@@ -8,6 +8,17 @@ root=$(cd "$(dirname "$0")/.." && pwd)
 mkdir -p "$target/Sources/CallDiagnostics" "$target/Tests/ScreenTests"
 cp "$root"/Tests/SereinDiagnostics/*.swift "$target/Tests/ScreenTests/"
 ln -s "$checkout/Packages/SignalI18n" "$target/SignalI18n"
+codecs="$checkout/Packages/SignalCodecs"
+if [ "$(uname -s)" = Linux ]; then
+    mkdir -p "$target/SignalCodecs"
+    cp -R "$codecs/Sources" "$target/SignalCodecs/"
+    ln -s "$codecs/Package.swift" "$target/SignalCodecs/Package.swift"
+    ln -s "$codecs/Tests" "$target/SignalCodecs/Tests"
+    # Serein's codec math uses the same scoped C functions from Linux libm.
+    sed 's/Darwin\./Glibc./g' "$codecs/Sources/CodecCore/Math/LibM.swift" > "$target/SignalCodecs/Sources/CodecCore/Math/LibM.swift"
+else
+    ln -s "$codecs" "$target/SignalCodecs"
+fi
 cp "$source_dir/Calling/CallDiagnosticWindow.swift" "$source_dir/Theme/I18nEnvironment.swift" \
     "$source_dir/Theme/AxoColor.swift" "$source_dir/Theme/AxoFocusRing.swift" \
     "$source_dir/Theme/AxoShadow.swift" "$source_dir/Tokens/AxoTokens.generated.swift" \
@@ -17,7 +28,9 @@ cp "$source_dir/Calling/CallDiagnosticWindow.swift" "$source_dir/Theme/I18nEnvir
 target_dir="$target/Sources/CallDiagnostics"
 cp "$source_dir/Axo/Internal/AxoBaseSegmentedControl.swift" "$source_dir/Axo/AxoSegmentedControl.swift" \
    "$source_dir/Axo/AxoBadge.swift" "$source_dir/Theme/CSSFlex.swift" \
-   "$source_dir/Components/Conversation/MediaGallery/MediaGalleryEmptyState.swift" "$target_dir/"
+   "$source_dir/Components/Conversation/MediaGallery/MediaGalleryEmptyState.swift" \
+   "$source_dir/Components/Conversation/MediaGallery/MediaGridItem.swift" \
+   "$source_dir/Components/Conversation/MediaGallery/AttachmentSection.swift" "$target_dir/"
 cp "$source_dir/Axo/AxoBaseMenu.swift" "$source_dir/Axo/AxoDropdownMenu.swift" "$source_dir/Axo/AxoIconButton.swift" "$target_dir/"
 # The empty-gallery fixture uses the production panel and all of its header controls.
 awk 'BEGIN { print "import SwiftUI\nimport SignalI18n" }
@@ -45,12 +58,33 @@ declarations() {
 }
 {
     echo 'import SwiftUI'
+    echo 'import CodecCore'
     declarations '^struct (PlaybackButton|AudioWaveformBars):|^public struct AudioWaveform:' 3 "$source_dir/Components/Conversation/Message/MessageAudio.swift"
     declarations '^public struct MessageAttachment:' 1 "$source_dir/Components/Conversation/Message/MessageAttachment.swift"
     declarations '^enum QuoteMIME ' 1 "$source_dir/Components/Conversation/Quote.swift"
     declarations '^public struct RGBAImage:|^public final class RGBAAnimation:' 2 "$source_dir/Theme/PixelImage.swift"
-    declarations '^public struct PixelBuffer:' 1 "$checkout/Packages/SignalCodecs/Sources/CodecCore/Image/PixelBuffer.swift"
+    declarations '^public func formatFileSize[(]' 1 "$source_dir/Theme/I18nRichText.swift"
+    declarations '^public struct ImageOrBlurhash:' 1 "$source_dir/Components/Conversation/ConversationImage.swift"
 } > "$target_dir/DraftAudioSupport.swift"
+# Keep Serein's image fitting, snapping and animation. Paint the decoded RGBA bytes
+# through SwiftUI.Image on both platforms so the comparison can run without Metal.
+{
+    echo 'import SwiftUI'
+    declarations '^struct AnimationSchedule:|^public struct PixelImage:|^struct AnimatedPixelImage:' 3 "$source_dir/Theme/PixelImage.swift"
+    awk '/^public enum ObjectFit:/ { print; count++ } END { if (count != 1) exit 1 }' "$source_dir/Theme/PixelImage.swift"
+} > "$target/PixelImageSource.swift"
+awk '/^            Rectangle\(\)$/ { replacing=1; next }
+     replacing && /\.float\(Float\(displayScale\)\)\)\)/ {
+         print "            raster.frame(width: rect.width, height: rect.height).offset(x: rect.minX, y: rect.minY)"
+         replacing=0; count++; next }
+     !replacing { print } END { if (count != 1 || replacing) exit 1 }' "$target/PixelImageSource.swift" > "$target_dir/PixelImage.swift"
+gallery_tests="$checkout/Packages/SignalUI/Tests/SignalUITests/Components/MediaGallery"
+cp "$gallery_tests/AttachmentSectionFixtures.swift" "$target_dir/"
+mkdir -p "$target_dir/Media"
+# Standalone Serein checkouts also carry a decoded frame of the cat GIF.
+photo="$checkout/Signal-Desktop/fixtures/cat-screenshot-3x4.png"
+if [ ! -f "$photo" ]; then photo="$checkout/Packages/SignalUI/Tests/SignalUITests/Fixtures/cat-gif-frame0.png"; fi
+cp "$photo" "$target_dir/Media/cat-screenshot-3x4.png"
 # Serein observes AppKit's app-deactivation notification to save the recording draft.
 # The Linux scene supplies the same transition from Qt window and application events.
 awk '/^public struct CompositionRecording: View/ { print; print "#if os(Linux)\n    @Environment(\\.scenePhase) var phase\n#endif"; next }
@@ -106,16 +140,19 @@ awk '/^public struct AxoType: / { print "import SwiftUI"; inside = 1 }
     "$source_dir/Theme/AxoType.swift" > "$target_dir/AxoType.swift"
 mkdir -p "$target_dir/Fonts"
 cp "$source_dir"/Resources/Fonts/Inter-*.ttf "$source_dir/Resources/Fonts/SignalSymbolsVariable.ttf" "$target_dir/Fonts/"
+if [ "$(uname -s)" = Linux ]; then cp "$root/Package.resolved" "$target/Package.resolved"; fi
 cat > "$target/Package.swift" <<'SWIFT'
 // swift-tools-version: 6.2
 import PackageDescription
-var packages: [Package.Dependency] = [.package(path: "SignalI18n")]
-var dependencies: [Target.Dependency] = [.product(name: "SignalI18n", package: "SignalI18n")]
+var packages: [Package.Dependency] = [.package(path: "SignalI18n"), .package(path: "SignalCodecs")]
+var dependencies: [Target.Dependency] = [.product(name: "SignalI18n", package: "SignalI18n"),
+    .product(name: "CodecCore", package: "SignalCodecs"), .product(name: "ImagePNG", package: "SignalCodecs"),
+    .product(name: "ImageBMP", package: "SignalCodecs")]
 #if os(Linux)
 packages.append(.package(name: "QtSwiftUI", path: "/src"))
 dependencies.append(.product(name: "SwiftUI", package: "QtSwiftUI"))
 #endif
 let package = Package(name: "CallDiagnostics", platforms: [.macOS("27.0")], dependencies: packages,
-                      targets: [.executableTarget(name: "CallDiagnostics", dependencies: dependencies, resources: [.copy("Fonts")]),
+                      targets: [.executableTarget(name: "CallDiagnostics", dependencies: dependencies, resources: [.copy("Fonts"), .copy("Media")]),
                                 .testTarget(name: "ScreenTests", dependencies: ["CallDiagnostics"] + dependencies)])
 SWIFT

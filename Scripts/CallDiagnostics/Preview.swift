@@ -8,7 +8,8 @@ struct DiagnosticPreview: App {
         let linking = linkError || CommandLine.arguments.contains("--link-device")
         let leaveCall = CommandLine.arguments.contains("--leave-call")
         let clearing = CommandLine.arguments.contains("--clearing-data")
-        let gallery = CommandLine.arguments.contains("--gallery")
+        let populatedGallery = CommandLine.arguments.contains("--gallery-media")
+        let gallery = populatedGallery || CommandLine.arguments.contains("--gallery")
         let draft = CommandLine.arguments.contains("--recording-draft")
         let recording = CommandLine.arguments.contains("--recording")
         let discard = CommandLine.arguments.contains("--discard-recording")
@@ -16,7 +17,7 @@ struct DiagnosticPreview: App {
         WindowGroup(recording || draft || discard ? "Voice message" : gallery ? "All media" : clearing ? "Clearing data" : linking ? "Link device" : leaveCall ? "Leave current call" : "Call diagnostics") {
             if draft { RecordingDraftPreview() }
             else if recording || discard { RecordingPreview(discard: discard) }
-            else if gallery { GalleryPreview() }
+            else if gallery { GalleryPreview(populated: populatedGallery) }
             else if clearing {
                 ClearingData(step: .deletingData)
                     .background(AxoColor.surfacePrimary)
@@ -84,22 +85,42 @@ struct RecordingPreview: View {
 }
 
 struct GalleryPreview: View {
+    var populated = false
+    @State private var attachments = GalleryMediaSample.attachments
+    @State private var opened: RGBAImage?
     @State private var tab: MediaGalleryTab = .media
     @State private var order: MediaSortOrder = .date
     @Environment(\.dismiss) var dismiss
-    var body: some View { GalleryPanel(tab: $tab, order: $order, onBack: { dismiss() }) }
+    var body: some View {
+        if let opened {
+            ConversationPanel(onBack: { self.opened = nil }) { EmptyView() } content: {
+                PixelImage(opened, fit: .contain)
+            }
+        } else {
+            GalleryPanel(tab: $tab, order: $order, onBack: { dismiss() }, attachments: populated ? attachments : []) { index in
+                switch attachments[index].status {
+                case .readyToShow: opened = attachments[index].image
+                case .needsDownload, .downloading: attachments[index].pending.toggle()
+                }
+            }
+        }
+    }
 }
 
 struct GalleryPanel: View {
     @Binding var tab: MediaGalleryTab
     @Binding var order: MediaSortOrder
     var onBack: () -> Void
+    var attachments: [MessageAttachment] = []
+    var onItemClick: (Int) -> Void = { _ in }
 
     var body: some View {
         ConversationPanel(onBack: onBack) {
             MediaGalleryPanelHeader(tab: $tab, sortOrder: $order)
         } content: {
-            MediaGalleryEmptyState(tab: tab)
+            if tab == .media && !attachments.isEmpty {
+                ScrollView { GalleryMediaSection(attachments: attachments, order: order, onClick: onItemClick) }
+            } else { MediaGalleryEmptyState(tab: tab) }
         }
         .axoLayerHost()
     }

@@ -40,6 +40,7 @@ if [ -n "${QTSWIFTUI_SCREENSHOT:-}" ]; then
     QTSWIFTUI_SCREENSHOT="$(dirname "$QTSWIFTUI_SCREENSHOT")/recording-draft.png" "$binary" --recording-draft
     QTSWIFTUI_SCREENSHOT="$(dirname "$QTSWIFTUI_SCREENSHOT")/voice-recording.png" "$binary" --recording
     QTSWIFTUI_SCREENSHOT="$(dirname "$QTSWIFTUI_SCREENSHOT")/discard-recording.png" "$binary" --discard-recording
+    QTSWIFTUI_SCREENSHOT="$(dirname "$QTSWIFTUI_SCREENSHOT")/media-gallery-populated.png" "$binary" --gallery-media
     QTSWIFTUI_SCREENSHOT="$(dirname "$QTSWIFTUI_SCREENSHOT")/media-gallery.png" "$binary" --gallery
     QTSWIFTUI_SCREENSHOT="$(dirname "$QTSWIFTUI_SCREENSHOT")/call-diagnostics.png" "$binary"
     QTSWIFTUI_SCREENSHOT="$(dirname "$QTSWIFTUI_SCREENSHOT")/confirm-leave-call.png" "$binary" --leave-call
