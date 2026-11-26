@@ -45,17 +45,24 @@ extension Path {
     }
 }
 
-private struct StrokedShape<Base: Shape>: Shape {
+private struct StrokedShape<Base: Shape>: AnimatedShape {
     let base: Base
     let style: StrokeStyle
     nonisolated func path(in rect: CGRect) -> Path { base.path(in: rect).strokedPath(style) }
+    func renderedPath(in rect: CGRect, context: Context) -> Path {
+        base.path(in: rect, context: context.descending(.position(0))).strokedPath(style)
+    }
 }
 
-private struct TrimmedShape<Base: Shape>: Shape {
+private struct TrimmedShape<Base: Shape>: AnimatedShape {
     let base: Base
     let from: CGFloat
     let to: CGFloat
     nonisolated func path(in rect: CGRect) -> Path { base.path(in: rect).trimmedPath(from: from, to: to) }
+    func renderedPath(in rect: CGRect, context: Context) -> Path {
+        base.path(in: rect, context: context.descending(.position(0)))
+            .trimmedPath(from: context.interpolated(from, key: "trim start"), to: context.interpolated(to, key: "trim end"))
+    }
 }
 
 extension Shape {

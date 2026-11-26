@@ -32,6 +32,7 @@ public struct EnvironmentValues {
     public var locale: Locale = .autoupdatingCurrent
     public var timeZone: TimeZone = .autoupdatingCurrent
     var accessibilityTraits: AccessibilityTraits = []
+    var accessibleValue = ""
     var stackAxis = Axis.vertical
     var label = "", identifier = "", helpText = ""
 }

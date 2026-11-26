@@ -61,9 +61,17 @@ extension View {
             }]
         }
     }
+    public func rotationEffect(_ angle: Angle, anchor: UnitPoint = .center) -> some View {
+        Transform(content: self) { view, ctx in
+            let group = ctx.widget(QSGroup)
+            qs_group_rotation(group, ctx.interpolated(angle.degrees, key: "rotation"), anchor.x, anchor.y)
+            return ctx.children(of: view, inside: group)
+        }
+    }
     public func offset(x: CGFloat = 0, y: CGFloat = 0) -> some View {
         Transform(content: self) { view, ctx in
-            view.resolve(ctx).map { child in Element(size: child.measure) { child.place($0.offsetBy(dx: x, dy: y), $1) } }
+            let dx = ctx.interpolated(x, key: "offset x"), dy = ctx.interpolated(y, key: "offset y")
+            return view.resolve(ctx).map { child in Element(size: child.measure) { child.place($0.offsetBy(dx: dx, dy: dy), $1) } }
         }
     }
     public func offset(_ offset: CGSize) -> some View { self.offset(x: offset.width, y: offset.height) }

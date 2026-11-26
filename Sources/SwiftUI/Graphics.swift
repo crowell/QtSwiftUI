@@ -182,7 +182,13 @@ public protocol InsettableShape: Shape {
 public protocol Shape: View, Sendable {
     nonisolated func path(in rect: CGRect) -> Path
 }
+protocol AnimatedShape: Shape {
+    @MainActor func renderedPath(in rect: CGRect, context: Context) -> Path
+}
 extension Shape {
+    @MainActor func path(in rect: CGRect, context: Context) -> Path {
+        (self as? any AnimatedShape)?.renderedPath(in: rect, context: context) ?? path(in: rect)
+    }
     public var body: some View { FilledShape(shape: self, style: nil as Color?) }
     public func fill<S: ShapeStyle>(_ content: S, style: FillStyle = FillStyle()) -> some View {
         FilledShape(shape: self, style: content, fill: style)
@@ -199,7 +205,7 @@ private struct FilledShape<S: Shape, Style: ShapeStyle>: Primitive {
             if shape is Circle { let side = min(size.width, size.height); return CGSize(width: side, height: side) }
             return size
         } place: { rect, _ in
-            shape.path(in: CGRect(origin: .zero, size: rect.size)).withNativePath {
+            shape.path(in: CGRect(origin: .zero, size: rect.size), context: context).withNativePath {
                 qs_surface_path(widget, $0, fill.isEOFilled ? 1 : 0, fill.isAntialiased ? 1 : 0)
             }
             qs_place(widget, rect.minX, rect.minY, rect.width, rect.height)

@@ -46,21 +46,60 @@ public:
     using QWidget::QWidget;
     bool exposeChildren = true;
     bool isImage = false;
+    bool updatesFrequently = false;
+    QString accessibleValue;
     bool accessibilityHidden = false;
 };
 class AccessibleGroup final : public QAccessibleWidget {
 public:
     explicit AccessibleGroup(GroupWidget *group) : QAccessibleWidget(group), group(group) {}
     QAccessible::Role role() const override { return group->isImage ? QAccessible::Graphic : QAccessible::Grouping; }
+    QString text(QAccessible::Text kind) const override {
+        return kind == QAccessible::Value ? group->accessibleValue : QAccessibleWidget::text(kind);
+    }
     QAccessible::State state() const override {
         auto result = QAccessibleWidget::state();
         if (group->accessibilityHidden) result.invisible = true;
+        result.animated = group->updatesFrequently;
         return result;
     }
     int childCount() const override { return group->exposeChildren && !group->accessibilityHidden ? QAccessibleWidget::childCount() : 0; }
     QAccessibleInterface *child(int index) const override { return group->exposeChildren && !group->accessibilityHidden ? QAccessibleWidget::child(index) : nullptr; }
 private:
     GroupWidget *group;
+};
+class RotationEffect final : public QGraphicsEffect {
+public:
+    explicit RotationEffect(QObject *parent) : QGraphicsEffect(parent) {}
+    void setRotation(double value, QPointF anchorValue) {
+        if (degrees == value && anchor == anchorValue) return;
+        degrees = value;
+        anchor = anchorValue;
+        updateBoundingRect();
+        update();
+    }
+    QRectF boundingRectFor(const QRectF &source) const override { return matrix(source).mapRect(source); }
+protected:
+    void draw(QPainter *painter) override {
+        QPoint offset;
+        const auto source = sourcePixmap(Qt::LogicalCoordinates, &offset, NoPad);
+        painter->save();
+        painter->setRenderHint(QPainter::SmoothPixmapTransform);
+        painter->setTransform(matrix(sourceBoundingRect(Qt::LogicalCoordinates)), true);
+        painter->drawPixmap(offset, source);
+        painter->restore();
+    }
+private:
+    double degrees = 0;
+    QPointF anchor;
+    QTransform matrix(const QRectF &source) const {
+        const QPointF center(source.x() + anchor.x() * source.width(), source.y() + anchor.y() * source.height());
+        QTransform t;
+        t.translate(center.x(), center.y());
+        t.rotate(degrees);
+        t.translate(-center.x(), -center.y());
+        return t;
+    }
 };
 class AccessibleLink final : public QAccessibleWidget {
 public:
@@ -174,7 +213,7 @@ struct QSWindow final : QWidget {
     void *context;
     QSRender render;
     QSEvent event;
-    bool pending = false;
+    bool pending = false, framePending = false;
 
     void schedule() {
         if (pending) return;
@@ -243,6 +282,14 @@ int qs_open_url(const char *url) {
     return destination.isValid() && !destination.isRelative() && QDesktopServices::openUrl(destination);
 }
 void qs_update(QSWindow *window) { window->schedule(); }
+void qs_animation_frame(QSWindow *window) {
+    if (window->framePending) return;
+    window->framePending = true;
+    QTimer::singleShot(16, window, [window] {
+        window->framePending = false;
+        window->schedule();
+    });
+}
 void qs_flush() { application().processEvents(); }
 int qs_run(QSWindow *window, const char *screenshot, QSPump pump) {
     // Swift's main actor and Foundation timers share the GUI thread with Qt.
@@ -504,14 +551,29 @@ void qs_path_step(QSPath *target, int op, double x, double y, double a, double b
     case 7: path.addRoundedRect(QRectF(x, y, a, b), c, d); break;
     }
 }
-void qs_group(QSWidget w, int exposeChildren, int isImage) {
+void qs_group(QSWidget w, int exposeChildren, int isImage, int updatesFrequently, const char *value) {
     auto *group = static_cast<GroupWidget *>(w);
     group->exposeChildren = exposeChildren;
     group->isImage = isImage;
+    group->updatesFrequently = updatesFrequently;
+    group->accessibleValue = QString::fromUtf8(value);
 }
 void qs_group_hidden(QSWidget w, int hidden) { static_cast<GroupWidget *>(w)->accessibilityHidden = hidden; }
 void qs_group_hover(QSWidget w, int enabled) { widget(w)->setProperty("qsHover", bool(enabled)); }
 void qs_help(QSWidget w, const char *text) { widget(w)->setToolTip(QString::fromUtf8(text)); }
+void qs_group_rotation(QSWidget w, double degrees, double anchorX, double anchorY) {
+    auto *item = widget(w);
+    if (std::remainder(degrees, 360.0) == 0) {
+        if (item->graphicsEffect()) item->setGraphicsEffect(nullptr);
+        return;
+    }
+    auto *effect = dynamic_cast<RotationEffect *>(item->graphicsEffect());
+    if (!effect) {
+        effect = new RotationEffect(item);
+        item->setGraphicsEffect(effect);
+    }
+    effect->setRotation(degrees, QPointF(anchorX, anchorY));
+}
 void qs_group_opacity(QSWidget w, double value) {
     auto *item = widget(w);
     value = qBound(0.0, value, 1.0);

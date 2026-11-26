@@ -11,6 +11,7 @@ enum Part: Hashable {
     var path: [Part] = []
     var parent: UnsafeMutableRawPointer?
     var environment = EnvironmentValues()
+    var animation: Animation?
     var spaces: [AnyHashable: NamedOrigin] = [:]
     var windowOffset: CGPoint {
         guard let parent else { return .zero }
@@ -103,7 +104,12 @@ enum Part: Hashable {
     private let content: (Context) -> [Element]
     private(set) var window: OpaquePointer!
 
-    init(title: String, content: @escaping (Context) -> [Element]) {
+    private let animationClock: () -> TimeInterval
+    private(set) var frameTime: TimeInterval = 0
+
+    init(title: String, animationClock: @escaping () -> TimeInterval = { ProcessInfo.processInfo.systemUptime },
+         content: @escaping (Context) -> [Element]) {
+        self.animationClock = animationClock
         self.content = content
         window = qs_window(title, Unmanaged.passUnretained(self).toOpaque(), { pointer, width, height in
             MainActor.assumeIsolated {
@@ -134,6 +140,7 @@ enum Part: Hashable {
         return entry
     }
     private func render(width: Int, height: Int) {
+        frameTime = animationClock()
         liveMounts.removeAll(keepingCapacity: true)
         liveStorage.removeAll(keepingCapacity: true)
         nextDisappear.removeAll(keepingCapacity: true)

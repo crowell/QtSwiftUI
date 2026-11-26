@@ -11,6 +11,7 @@ ln -s "$checkout/Packages/SignalI18n" "$target/SignalI18n"
 cp "$source_dir/Calling/CallDiagnosticWindow.swift" "$source_dir/Theme/I18nEnvironment.swift" \
     "$source_dir/Theme/AxoColor.swift" "$source_dir/Theme/AxoFocusRing.swift" \
     "$source_dir/Theme/AxoShadow.swift" "$source_dir/Tokens/AxoTokens.generated.swift" \
+    "$source_dir/Theme/AxoMotion.swift" "$source_dir/Axo/Status/AxoBaseSpinner.swift" \
     "$root"/Scripts/CallDiagnostics/*.swift "$target/Sources/CallDiagnostics/"
 cat > "$target/Package.swift" <<'SWIFT'
 // swift-tools-version: 6.2

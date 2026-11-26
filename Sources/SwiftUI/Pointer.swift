@@ -30,7 +30,7 @@ extension View {
     public func opacity(_ opacity: Double) -> some View {
         Transform(content: self) { view, ctx in
             let group = ctx.widget(QSGroup)
-            qs_group_opacity(group, opacity)
+            qs_group_opacity(group, ctx.interpolated(opacity, key: "opacity"))
             return ctx.children(of: view, inside: group)
         }
     }
