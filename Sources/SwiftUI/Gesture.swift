@@ -34,6 +34,7 @@ struct Recognizer {
     var movesWindow = false
     var dragDistance: CGFloat?
     var drag: ((QSDragSample, Context, UnsafeMutableRawPointer) -> Void)?
+    var reset: (() -> Void)?
     var ended: () -> Void
 }
 
@@ -112,9 +113,14 @@ extension View {
             let inner = ctx.with(\.gesturesEnabled, ctx.environment.gesturesEnabled && mask.contains(.subviews))
             let enabled = ctx.environment.gesturesEnabled && mask.contains(.gesture)
             let recognizer = enabled ? gesture.resolve(changed: { _ in }, ended: { _ in }) : nil
+            let reset = recognizer?.reset
+            if let reset { ctx.host.lifetime(at: ctx.path, appear: {}, disappear: reset) }
             let group = ctx.widget(QSGroup, tap: recognizer?.spatialTap.map { callback in { widget in callback(ctx, widget) } },
-                                   drag: recognizer?.drag.map { callback in { sample, widget in callback(sample, ctx, widget) } },
-                                   action: { _ in recognizer?.ended() })
+                                   drag: recognizer?.drag.map { callback in { sample, widget in
+                                       callback(sample, ctx, widget)
+                                       if sample.ended != 0 { reset?() }
+                                   } }, cancelGesture: reset,
+                                   action: { _ in recognizer?.ended(); reset?() })
             qs_group_gesture(group, Int32(clamping: recognizer?.taps ?? 0), recognizer?.movesWindow == true ? 1 : 0,
                              simultaneous ? 1 : 0, recognizer?.dragDistance ?? -1, Int32(recognizer?.inputs.rawValue ?? 0))
             return inner.children(of: view, inside: group)

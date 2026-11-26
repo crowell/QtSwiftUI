@@ -1,0 +1,46 @@
+import Foundation
+import QtBridge
+
+extension AttributeScopes {
+    public var swiftUI: SwiftUIAttributes.Type { SwiftUIAttributes.self }
+    public struct SwiftUIAttributes: AttributeScope {
+        public let font: FontAttribute
+        public let foregroundColor: ForegroundColorAttribute
+        public let backgroundColor: BackgroundColorAttribute
+        public let foundation: FoundationAttributes
+
+        public enum FontAttribute: AttributedStringKey {
+            public typealias Value = Font
+            public static let name = "SwiftUI.Font"
+        }
+        public enum ForegroundColorAttribute: AttributedStringKey {
+            public typealias Value = Color
+            public static let name = "SwiftUI.ForegroundColor"
+        }
+        public enum BackgroundColorAttribute: AttributedStringKey {
+            public typealias Value = Color
+            public static let name = "SwiftUI.BackgroundColor"
+        }
+    }
+}
+
+extension AttributeDynamicLookup {
+    public subscript<T: AttributedStringKey>(dynamicMember keyPath: KeyPath<AttributeScopes.SwiftUIAttributes, T>) -> T { self[T.self] }
+}
+
+extension Text {
+    func configure(_ text: AttributedString, on widget: UnsafeMutableRawPointer, in environment: EnvironmentValues) {
+        qs_attributed_begin(widget)
+        for run in text.runs {
+            let value = String(text[run.range].characters)
+            let font = run.font
+            value.withCString { bytes in
+                qs_attributed_append(widget, bytes, value.utf8.count, run.link?.absoluteString ?? "",
+                                     run.foregroundColor?.hex(environment.colorScheme) ?? "",
+                                     run.backgroundColor?.hex(environment.colorScheme) ?? "",
+                                     font?.qtFamily ?? "", Double(font?.size ?? 0), font?.weight.value ?? 400, font?.slanted == true ? 1 : 0)
+            }
+        }
+        qs_attributed_finish(widget, environment.selectableText ? 1 : 0)
+    }
+}

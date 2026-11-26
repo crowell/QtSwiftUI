@@ -1,4 +1,5 @@
 #include "QtBridge.h"
+#include "AttributedLabel.hpp"
 #include "CanvasBlur.hpp"
 #include "PointerDrag.hpp"
 #include "PlainTextEditor.hpp"
@@ -447,7 +448,7 @@ struct QSWindow final : QWidget {
                 if (!scope) continue;
                 const bool tracking = scope->trackingTap || scope->trackingDrag || scope->pointerDrag.tracking;
                 if (input->type() == QEvent::UngrabMouse && !tracking) continue;
-                if (parent == source || (scope->simultaneous && tracking)) scope->cancelPointer();
+                if (parent == source || (scope->simultaneous && tracking)) cancelGesture(scope);
             }
         }
         if (group && group->hitBounds() != group->rect() &&
@@ -502,7 +503,7 @@ struct QSWindow final : QWidget {
         const auto deviceId = device ? device->systemId() : 0;
         if (group->gestureDevice != deviceId) {
             if (!press) return false;
-            group->cancelPointer();
+            cancelGesture(group);
             group->gestureDevice = deviceId;
         }
         if (group->pointerDrag.threshold >= 0) {
@@ -558,6 +559,11 @@ struct QSWindow final : QWidget {
             }
         }
         return true;
+    }
+    void cancelGesture(GroupWidget *group) {
+        const bool active = group->pointerDrag.tracking && group->pointerDrag.recognized;
+        group->cancelPointer();
+        if (active) event(context, group->property("swiftId").toInt(), QSGestureCancelled, "");
     }
     void observeFocus(QWidget *item, int id) {
         item->setProperty("swiftId", id);
@@ -705,6 +711,13 @@ QSWidget qs_create(QSWindow *window, QSWidget parent, QSKind kind, int id) {
         label->setMargin(0);
         return label;
     }
+    case QSAttributedLabel: {
+        auto *label = new AttributedLabel(container);
+        QObject::connect(label, &QLabel::linkActivated, window, [=](const QString &url) {
+            window->event(window->context, id, QSActivate, url.toUtf8().constData());
+        });
+        return label;
+    }
     case QSLink: case QSButton: {
         auto *button = new SwiftButton(container);
         if (kind == QSLink) {
@@ -808,6 +821,12 @@ void qs_text(QSWidget w, const char *s) {
     else if (auto *button = qobject_cast<QAbstractButton *>(widget(w))) button->setText(QString(text).replace('&', "&&"));
     else if (auto *edit = qobject_cast<QLineEdit *>(widget(w)); edit && edit->text() != text) edit->setText(text);
 }
+void qs_attributed_begin(QSWidget w) { static_cast<AttributedLabel *>(w)->begin(); }
+void qs_attributed_append(QSWidget w, const char *text, size_t count, const char *link, const char *foreground, const char *background,
+                          const char *family, double size, int weight, int italic) {
+    static_cast<AttributedLabel *>(w)->append(QString::fromUtf8(text, qsizetype(count)), link, foreground, background, family, size, weight, italic);
+}
+void qs_attributed_finish(QSWidget w, int selectable) { static_cast<AttributedLabel *>(w)->finish(selectable); }
 void qs_editor_text(QSWidget w, const char *utf8, size_t count) {
     static_cast<PlainTextEditor *>(w)->applyText(QString::fromUtf8(utf8, qsizetype(count)));
 }
@@ -1147,6 +1166,10 @@ void qs_accessibility(QSWidget w, const char *label, const char *identifier) {
 QSSize qs_measure(QSWidget w, double width) {
     auto *item = widget(w);
     item->ensurePolished();
+    if (auto *rich = dynamic_cast<AttributedLabel *>(item)) {
+        const auto hint = rich->measure(width);
+        return {hint.width(), hint.height()};
+    }
     if (auto *label = qobject_cast<QLabel *>(item)) {
         auto metrics = label->fontMetrics();
         auto flags = Qt::TextExpandTabs | Qt::TextDontClip;
@@ -1395,11 +1418,12 @@ static int clickPoint(QSWindow *window, int x, int y, const QPointingDevice *dev
     const QPoint point(x, y);
     QWidget *target = window->childAt(point);
     if (!target) return 0;
-    const auto local = target->mapFrom(window, point), global = window->mapToGlobal(point);
-    QMouseEvent press(QEvent::MouseButtonPress, local, global, Qt::LeftButton, Qt::LeftButton, Qt::NoModifier, device);
-    QApplication::sendEvent(target, &press);
-    QMouseEvent release(QEvent::MouseButtonRelease, local, global, Qt::LeftButton, Qt::NoButton, Qt::NoModifier, device);
-    QApplication::sendEvent(target, &release);
+    const auto global = window->mapToGlobal(point);
+    // Route through the platform window so Qt updates mouse focus and the implicit grab.
+    QMouseEvent press(QEvent::MouseButtonPress, point, global, Qt::LeftButton, Qt::LeftButton, Qt::NoModifier, device);
+    QApplication::sendEvent(window->windowHandle(), &press);
+    QMouseEvent release(QEvent::MouseButtonRelease, point, global, Qt::LeftButton, Qt::NoButton, Qt::NoModifier, device);
+    QApplication::sendEvent(window->windowHandle(), &release);
     qs_flush();
     return 1;
 }
@@ -1427,10 +1451,8 @@ int qs_has_focus(QSWindow *window, const char *id) {
     auto *item = window->findChild<QWidget *>(QString::fromUtf8(id));
     return item && item->hasFocus();
 }
-int qs_mouse_button(QSWindow *window, const char *id, int down) {
-    auto *button = window->findChild<QAbstractButton *>(QString::fromUtf8(id));
-    if (!button || !button->isEnabled()) return 0;
-    const auto location = button->mapTo(window, button->rect().center());
+int qs_pointer_button(QSWindow *window, int x, int y, int down) {
+    const QPoint location(x, y);
     QWidget *target = window->childAt(location);
     if (!target) return 0;
     const auto local = target->mapFrom(window, location);
@@ -1440,6 +1462,12 @@ int qs_mouse_button(QSWindow *window, const char *id, int down) {
     QApplication::sendEvent(target, &input);
     qs_flush();
     return 1;
+}
+int qs_mouse_button(QSWindow *window, const char *id, int down) {
+    auto *button = window->findChild<QAbstractButton *>(QString::fromUtf8(id));
+    if (!button || !button->isEnabled()) return 0;
+    const auto location = button->mapTo(window, button->rect().center());
+    return qs_pointer_button(window, location.x(), location.y(), down);
 }
 int qs_mouse_click(QSWindow *window, const char *id) {
     return qs_mouse_button(window, id, 1) && qs_mouse_button(window, id, 0);

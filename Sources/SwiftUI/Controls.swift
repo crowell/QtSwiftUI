@@ -18,6 +18,11 @@ extension Context {
 }
 public struct Text: Primitive {
     nonisolated let string: String
+    nonisolated private(set) var attributed: AttributedString?
+    public nonisolated init(_ attributedContent: AttributedString) {
+        string = String(attributedContent.characters)
+        attributed = attributedContent
+    }
     private var attributes: [(inout EnvironmentValues) -> Void] = []
     public nonisolated init<S: StringProtocol>(_ content: S) { string = String(content) }
     public nonisolated init(verbatim content: String) { string = content }
@@ -36,10 +41,19 @@ public struct Text: Primitive {
     }
     func elements(in context: Context) -> [Element] {
         let ctx = styled(context)
-        let widget = ctx.widget(QSLabel)
-        qs_selectable(widget, ctx.environment.selectableText ? 1 : 0)
-        qs_text(widget, string)
-        ctx.style(widget)
+        let widget: UnsafeMutableRawPointer
+        if let attributed {
+            widget = ctx.widget(QSAttributedLabel, action: { value in
+                if let link = URL(string: value) { ctx.environment.openURL(link) }
+            })
+            ctx.style(widget)
+            configure(attributed, on: widget, in: ctx.environment)
+        } else {
+            widget = ctx.widget(QSLabel)
+            qs_selectable(widget, ctx.environment.selectableText ? 1 : 0)
+            qs_text(widget, string)
+            ctx.style(widget)
+        }
         return [Element { p in
             let hint = qs_measure(widget, p.width ?? -1)
             let font = ctx.environment.font ?? .body
@@ -61,7 +75,7 @@ public struct Button<Label: View>: Primitive {
         }, action: { _ in action() })
         context.installShortcut(on: widget)
         qs_plain_button(widget, style != nil ? 1 : 0)
-        if style == nil, let text = label as? Text {
+        if style == nil, let text = label as? Text, text.attributed == nil {
             qs_text(widget, text.string)
             return [text.styled(context).control(widget)]
         }
@@ -95,7 +109,7 @@ public struct Toggle<Label: View>: Primitive {
         let widget = context.widget(QSToggle, action: { isOn.wrappedValue = $0 == "1" })
         context.installShortcut(on: widget)
         qs_checked(widget, isOn.wrappedValue ? 1 : 0)
-        if let text = label as? Text {
+        if let text = label as? Text, text.attributed == nil {
             qs_text(widget, text.string)
             return [text.styled(context).control(widget)]
         }

@@ -136,13 +136,26 @@ extension View {
                 return clamp(result, low, high)
             }
             return view.resolve(ctx).map { child in
-                child.wrapping { p in
-                    let offer = proposed(p), size = child.measure(offer)
+                @MainActor func measured(_ proposal: ProposedViewSize) -> (offer: ProposedViewSize, size: CGSize) {
+                    var offer = proposed(proposal)
+                    let ideal = child.measure(offer)
+                    if offer.width == nil {
+                        let width = clamp(ideal.width, minWidth, maxWidth)
+                        if width != ideal.width { offer.width = width }
+                    }
+                    if offer.height == nil {
+                        let height = clamp(ideal.height, minHeight, maxHeight)
+                        if height != ideal.height { offer.height = height }
+                    }
+                    return (offer, child.measure(offer))
+                }
+                return child.wrapping { p in
+                    let (offer, size) = measured(p)
                     return CGSize(width: dimension(size.width, offer.width, minWidth, maxWidth),
                                   height: dimension(size.height, offer.height, minHeight, maxHeight))
                 } place: { bounds, p in
-                    let offer = proposed(p)
-                    child.place(alignment.rect(child.measure(offer), in: bounds, direction: ctx.environment.layoutDirection), offer)
+                    let (offer, size) = measured(p)
+                    child.place(alignment.rect(size, in: bounds, direction: ctx.environment.layoutDirection), offer)
                 }
             }
         }

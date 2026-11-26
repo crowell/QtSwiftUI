@@ -11,9 +11,9 @@ typedef struct { double x, y, width, height; } QSRect;
 typedef struct { double a, b, c, d, tx, ty; } QSAffine;
 typedef struct QSPath QSPath;
 typedef void (*QSRender)(void *context, int width, int height);
-enum QSEventKind { QSActivate, QSFocusChanged, QSSubmit, QSPressedChanged, QSExitCommand, QSHoverChanged, QSIncrement, QSDecrement };
+enum QSEventKind { QSActivate, QSFocusChanged, QSSubmit, QSPressedChanged, QSExitCommand, QSHoverChanged, QSIncrement, QSDecrement, QSGestureCancelled };
 typedef void (*QSEvent)(void *context, int id, enum QSEventKind kind, const char *value);
-enum QSKind { QSLabel, QSButton, QSToggle, QSEdit, QSSecureEdit, QSSurface, QSScroll, QSSlider, QSProgress, QSGroup, QSCanvas, QSLink, QSRaster, QSTextEditor };
+enum QSKind { QSLabel, QSButton, QSToggle, QSEdit, QSSecureEdit, QSSurface, QSScroll, QSSlider, QSProgress, QSGroup, QSCanvas, QSLink, QSRaster, QSTextEditor, QSAttributedLabel };
 
 QSWindow *qs_window(const char *title, void *context, QSRender render, QSEvent event);
 void qs_open(QSWindow *, int width, int height);
@@ -34,6 +34,10 @@ void qs_scroll_axes(QSWidget, int horizontal, int vertical);
 void qs_destroy(QSWidget);
 void qs_text(QSWidget, const char *);
 void qs_hint(QSWidget, const char *);
+void qs_attributed_begin(QSWidget);
+void qs_attributed_append(QSWidget, const char *utf8, size_t count, const char *link, const char *foreground, const char *background,
+                          const char *family, double size, int weight, int italic);
+void qs_attributed_finish(QSWidget, int selectable);
 void qs_editor_text(QSWidget, const char *utf8, size_t count);
 const unsigned char *qs_editor_value(QSWidget, size_t *count);
 void qs_scroll_background(QSWidget, int visible, int dark);
@@ -138,6 +142,7 @@ int qs_click_device(QSWindow *, int x, int y, int kind);
 int qs_drag_pointer(QSWindow *, int x1, int y1, int x2, int y2, int steps);
 int qs_click_named_button(QSWindow *, const char *label);
 int qs_tab(QSWindow *);
+int qs_pointer_button(QSWindow *, int x, int y, int down);
 int qs_mouse_button(QSWindow *, const char *identifier, int down);
 #ifdef __cplusplus
 }

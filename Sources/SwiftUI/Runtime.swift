@@ -64,7 +64,7 @@ enum Part: Hashable {
                 tap: ((UnsafeMutableRawPointer) -> Void)? = nil,
                 adjustment: ((AccessibilityAdjustmentDirection) -> Void)? = nil,
                 drag: ((QSDragSample, UnsafeMutableRawPointer) -> Void)? = nil,
-                hover: ((Bool) -> Void)? = nil, action: ((String) -> Void)? = nil) -> UnsafeMutableRawPointer {
+                cancelGesture: (() -> Void)? = nil, hover: ((Bool) -> Void)? = nil, action: ((String) -> Void)? = nil) -> UnsafeMutableRawPointer {
         let entry = host.mount(path: path + [.widget(kind.rawValue)], kind: kind, parent: parent)
         host.keys.install(environment.keyPressHandlers, for: entry.id)
         if let drag { host.drags[entry.id] = { drag($0, entry.widget) } }
@@ -80,6 +80,7 @@ enum Part: Hashable {
             case QSDecrement: adjustment?(.decrement)
             case QSFocusChanged: focus?.change(value == "1")
             case QSSubmit: submit?()
+            case QSGestureCancelled: cancelGesture?()
             case QSExitCommand: exitCommand?()
             case QSHoverChanged: hover?(value == "1")
             case QSPressedChanged: pressed?(value == "1")

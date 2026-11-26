@@ -8,99 +8,11 @@ import QtBridge
 import AppKit
 #endif
 
-@MainActor private final class PickerWindow {
-    let width = 780, height = 720
-    #if os(Linux)
-    let host: SwiftUI.Host
-    #else
-    let window: NSWindow
-    let hosting: NSHostingView<AnyView>
-    let bitmap: NSBitmapImageRep
-    var tick = 0
-    #endif
-
-    init() async throws {
-        let screen = ChatColorPickerPreview()
-            .environment(\.axoAnimationsDisabled, true)
-            .environment(\.colorScheme, .light)
-            .frame(width: CGFloat(width), height: CGFloat(height))
-        #if os(Linux)
-        host = Host(title: "Chat colors") { screen.resolve($0) }
-        host.open(width: width, height: height)
-        #else
-        hosting = NSHostingView(rootView: AnyView(screen))
-        window = NSWindow(contentRect: CGRect(x: 0, y: 0, width: width, height: height),
-                          styleMask: [.borderless], backing: .buffered, defer: false)
-        window.isReleasedWhenClosed = false
-        bitmap = try XCTUnwrap(NSBitmapImageRep(bitmapDataPlanes: nil, pixelsWide: width, pixelsHigh: height,
-            bitsPerSample: 8, samplesPerPixel: 4, hasAlpha: true, isPlanar: false, colorSpaceName: .deviceRGB,
-            bytesPerRow: 0, bitsPerPixel: 0))
-        window.contentView = hosting
-        window.orderFrontRegardless()
-        hosting.layoutSubtreeIfNeeded()
-        try await Task.sleep(for: .milliseconds(50))
-        #endif
-    }
-
-    var isVisible: Bool {
-        #if os(Linux)
-        qs_scene_phase(host.window) != 0
-        #else
-        window.isVisible
-        #endif
-    }
-
-    func close() {
-        #if os(Linux)
-        host.close()
-        #else
-        window.close()
-        #endif
-    }
-
-    func click(_ x: Int, _ y: Int) async throws {
-        #if os(Linux)
-        XCTAssertEqual(qs_click_point(host.window, Int32(x), Int32(y)), 1)
-        #else
-        for type in [NSEvent.EventType.leftMouseDown, .leftMouseUp] {
-            tick += 1
-            let event = try XCTUnwrap(NSEvent.mouseEvent(with: type, location: CGPoint(x: x, y: height-y), modifierFlags: [],
-                timestamp: ProcessInfo.processInfo.systemUptime + Double(tick)*0.016, windowNumber: window.windowNumber,
-                context: nil, eventNumber: tick, clickCount: 1, pressure: 1))
-            window.sendEvent(event)
-        }
-        try await Task.sleep(for: .milliseconds(50))
-        #endif
-    }
-
-    func pixel(_ x: Int, _ y: Int) -> UInt32 {
-        #if os(Linux)
-        return qs_pixel(host.window, Int32(x), Int32(y)) & 0xffffff
-        #else
-        hosting.cacheDisplay(in: hosting.bounds, to: bitmap)
-        let color = bitmap.colorAt(x: x, y: y)!.usingColorSpace(.sRGB)!
-        let values = [color.redComponent, color.greenComponent, color.blueComponent].map { UInt32(($0 * 255).rounded()) }
-        return values[0] << 16 | values[1] << 8 | values[2]
-        #endif
-    }
-
-    func capture(_ stage: String) throws {
-        guard let dir = ProcessInfo.processInfo.environment["QTSWIFTUI_PICKER_REFERENCE"] else { return }
-        let url = URL(fileURLWithPath: dir).appendingPathComponent("picker-\(stage).png")
-        #if os(Linux)
-        XCTAssertEqual(qs_capture(host.window, url.path), 1)
-        #else
-        hosting.cacheDisplay(in: hosting.bounds, to: bitmap)
-        try XCTUnwrap(bitmap.representation(using: .png, properties: [:])).write(to: url)
-        #endif
-    }
-}
-
 final class ChatColorPickerTests: XCTestCase {
     @MainActor func testSelectingAndEditingColors() async throws {
-        let window = try await PickerWindow()
+        let window = try await ScreenWindow(ChatColorPickerPreview(), width: 780, height: 720)
         defer { window.close() }
-        try window.capture("initial")
+        try window.capture("picker-initial.png", directoryVariable: "QTSWIFTUI_PICKER_REFERENCE")
         let original = window.pixel(500, 62)
         let crimson = window.pixel(162, 327), orange = window.pixel(390, 479)
         XCTAssertNotEqual(original, crimson)
@@ -112,7 +24,7 @@ final class ChatColorPickerTests: XCTestCase {
         try await window.click(390, 479)
         XCTAssertEqual(window.pixel(500, 62), orange, "The outgoing bubble adopts the custom color")
         try await window.click(390, 479)
-        try window.capture("menu")
+        try window.capture("picker-menu.png", directoryVariable: "QTSWIFTUI_PICKER_REFERENCE")
         try await window.click(390, 528)
         XCTAssertEqual(window.pixel(345, 260), orange, "Edit opens the selected custom color")
         try await window.click(390, 494) // Hue slider midpoint
@@ -124,7 +36,7 @@ final class ChatColorPickerTests: XCTestCase {
     }
 
     @MainActor func testResetAndCancel() async throws {
-        let window = try await PickerWindow()
+        let window = try await ScreenWindow(ChatColorPickerPreview(), width: 780, height: 720)
         defer { window.close() }
         let background = window.pixel(100, 695)
         try await window.click(86, 327)
@@ -148,7 +60,7 @@ final class ChatColorPickerTests: XCTestCase {
     }
 
     @MainActor func testAddingDuplicatingAndRemoving() async throws {
-        let window = try await PickerWindow()
+        let window = try await ScreenWindow(ChatColorPickerPreview(), width: 780, height: 720)
         defer { window.close() }
         try await window.click(86, 327)
         let defaultColor = window.pixel(500, 62)
