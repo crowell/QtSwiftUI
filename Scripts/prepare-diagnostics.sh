@@ -181,10 +181,14 @@ for thumbnail in presenting-source-screen.png presenting-source-window.png; do
 done
 cp "$source_dir/Components/Stickers/StickerManager.swift" "$source_dir/Axo/AxoModalStack.swift" "$target_dir/"
 # Keep the pack preview's native clipboard operation on each desktop.
-awk '/^import AppKit$/ { print "#if os(Linux)\nimport QtBridge\n#else\nimport AppKit\n#endif"; next }
+if grep -q 'DesktopDisplay.copy' "$source_dir/Components/Stickers/StickerPreviewModal.swift"; then
+    cp "$source_dir/App/DesktopDisplay.swift" "$source_dir/Components/Stickers/StickerPreviewModal.swift" "$target_dir/"
+else
+    awk '/^import AppKit$/ { print "#if os(Linux)\nimport QtBridge\n#else\nimport AppKit\n#endif"; next }
      /NSPasteboard.general.clearContents/ { print "#if os(Linux)\n        qs_clipboard_text(Self.link(packId: pack.id, packKey: pack.key))\n#else" }
      { print } /NSPasteboard.general.setString/ { print "#endif"; count++ }
      END { if (count != 1) exit 1 }' "$source_dir/Components/Stickers/StickerPreviewModal.swift" > "$target_dir/StickerPreviewModal.swift"
+fi
 if [ -f "$source_dir/Linux/LineClampText+Qt.swift" ]; then
     cp "$source_dir/Axo/AxoStackedButton.swift" "$target_dir/"
     if [ "$(uname -s)" = Linux ]; then

@@ -1,7 +1,24 @@
 import SwiftUI
 import XCTest
 
+private struct EditorCallbacks {
+    var submit: (() -> Void)?
+}
+
+private extension EnvironmentValues {
+    @Entry var editorCallbacks = EditorCallbacks()
+}
+
 final class EnvironmentTests: XCTestCase {
+    func testInferredEntryWithANonSendableDefault() {
+        var environment = EnvironmentValues()
+        var submitted = false
+        environment.editorCallbacks.submit = { submitted = true }
+        environment.editorCallbacks.submit?()
+        XCTAssertTrue(submitted)
+        XCTAssertNil(EnvironmentValues().editorCallbacks.submit)
+    }
+
     @MainActor func testURLDispositionAndRegionalOverrides() async {
         let url = URL(string: "https://example.test/help")!
         var environment = EnvironmentValues()

@@ -1,6 +1,6 @@
 import QtBridge
 import XCTest
-@testable import SwiftUI
+@_spi(Qt) @testable import SwiftUI
 
 private struct CapsuleHitStyle: ButtonStyle {
     func makeBody(configuration: Configuration) -> some View {
@@ -42,7 +42,9 @@ final class FocusInteractionTests: XCTestCase {
         XCTAssertEqual(qs_click(host.window, "move"), 1)
         XCTAssertEqual(qs_has_focus(host.window, "target"), 1)
         XCTAssertEqual(qs_read_text(host.window, "status", "Focused"), 1)
+        XCTAssertFalse(QtDesktop.keyboardFocusVisible)
         XCTAssertEqual(qs_tab(host.window), 1)
+        XCTAssertTrue(QtDesktop.keyboardFocusVisible)
         XCTAssertEqual(qs_read_text(host.window, "status", "Idle"), 1)
     }
 }

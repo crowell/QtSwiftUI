@@ -50,6 +50,16 @@ The `--avatar-editor` example builds the Serein Linux branch’s Group Avatar di
 
 ![Serein Group Avatar editor on Ubuntu](Screenshots/group-avatar.png)
 
+The composer fixture builds Serein’s production `CompositionInput`, rich editor, draft conversion and typography from its Linux branch. The X11 test types into a restored two-line draft, presses Return, deletes a mention with Backspace, and checks the outgoing body, mention ID and UTF-16 formatting ranges after each edit. With Swift 6.4 and Qt 6 installed in Ubuntu, run:
+
+```sh
+sh Scripts/prepare-composer.sh ../serein /tmp/serein-composer
+swift build --package-path /tmp/serein-composer --product ComposerCheck
+xvfb-run -a sh Scripts/ComposerCheck/exercise-x11.sh /tmp/serein-composer/.build/debug/ComposerCheck
+```
+
+![Serein message composer on Ubuntu](Screenshots/composer-draft.png)
+
 [Qt file chooser opened by Serein’s Photo button](Screenshots/group-avatar-file-import.png)
 
 The `--call-participants` example displays Serein’s group-call tiles for a blocked participant and a participant with a raised hand. “More Info” opens Serein’s localized alert in a window-modal Qt dialog. Ubuntu tests dismiss it and open it again. Apple and Qt tests both activate the raised-hand control. The alert capture was taken from an X11 display in Docker.
@@ -271,6 +281,7 @@ The target is source compatibility with Apple's public SwiftUI APIs. The impleme
 | View visibility and masks | Hidden views keep their layout and preferences. Both mask overloads composite the mask view’s alpha with the content in Qt. Tests move a half-transparent mask between the two edges and check hidden hit targets on both platforms. |
 | Lazy grids | Fixed, flexible and adaptive columns, per-column and grid alignment, right-to-left layout, full-width section headers and footers, and on-demand rows in a scroll view. Tests compare track frames and check cell state after scrolling and changing the column count. |
 | Lazy stacks | `LazyVStack` measures visible rows, estimates the remaining height and preserves state by row identity. Apple and Ubuntu tests jump between the ends of 200 rows, check retained state, and pin section headers and footers. |
+| Text editing | Text fields and editors bind selections to the Qt cursor. Attributed editors carry Swift attribute values through typing, paragraph breaks, deletion and undo, including custom keys used in Serein mentions. Disjoint selections can be set programmatically in multiline editors. Soft-wrap affinity and gesture-based disjoint selection still need verification. |
 | Scrolling | `ScrollViewReader` scrolls by explicit or `ForEach` ID, with an optional anchor. Shared tests move both axes, target sibling scroll views, jump to distant lazy rows and remove a target. `scrollDisabled` controls Qt wheel, scrollbar and kinetic input while leaving child actions available. Scroll views and text editors apply per-axis bounce policies to the Qt kinetic scroller. Physical trackpad and touch bounce remain unverified. Native Qt scrolling updates scroll geometry observers. Apple and Ubuntu tests scroll 240 points of content through an 80-point viewport and check old and new values as the offset crosses a threshold. |
 | Adaptive layouts | `ViewThatFits` checks candidates in order, measures ideal size on the requested axes and falls back to the last child. Tests resize across breakpoints and check the chosen button, lifecycle callbacks, preference values, size and alignment guides on Ubuntu and macOS. |
 | Scroll positioning | `ScrollPosition` and ID bindings move a native Qt scroll area by edge, coordinate or target. Tests cover per-role default anchors, short content, visibility thresholds, disabled target layouts and appended rows. Animated scrolling and exact visibility timing remain open. |
@@ -279,7 +290,7 @@ The target is source compatibility with Apple's public SwiftUI APIs. The impleme
 
 `./Scripts/check-apple.sh ../serein` type-checks the example source with Apple's SwiftUI module on a Mac with Xcode. `./Scripts/check-api.sh` extracts public symbol graphs from Xcode and the Linux image. Pass `--missing` to list missing declaration paths. The inventory groups declarations by symbol kind and path, counts overload spellings separately, and excludes underscored and synthesized members. A shared name alone cannot establish matching signatures, constraints, availability or behavior.
 
-The inventory against the macOS 27.2 SDK found 1,450 shared declaration paths out of 7,627 and 939 identical declaration spellings out of 8,735. The examples exercise a smaller set at runtime. Navigation, multiwindow scenes, broader animation support, text shaping parity, gestures and platform integration remain substantial gaps. Font metrics, control appearance and several layout behaviors differ from Apple's implementation.
+The inventory against the macOS 27.2 SDK found 1,487 shared declaration paths out of 7,627 and 979 identical declaration spellings out of 8,735. The examples exercise a smaller set at runtime. Navigation, multiwindow scenes, broader animation support, text shaping parity, gestures and platform integration remain substantial gaps. Font metrics, control appearance and several layout behaviors differ from Apple's implementation.
 
 After capturing the Linux examples, run `./Scripts/compare-artwork.sh ../serein` on macOS to render both illustrations with Apple's `ImageRenderer`. At a threshold of 8/255 in any RGB channel, 101 of 119,680 account artwork pixels (0.084%) and 91 of 49,928 key transparency pixels (0.182%) differed. The mean absolute channel differences were 0.104/255 and 0.095/255 respectively. Both reference images are saved in `.build/artwork/`.
 

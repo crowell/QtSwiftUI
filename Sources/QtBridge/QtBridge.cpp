@@ -19,7 +19,7 @@
 #include <QGestureEvent>
 #include <QNativeGestureEvent>
 #include <QPixmapCache>
-#include "PlainTextEditor.hpp"
+#include "RichTextEditor.hpp"
 #include "TextParagraph.hpp"
 #include <QClipboard>
 #include <QContextMenuEvent>
@@ -1071,14 +1071,20 @@ QSWidget qs_create(QSWindow *window, QSWidget parent, QSKind kind, int id) {
         QObject::connect(toggle, &QCheckBox::toggled, window, [=](bool on) { window->event(window->context, id, QSActivate, on ? "1" : "0"); });
         return toggle;
     }
-    case QSMultilineField: case QSTextEditor: {
-        auto *edit = new PlainTextEditor(container);
+    case QSMultilineField: case QSTextEditor: case QSRichEditor: {
+        auto *edit = kind == QSRichEditor ? new RichTextEditor(container) : new PlainTextEditor(container);
         if (kind == QSMultilineField) {
             edit->configureField();
             edit->submit = [=] { window->event(window->context, id, QSSubmit, ""); };
         }
         edit->setProperty("qsScrollInput", QVariant::fromValue<QObject *>(new ScrollInput(edit)));
         window->observeFocus(edit, id);
+        auto cursorChanged = [=] {
+            if (!edit->extraSelections().isEmpty()) edit->setExtraSelections({});
+            window->event(window->context, id, QSCursorChanged, "");
+        };
+        QObject::connect(edit, &QPlainTextEdit::cursorPositionChanged, edit, cursorChanged);
+        QObject::connect(edit, &QPlainTextEdit::selectionChanged, edit, cursorChanged);
         QObject::connect(edit, &QPlainTextEdit::textChanged, window, [=] {
             window->event(window->context, id, QSActivate, "");
         });
@@ -1088,6 +1094,9 @@ QSWidget qs_create(QSWindow *window, QSWidget parent, QSKind kind, int id) {
         auto *edit = new QLineEdit(container);
         if (kind == QSSecureEdit) edit->setEchoMode(QLineEdit::Password);
         window->observeFocus(edit, id);
+        auto cursorChanged = [=] { window->event(window->context, id, QSCursorChanged, ""); };
+        QObject::connect(edit, &QLineEdit::cursorPositionChanged, edit, cursorChanged);
+        QObject::connect(edit, &QLineEdit::selectionChanged, edit, cursorChanged);
         QObject::connect(edit, &QLineEdit::textEdited, window, [=](const QString &s) { window->event(window->context, id, QSActivate, s.toUtf8().constData()); });
         QObject::connect(edit, &QLineEdit::returnPressed, window, [=] { window->event(window->context, id, QSSubmit, ""); });
         return edit;
@@ -1235,7 +1244,10 @@ void qs_text(QSWidget w, const char *s) {
     auto text = QString::fromUtf8(s);
     if (auto *label = dynamic_cast<PlainLabel *>(widget(w))) label->setSource(text);
     else if (auto *button = qobject_cast<QAbstractButton *>(widget(w))) button->setText(QString(text).replace('&', "&&"));
-    else if (auto *edit = qobject_cast<QLineEdit *>(widget(w)); edit && edit->text() != text) edit->setText(text);
+    else if (auto *edit = qobject_cast<QLineEdit *>(widget(w)); edit && edit->text() != text) {
+        const QSignalBlocker block(edit);
+        edit->setText(text);
+    }
 }
 static Qt::TextElideMode textElideMode(QSTextTruncation mode) {
     switch (mode) {
@@ -1298,6 +1310,63 @@ void qs_field_style(QSWidget w, int plain) {
     auto palette = edit->palette();
     palette.setColor(QPalette::Base, plain ? QColor(Qt::transparent) : application().palette().color(QPalette::Base));
     edit->setPalette(palette);
+}
+void qs_rich_define(QSWidget w, int id, const char *link, const char *foreground, const char *background,
+                    const char *family, double size, int weight, int italic, int underline, const char *underlineColor,
+                    int strike, const char *strikeColor) {
+    auto *editor = static_cast<RichTextEditor *>(w);
+    bool customStrike;
+    auto format = swiftTextFormat(editor->font(), editor->palette(), link, foreground, background, family, size, weight,
+                                  italic, underline, underlineColor, strike, strikeColor, customStrike);
+    if (customStrike) format.setFontStrikeOut(true);
+    editor->define(id, format);
+}
+int qs_rich_revision(QSWidget w) { return static_cast<RichTextEditor *>(w)->document()->revision(); }
+void qs_rich_begin(QSWidget w) { static_cast<RichTextEditor *>(w)->begin(); }
+void qs_rich_append(QSWidget w, int id, const char *text, size_t count) { static_cast<RichTextEditor *>(w)->append(QString::fromUtf8(text, qsizetype(count)), id); }
+void qs_rich_finish(QSWidget w) { static_cast<RichTextEditor *>(w)->finish(); }
+void qs_rich_typing(QSWidget w, int id) { static_cast<RichTextEditor *>(w)->typing(id); }
+void qs_rich_read(QSWidget w, void *context, QSEditorRun receive) { static_cast<RichTextEditor *>(w)->read(context, receive); }
+QSTextRange qs_editor_selection(QSWidget w) {
+    if (auto *line = qobject_cast<QLineEdit *>(widget(w))) {
+        if (line->hasSelectedText()) return {line->selectionStart(), line->selectionEnd()};
+        return {line->cursorPosition(), line->cursorPosition()};
+    }
+    const auto cursor = static_cast<PlainTextEditor *>(w)->textCursor();
+    return {cursor.selectionStart(), cursor.selectionEnd()};
+}
+void qs_editor_select(QSWidget w, const QSTextRange *ranges, size_t count, int upstream) {
+    const QSignalBlocker block(widget(w));
+    if (auto *line = qobject_cast<QLineEdit *>(widget(w))) {
+        if (!count) { line->deselect(); return; }
+        auto range = ranges[0];
+        if (range.start == range.end) line->setCursorPosition(range.start);
+        else line->setSelection(upstream ? range.end : range.start, upstream ? range.start - range.end : range.end - range.start);
+        return;
+    }
+    auto *editor = static_cast<PlainTextEditor *>(w);
+    auto cursor = editor->textCursor();
+    QList<QTextEdit::ExtraSelection> extra;
+    for (size_t index = 0; index < count; ++index) {
+        const auto range = ranges[index];
+        if (range.start < 0 || range.end >= editor->document()->characterCount()) continue;
+        QTextCursor next(editor->document());
+        next.setPosition(upstream ? range.end : range.start);
+        next.setPosition(upstream ? range.start : range.end, QTextCursor::KeepAnchor);
+        if (index == 0) cursor = next;
+        else {
+            QTextEdit::ExtraSelection selected;
+            selected.cursor = next;
+            selected.format.setForeground(editor->palette().highlightedText());
+            selected.format.setBackground(editor->palette().highlight());
+            extra.append(selected);
+        }
+    }
+    if (!count) cursor.clearSelection();
+    if (!extra.isEmpty() || !editor->extraSelections().isEmpty()) editor->setExtraSelections(extra);
+    const auto current = editor->textCursor();
+    if (cursor.selectionStart() != current.selectionStart() || cursor.selectionEnd() != current.selectionEnd())
+        editor->setTextCursor(cursor);
 }
 void qs_editor_text(QSWidget w, const char *utf8, size_t count) {
     static_cast<PlainTextEditor *>(w)->applyText(QString::fromUtf8(utf8, qsizetype(count)));
@@ -1678,6 +1747,10 @@ void qs_group_shape(QSWidget w, const QSPath *path, int evenOdd) {
     auto *group = static_cast<GroupWidget *>(w);
     group->contentShape = *path;
     group->contentShape->setFillRule(evenOdd ? Qt::OddEvenFill : Qt::WindingFill);
+}
+int qs_keyboard_focus_visible(void) {
+    const auto *window = QApplication::activeWindow();
+    return window && window->testAttribute(Qt::WA_KeyboardFocusChange);
 }
 void qs_focus_effect(QSWidget w, int enabled) { widget(w)->setProperty("qsNoFocusEffect", !enabled); }
 void qs_group_focus(QSWidget w, int enabled, int interactions) {

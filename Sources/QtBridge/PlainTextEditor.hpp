@@ -8,7 +8,7 @@
 #include <functional>
 #include <cmath>
 
-class PlainTextEditor final : public QPlainTextEdit {
+class PlainTextEditor : public QPlainTextEdit {
 public:
     explicit PlainTextEditor(QWidget *parent) : QPlainTextEdit(parent) {
         setFrameShape(QFrame::NoFrame);

@@ -56,6 +56,7 @@ public struct EnvironmentValues {
     public var horizontalScrollBounceBehavior = ScrollBounceBehavior.automatic
     public var verticalScrollIndicatorVisibility = ScrollIndicatorVisibility.automatic
     public var horizontalScrollIndicatorVisibility = ScrollIndicatorVisibility.automatic
+    var selectionAffinity = TextSelectionAffinity.automatic
     var selectableText = false
     public internal(set) var accessibilityReduceMotion = false
     public var displayScale: CGFloat = 1

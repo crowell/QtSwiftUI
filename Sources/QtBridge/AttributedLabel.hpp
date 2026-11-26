@@ -1,7 +1,6 @@
 #pragma once
-#include "RegisteredFonts.hpp"
+#include "TextFormat.hpp"
 #include "TextElision.hpp"
-#include "TextStrike.hpp"
 #include <QTextBrowser>
 #include <QPointer>
 #include <QScrollBar>
@@ -42,25 +41,11 @@ public:
     }
     void append(const QString &text, const char *link, const char *foreground, const char *background,
                 const char *family, double size, int weight, bool italic, int underline, const char *underlineColor, int strike, const char *strikeColor) {
-        QTextCharFormat format;
-        if (*link) {
-            hasLinks = true;
-            format.setAnchor(true);
-            format.setAnchorHref(QString::fromUtf8(link));
-            format.setForeground(palette().color(QPalette::Link));
-            format.setFontUnderline(false);
-        }
-        if (*foreground) format.setForeground(QColor(QString::fromUtf8(foreground)));
-        if (*background) format.setBackground(QColor(QString::fromUtf8(background)));
-        if (size > 0) {
-            QFont face = resolveFont(font(), QString::fromUtf8(family), weight, italic);
-            face.setPixelSize(qMax(1, qRound(size)));
-            face.setLetterSpacing(font().letterSpacingType(), font().letterSpacing());
-            format.setFont(face);
-        }
-        if (underline) format.setUnderlineStyle(static_cast<QTextCharFormat::UnderlineStyle>(underline));
-        if (*underlineColor) format.setUnderlineColor(QColor(QString::fromUtf8(underlineColor)));
-        hasCustomStrikes |= setStrikeFormat(format, strike, QString::fromUtf8(strikeColor));
+        bool customStrike;
+        const auto format = swiftTextFormat(font(), palette(), link, foreground, background, family, size, weight, italic,
+                                            underline, underlineColor, strike, strikeColor, customStrike);
+        hasCustomStrikes |= customStrike;
+        hasLinks |= *link != 0;
         pending.append({text, format});
         QTextCursor cursor(&content);
         cursor.movePosition(QTextCursor::End);

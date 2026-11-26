@@ -1,6 +1,8 @@
 import QtBridge
 
 @_spi(Qt) @MainActor public enum QtDesktop {
+    public static var keyboardFocusVisible: Bool { qs_keyboard_focus_visible() != 0 }
+
     public static var primaryScreenSize: CGSize? {
         let size = qs_primary_screen_size()
         guard size.width > 0, size.height > 0 else { return nil }

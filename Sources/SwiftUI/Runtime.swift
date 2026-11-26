@@ -71,6 +71,7 @@ enum Part: Hashable {
         return owner
     }
     func widget(_ kind: QSKind, pressed: ((Bool) -> Void)? = nil, exitCommand: (() -> Void)? = nil,
+                cursorChanged: ((UnsafeMutableRawPointer) -> Void)? = nil,
                 tap: ((UnsafeMutableRawPointer) -> Void)? = nil, transfer: TransferAction? = nil,
                 adjustment: ((AccessibilityAdjustmentDirection) -> Void)? = nil,
                 drag: ((QSDragSample, UnsafeMutableRawPointer) -> Void)? = nil,
@@ -89,6 +90,7 @@ enum Part: Hashable {
             case QSActivate:
                 tap?(entry.widget)
                 action?(value)
+            case QSCursorChanged: cursorChanged?(entry.widget)
             case QSAccessibilityAction: accessibilityAction?(value)
             case QSIncrement: adjustment?(.increment)
             case QSDecrement: adjustment?(.decrement)

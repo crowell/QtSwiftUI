@@ -24,7 +24,7 @@ public struct EntryMacro: AccessorMacro, PeerMacro {
     public static func expansion(of node: AttributeSyntax, providingAccessorsOf declaration: some DeclSyntaxProtocol,
                                  in context: some MacroExpansionContext) throws -> [AccessorDeclSyntax] {
         let key = "__Key_" + (try EntryDeclaration(declaration)).name
-        return ["get { self[\(raw: key).self] }", "set { self[\(raw: key).self] = newValue }"]
+        return ["get { self[\(raw: key).self] }", "set { self[\(raw: key).self] = newValue }", "_modify { yield &self[\(raw: key).self] }"]
     }
     public static func expansion(of node: AttributeSyntax, providingPeersOf declaration: some DeclSyntaxProtocol,
                                  in context: some MacroExpansionContext) throws -> [DeclSyntax] {
@@ -43,12 +43,23 @@ public struct EntryMacro: AccessorMacro, PeerMacro {
         guard let initial = entry.initial else { throw MacroExpansionErrorMessage("@Entry requires a type or initial value") }
         return ["""
             private enum \(raw: key): SwiftUI.\(raw: protocolName) {
-                static let defaultValue = \(initial)
+                @SwiftUI.__EntryDefaultValue static var defaultValue = \(initial)
             }
             """]
     }
 }
 
+// A computed getter keeps Swift's inferred initializer type without sharing a non-Sendable value.
+public struct EntryDefaultValueMacro: AccessorMacro {
+    public static func expansion(of node: AttributeSyntax, providingAccessorsOf declaration: some DeclSyntaxProtocol,
+                                 in context: some MacroExpansionContext) throws -> [AccessorDeclSyntax] {
+        guard let value = try EntryDeclaration(declaration).initial else {
+            throw MacroExpansionErrorMessage("An entry default requires an initializer")
+        }
+        return ["get { \(value) }"]
+    }
+}
+
 @main struct QtSwiftUIPlugin: CompilerPlugin {
-    let providingMacros: [Macro.Type] = [EntryMacro.self]
+    let providingMacros: [Macro.Type] = [EntryMacro.self, EntryDefaultValueMacro.self]
 }

@@ -161,17 +161,20 @@ public struct Toggle<Label: View>: Primitive {
         return [stacked([context.control(widget)] + label.resolve(context.descending(.position(0))), axis: .horizontal, alignment: .center, spacing: 4, direction: context.environment.layoutDirection)]
     }
 }
-@MainActor private func field(_ title: String, text: Binding<String>, secure: Bool, in context: Context) -> Element {
-    let widget = context.widget(secure ? QSSecureEdit : QSEdit, action: { text.wrappedValue = $0 })
+@MainActor private func field(_ title: String, text: Binding<String>, secure: Bool, selection: EditorSelection?, in context: Context) -> Element {
+    let widget = context.widget(secure ? QSSecureEdit : QSEdit, cursorChanged: { selection?.changed($0) },
+                                action: { text.wrappedValue = $0 })
     qs_text(widget, text.wrappedValue)
+    selection?.apply(to: widget)
     qs_hint(widget, title)
     qs_autocorrection(widget, context.environment.autocorrectionDisabled ? 1 : 0)
     let control = context.control(widget, expands: true)
     qs_field_style(widget, context.environment.plainField ? 1 : 0)
     return control
 }
-public struct TextField<Label: View>: Primitive {
+public nonisolated struct TextField<Label: View>: Primitive {
     let title: String, text: Binding<String>
+    private var selection: Binding<TextSelection?>?
     var axis: Axis = .horizontal
     var prompt: Text?
     var secure = false
@@ -190,23 +193,30 @@ public struct TextField<Label: View>: Primitive {
         self.prompt = prompt
         self.axis = axis
     }
-    init(configuration title: String, text: Binding<String>, secure: Bool, prompt: Text? = nil, axis: Axis = .horizontal) {
+    @_disfavoredOverload
+    public nonisolated init<S: StringProtocol>(_ title: S, text: Binding<String>, selection: Binding<TextSelection?>, prompt: Text? = nil, axis: Axis? = nil) where Label == Text {
+        self.init(title, text: text, prompt: prompt, axis: axis ?? .horizontal)
+        self.selection = selection
+    }
+    init(configuration title: String, text: Binding<String>, secure: Bool, selection: Binding<TextSelection?>? = nil, prompt: Text? = nil, axis: Axis = .horizontal) {
+        self.selection = selection
         self.prompt = prompt
         self.axis = axis
         self.title = title
         self.text = text
         self.secure = secure
     }
-    func elements(in context: Context) -> [Element] {
+    @MainActor func elements(in context: Context) -> [Element] {
         if let style = context.environment.fieldStyle {
-            let configuration = TextField<_TextFieldStyleLabel>(configuration: title, text: text, secure: secure, prompt: prompt, axis: axis)
+            let configuration = TextField<_TextFieldStyleLabel>(configuration: title, text: text, secure: secure, selection: selection, prompt: prompt, axis: axis)
             return style(configuration).resolve(context.with(\.fieldStyle, nil))
         }
         var context = context
         if context.environment.label.isEmpty { context.environment.label = title }
         let placeholder = prompt?.string ?? title
-        guard axis == .vertical else { return [field(placeholder, text: text, secure: secure, in: context)] }
-        let widget = boundEditor(QSMultilineField, text: text, in: context)
+        let cursor = selection.map { EditorSelection(binding: $0, text: text, affinity: context.environment.selectionAffinity) }
+        guard axis == .vertical else { return [field(placeholder, text: text, secure: secure, selection: cursor, in: context)] }
+        let widget = boundEditor(QSMultilineField, text: text, selection: cursor, in: context)
         qs_hint(widget, placeholder)
         context.style(widget)
         qs_field_style(widget, context.environment.plainField ? 1 : 0)

@@ -12,9 +12,9 @@ typedef struct { double x, y, width, height; } QSRect;
 typedef struct { double a, b, c, d, tx, ty; } QSAffine;
 typedef struct QSPath QSPath;
 typedef void (*QSRender)(void *context, int width, int height);
-enum QSEventKind { QSActivate, QSFocusChanged, QSSubmit, QSPressedChanged, QSExitCommand, QSHoverChanged, QSContinuousHover, QSIncrement, QSDecrement, QSGestureCancelled, QSMagnified, QSAccessibilityAction };
+enum QSEventKind { QSActivate, QSFocusChanged, QSSubmit, QSPressedChanged, QSExitCommand, QSHoverChanged, QSContinuousHover, QSIncrement, QSDecrement, QSGestureCancelled, QSMagnified, QSAccessibilityAction, QSCursorChanged };
 typedef void (*QSEvent)(void *context, int id, enum QSEventKind kind, const char *value);
-enum QSKind { QSLabel, QSButton, QSToggle, QSEdit, QSSecureEdit, QSSurface, QSScroll, QSSlider, QSProgress, QSGroup, QSCanvas, QSLink, QSRaster, QSTextEditor, QSAttributedLabel, QSBusyIndicator, QSMultilineField, QSMenuButton, QSPopover, QSMenuBar };
+enum QSKind { QSLabel, QSButton, QSToggle, QSEdit, QSSecureEdit, QSSurface, QSScroll, QSSlider, QSProgress, QSGroup, QSCanvas, QSLink, QSRaster, QSTextEditor, QSAttributedLabel, QSBusyIndicator, QSMultilineField, QSMenuButton, QSPopover, QSMenuBar, QSRichEditor };
 
 QSWindow *qs_window(const char *title, void *context, QSRender render, QSEvent event);
 void qs_open(QSWindow *, int width, int height);
@@ -72,6 +72,19 @@ void qs_attributed_begin(QSWidget);
 void qs_attributed_append(QSWidget, const char *utf8, size_t count, const char *link, const char *foreground, const char *background,
                           const char *family, double size, int weight, int italic, int underline, const char *underlineColor, int strike, const char *strikeColor);
 void qs_attributed_finish(QSWidget, int selectable, double lineSpacing);
+typedef void (*QSEditorRun)(void *context, int attribute_id, const char *text, size_t count);
+void qs_rich_define(QSWidget, int id, const char *link, const char *foreground, const char *background,
+                    const char *family, double size, int weight, int italic, int underline, const char *underline_color,
+                    int strike, const char *strike_color);
+int qs_rich_revision(QSWidget);
+void qs_rich_begin(QSWidget);
+void qs_rich_append(QSWidget, int id, const char *text, size_t count);
+void qs_rich_finish(QSWidget);
+void qs_rich_typing(QSWidget, int id);
+void qs_rich_read(QSWidget, void *context, QSEditorRun receive);
+typedef struct { int start, end; } QSTextRange;
+QSTextRange qs_editor_selection(QSWidget);
+void qs_editor_select(QSWidget, const QSTextRange *ranges, size_t count, int upstream);
 void qs_editor_text(QSWidget, const char *utf8, size_t count);
 const unsigned char *qs_editor_value(QSWidget, size_t *count);
 void qs_scroll_background(QSWidget, int visible, int dark);
@@ -167,6 +180,7 @@ int qs_has_pointer_style(QSWindow *, int x, int y, QSPointer);
 int qs_direct_adjust(QSWindow *, const char *value, int increment);
 void qs_direct_touch(QSWidget, int enabled);
 void qs_group_focus(QSWidget, int enabled, int interactions);
+int qs_keyboard_focus_visible(void);
 void qs_focus_effect(QSWidget, int enabled);
 void qs_help(QSWidget, const char *text);
 unsigned qs_pixel(QSWindow *, int x, int y);
