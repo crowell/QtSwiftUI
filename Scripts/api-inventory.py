@@ -28,6 +28,7 @@ def main():
     parser.add_argument("apple")
     parser.add_argument("linux")
     parser.add_argument("--missing", action="store_true", help="print Apple paths absent on Linux")
+    parser.add_argument("--by-kind", action="store_true", help="show coverage for each declaration kind")
     args = parser.parse_args()
     apple, linux = declarations(args.apple), declarations(args.linux)
     common = apple.keys() & linux.keys()
@@ -37,6 +38,14 @@ def main():
     print(f"Missing paths: {len(apple.keys() - common)}")
     print(f"Apple declaration spellings: {sum(map(len, apple.values()))}")
     print(f"Identical spellings at matching paths: {exact}")
+    if args.by_kind:
+        print("\nKind                 Apple paths   Present   Missing   Apple spellings   Identical")
+        for kind in sorted({key[0] for key in apple}):
+            keys = [key for key in apple if key[0] == kind]
+            present = sum(key in linux for key in keys)
+            spellings = sum(len(apple[key]) for key in keys)
+            identical = sum(len(apple[key] & linux[key]) for key in keys if key in linux)
+            print(f"{kind.removeprefix('swift.'):20} {len(keys):11} {present:9} {len(keys) - present:9} {spellings:17} {identical:11}")
     if args.missing:
         for kind, path in sorted(apple.keys() - linux.keys()):
             print(kind, path)
