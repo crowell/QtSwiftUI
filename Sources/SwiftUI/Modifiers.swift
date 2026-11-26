@@ -19,7 +19,7 @@ struct Transform<Content: View>: Primitive {
     let transform: (Content, Context) -> [Element]
     func elements(in context: Context) -> [Element] { transform(content, context) }
 }
-public protocol ViewModifier {
+@MainActor @preconcurrency public protocol ViewModifier {
     associatedtype Body: View
     typealias Content = _ViewModifier_Content<Self>
     @MainActor @ViewBuilder func body(content: Content) -> Body

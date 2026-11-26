@@ -47,6 +47,7 @@ void qs_path_stroke(QSPath *target, const QSPath *source, double width, int cap,
                     const double *dash, size_t count, double phase);
 void qs_path_clip(QSPath *target, const QSPath *source, int evenOdd, int inverse);
 void qs_canvas_clip(QSWidget, const QSPath *);
+void qs_canvas_blur(QSWidget, double radius, unsigned blurOptions, unsigned filterOptions);
 void qs_surface_path(QSWidget, const QSPath *, int evenOdd, int antialias);
 void qs_canvas_clear(QSWidget);
 void qs_canvas_path(QSWidget, const QSPath *, QSAffine, double opacity, double lineWidth, int evenOdd, int antialias);

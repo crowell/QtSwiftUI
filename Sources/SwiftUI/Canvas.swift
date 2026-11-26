@@ -39,6 +39,23 @@ public struct GraphicsContext {
             Self(paint: .linear(gradient, startPoint, endPoint))
         }
     }
+    public struct BlurOptions: OptionSet, Sendable {
+        public let rawValue: UInt32
+        public init(rawValue: UInt32) { self.rawValue = rawValue }
+        public static let opaque = Self(rawValue: 1), dithersResult = Self(rawValue: 2)
+    }
+    public struct FilterOptions: OptionSet, Sendable {
+        public let rawValue: UInt32
+        public init(rawValue: UInt32) { self.rawValue = rawValue }
+        public static let linearColor = Self(rawValue: 1)
+    }
+    public struct Filter: Sendable {
+        fileprivate let radius: CGFloat
+        fileprivate let options: BlurOptions
+        public static func blur(radius: CGFloat, options: BlurOptions = []) -> Self {
+            Self(radius: radius, options: options)
+        }
+    }
     public struct ClipOptions: OptionSet, Sendable {
         public let rawValue: UInt32
         public init(rawValue: UInt32) { self.rawValue = rawValue }
@@ -62,10 +79,12 @@ public struct GraphicsContext {
         let opacity: Double, lineWidth: CGFloat?
         let environment: EnvironmentValues
         let clip: ClipRegion
+        let filters: [(Filter, FilterOptions)]
     }
     fileprivate final class DisplayList { var drawings: [Draw] = [] }
     fileprivate let list: DisplayList
     fileprivate var region: ClipRegion
+    fileprivate var filters: [(Filter, FilterOptions)] = []
     public var environment: EnvironmentValues
     public var opacity: Double = 1
     public var transform = CGAffineTransform.identity
@@ -85,15 +104,18 @@ public struct GraphicsContext {
     public mutating func clip(to path: Path, style: FillStyle = FillStyle(), options: ClipOptions = []) {
         region.steps.append((path.applying(transform), style.isEOFilled, options.contains(.inverse)))
     }
+    public mutating func addFilter(_ filter: Filter, options: FilterOptions = []) {
+        filters.append((filter, options))
+    }
     public func stroke(_ path: Path, with shading: Shading, style: StrokeStyle) {
         fill(path.strokedPath(style), with: shading)
     }
     public func fill(_ path: Path, with shading: Shading, style: FillStyle = FillStyle()) {
-        list.drawings.append(Draw(path: path, shading: shading, fill: style, transform: transform, opacity: opacity, lineWidth: nil, environment: environment, clip: region))
+        list.drawings.append(Draw(path: path, shading: shading, fill: style, transform: transform, opacity: opacity, lineWidth: nil, environment: environment, clip: region, filters: filters))
     }
     public func stroke(_ path: Path, with shading: Shading, lineWidth: CGFloat = 1) {
         if lineWidth > 0 {
-            list.drawings.append(Draw(path: path, shading: shading, fill: FillStyle(), transform: transform, opacity: opacity, lineWidth: lineWidth, environment: environment, clip: region))
+            list.drawings.append(Draw(path: path, shading: shading, fill: FillStyle(), transform: transform, opacity: opacity, lineWidth: lineWidth, environment: environment, clip: region, filters: filters))
         }
     }
     @MainActor fileprivate func replay(on widget: UnsafeMutableRawPointer) {
@@ -104,6 +126,9 @@ public struct GraphicsContext {
                                drawing.fill.isEOFilled ? 1 : 0, drawing.fill.isAntialiased ? 1 : 0)
             }
             if !drawing.clip.steps.isEmpty { drawing.clip.withPath { qs_canvas_clip(widget, $0) } }
+            for (filter, options) in drawing.filters {
+                qs_canvas_blur(widget, filter.radius, filter.options.rawValue, options.rawValue)
+            }
             let environment = drawing.environment
             switch drawing.shading.paint {
             case .style(let style): qs_canvas_color(widget, style.color(in: environment).hex(environment.colorScheme))

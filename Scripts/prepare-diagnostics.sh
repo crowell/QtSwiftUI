@@ -10,10 +10,8 @@ cp "$root"/Tests/SereinDiagnostics/*.swift "$target/Tests/ScreenTests/"
 ln -s "$checkout/Packages/SignalI18n" "$target/SignalI18n"
 cp "$source_dir/Calling/CallDiagnosticWindow.swift" "$source_dir/Theme/I18nEnvironment.swift" \
     "$source_dir/Theme/AxoColor.swift" "$source_dir/Theme/AxoFocusRing.swift" \
+    "$source_dir/Theme/AxoShadow.swift" "$source_dir/Tokens/AxoTokens.generated.swift" \
     "$root"/Scripts/CallDiagnostics/*.swift "$target/Sources/CallDiagnostics/"
-# Only the generated color extension is used by this screen.
-sed -n '/^extension AxoColor {$/,/^}$/p' "$source_dir/Tokens/AxoTokens.generated.swift" > "$target/Sources/CallDiagnostics/Colors.swift"
-test -s "$target/Sources/CallDiagnostics/Colors.swift"
 cat > "$target/Package.swift" <<'SWIFT'
 // swift-tools-version: 6.2
 import PackageDescription

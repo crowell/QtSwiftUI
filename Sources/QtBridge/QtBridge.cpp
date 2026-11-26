@@ -1,4 +1,5 @@
 #include "QtBridge.h"
+#include "CanvasBlur.hpp"
 #include <QApplication>
 #include <QAccessibleWidget>
 #include <QCheckBox>
@@ -110,6 +111,7 @@ struct Drawing {
     QColor color;
     std::optional<QLinearGradient> gradient;
     std::optional<QPainterPath> clip;
+    std::vector<CanvasBlur> filters;
 };
 class CanvasWidget final : public QWidget {
 public:
@@ -121,17 +123,47 @@ public:
         for (const auto &drawing : drawings) {
             painter.save();
             if (drawing.clip) painter.setClipPath(*drawing.clip);
-            painter.setRenderHint(QPainter::Antialiasing, drawing.antialias);
-            painter.setTransform(drawing.matrix, true);
             painter.setOpacity(drawing.opacity);
-            QBrush brush = drawing.gradient ? QBrush(*drawing.gradient) : QBrush(drawing.color);
-            if (drawing.lineWidth >= 0) {
-                painter.strokePath(drawing.path, QPen(brush, drawing.lineWidth, Qt::SolidLine, Qt::FlatCap, Qt::MiterJoin));
-            } else {
-                painter.fillPath(drawing.path, brush);
-            }
+            if (drawing.filters.empty()) paintSource(painter, drawing);
+            else paintFiltered(painter, drawing);
             painter.restore();
         }
+    }
+private:
+    static void paintSource(QPainter &painter, const Drawing &drawing) {
+        painter.setRenderHint(QPainter::Antialiasing, drawing.antialias);
+        painter.setTransform(drawing.matrix, true);
+        const QBrush brush = drawing.gradient ? QBrush(*drawing.gradient) : QBrush(drawing.color);
+        if (drawing.lineWidth >= 0) {
+            painter.strokePath(drawing.path, QPen(brush, drawing.lineWidth, Qt::SolidLine, Qt::FlatCap, Qt::MiterJoin));
+        } else {
+            painter.fillPath(drawing.path, brush);
+        }
+    }
+    void paintFiltered(QPainter &painter, const Drawing &drawing) {
+        // Keep enough offscreen source pixels for edges that blur into the window.
+        double pad = 1;
+        for (const auto &filter : drawing.filters) pad += 3.5 * filter.radius;
+        const double stroke = qMax(0.0, drawing.lineWidth) / 2;
+        QRectF bounds = drawing.matrix.mapRect(drawing.path.controlPointRect().adjusted(-stroke, -stroke, stroke, stroke));
+        const QRectF area = bounds.adjusted(-pad, -pad, pad, pad).intersected(QRectF(rect()).adjusted(-pad, -pad, pad, pad));
+        if (area.isEmpty() || !std::isfinite(area.width()) || !std::isfinite(area.height())) return;
+        // Large filters have low spatial frequency. Sample on a coarser grid
+        // before allocating backing storage when the spread exceeds the window.
+        const double scale = qMin(devicePixelRatioF(), 2.0 * qMax(width(), height()) / qMax(area.width(), area.height()));
+        const int w = qCeil(area.width() * scale), h = qCeil(area.height() * scale);
+        QImage layer(w, h, QImage::Format_ARGB32_Premultiplied);
+        if (layer.isNull()) return;
+        layer.fill(Qt::transparent);
+        {
+            QPainter source(&layer);
+            source.scale(scale, scale);
+            source.translate(-area.topLeft());
+            paintSource(source, drawing);
+        }
+        for (const auto &filter : drawing.filters) layer = gaussianBlur(layer, filter, scale);
+        painter.setRenderHint(QPainter::SmoothPixmapTransform);
+        painter.drawImage(QRectF(area.topLeft(), QSizeF(w / scale, h / scale)), layer);
     }
 };
 QWidget *widget(QSWidget w) { return static_cast<QWidget *>(w); }
@@ -438,6 +470,10 @@ void qs_canvas_path(QSWidget w, const QSPath *path, QSAffine t, double opacity, 
     auto *canvas = static_cast<CanvasWidget *>(w);
     auto &drawing = canvas->drawings.emplace_back(Drawing{*path, transform(t), opacity, lineWidth, bool(antialias), Qt::black, {}});
     drawing.path.setFillRule(evenOdd ? Qt::OddEvenFill : Qt::WindingFill);
+}
+void qs_canvas_blur(QSWidget w, double radius, unsigned blurOptions, unsigned filterOptions) {
+    if (std::isfinite(radius) && radius > 0)
+        static_cast<CanvasWidget *>(w)->drawings.back().filters.push_back({radius, blurOptions, filterOptions});
 }
 void qs_canvas_color(QSWidget w, const char *color) {
     static_cast<CanvasWidget *>(w)->drawings.back().color = QColor(QString::fromUtf8(color));
