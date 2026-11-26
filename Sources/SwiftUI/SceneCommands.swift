@@ -140,15 +140,18 @@ extension WindowScene {
         let actions = MenuActions()
         let bar = menuContext.widget(QSMenuBar, action: actions.perform)
         actions.install(items, on: bar)
-        let menuHeight = qs_measure(bar, -1).height
+        let menuSize = qs_measure(bar, -1)
+        let menuHeight = menuSize.height
         let root = stacked(content, axis: .vertical, alignment: .center, spacing: 8)
         func remaining(_ proposal: ProposedViewSize) -> ProposedViewSize {
             ProposedViewSize(width: proposal.width, height: proposal.height.map { max(0, $0 - menuHeight) })
         }
         return [Element { proposal in
             let measured = root.measure(remaining(proposal))
-            return CGSize(width: proposal.width.flatMap { $0.isFinite ? $0 : nil } ?? measured.width,
-                          height: proposal.height.flatMap { $0.isFinite ? $0 : nil } ?? measured.height + menuHeight)
+            let offeredWidth = proposal.width.flatMap { $0.isFinite ? $0 : nil } ?? 0
+            let offeredHeight = proposal.height.flatMap { $0.isFinite ? $0 : nil } ?? 0
+            return CGSize(width: max(menuSize.width, measured.width, offeredWidth),
+                          height: max(measured.height + menuHeight, offeredHeight))
         } place: { rect, proposal in
             qs_place(bar, rect.minX, rect.minY, rect.width, menuHeight)
             let inner = remaining(proposal)

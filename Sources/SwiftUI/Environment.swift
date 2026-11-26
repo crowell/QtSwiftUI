@@ -83,8 +83,8 @@ public struct EnvironmentValues {
     var submit: (() -> Void)?
     public internal(set) var isPresented = false
     var canPresentWindow = false
-    var presentWindow: @MainActor (String) -> Void = { _ in }
-    var dismissScene: @MainActor (String?) -> Void = { _ in }
+    var presentWindow: @MainActor (WindowRequest) -> Void = { _ in }
+    var dismissScene: @MainActor (WindowRequest?) -> Void = { _ in }
     var closePresentation: @MainActor () -> Void = {}
     var urlAction: OpenURLAction?
     public var calendar: Calendar = .autoupdatingCurrent

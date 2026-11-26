@@ -19,6 +19,7 @@ enum QSKind { QSLabel, QSButton, QSToggle, QSEdit, QSSecureEdit, QSSurface, QSSc
 QSWindow *qs_window(const char *title, void *context, QSRender render, QSEvent event);
 void qs_open(QSWindow *, int width, int height);
 void qs_window_raise(QSWindow *);
+void qs_window_limits(QSWindow *, double minWidth, double minHeight, double maxWidth, double maxHeight);
 void qs_request_window_close(QSWindow *);
 void qs_observe_close(QSWindow *, void (*closed)(void *context));
 void qs_snapshot_window(QSWindow *);

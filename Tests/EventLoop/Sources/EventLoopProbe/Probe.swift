@@ -78,6 +78,13 @@ private struct SecondWindow: View {
         }
         .defaultSize(width: 260, height: 100)
         Window("Second", id: "second") { SecondWindow(count: $count) }
+        WindowGroup(Text("Item"), id: "item", for: Int.self) { item in
+            Text(item.wrappedValue.map(String.init) ?? "New").frame(width: 120, height: 80)
+        }
+        .windowResizability(.contentSize)
+        .defaultSize(CGSize(width: 120, height: 80))
+        WindowGroup("Draft", for: String.self) { title in TextField("Title", text: title) }
+            defaultValue: { "New draft" }
     }
 
     private var status: some View {

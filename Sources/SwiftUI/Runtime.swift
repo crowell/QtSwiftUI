@@ -17,6 +17,7 @@ enum Part: Hashable {
     var isScrollTargetLayout = false
     var scrollConfiguration = ScrollConfiguration()
     var menuEntries: MenuEntries?
+    var windowValue: Binding<AnyHashable?>?
     var environment = EnvironmentValues()
     var preferences: [ObjectIdentifier: any PreferenceScope] = [:]
     var transaction = Transaction()
@@ -145,6 +146,7 @@ enum Part: Hashable {
     let transitions = ViewTransitions()
     private var pendingTransaction: Transaction?
     var hasMaterial = false
+    var resizability: WindowResizability?
     private var afterRender: [() -> Void] = []
     // Fitting a candidate may need Qt font and control metrics. Only the chosen
     // branch keeps its widgets and receives focus, lifecycle and layout callbacks.
@@ -309,6 +311,12 @@ enum Part: Hashable {
         qs_shortcut_begin(window)
         let roots = content(context)
         let root = stacked(roots, axis: .vertical, alignment: .center, spacing: 8)
+        if let resizability, let viewport {
+            let minimum = CGSize(width: root.measure(.init(width: 0, height: viewport.height)).width,
+                                 height: root.measure(.init(width: viewport.width, height: 0)).height)
+            let maximum = resizability.restrictMaximum ? root.measure(.infinity) : CGSize(width: CGFloat.infinity, height: .infinity)
+            qs_window_limits(window, minimum.width, minimum.height, maximum.width, maximum.height)
+        }
         let size = root.measure(proposal)
         let extent = viewport ?? size
         let drawable = viewport != nil || qs_snapshot_size(window, size.width, size.height) != 0

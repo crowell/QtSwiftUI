@@ -959,6 +959,14 @@ void qs_open(QSWindow *window, int width, int height) {
     qs_flush();
 }
 void qs_request_window_close(QSWindow *window) { window->close(); }
+void qs_window_limits(QSWindow *window, double minWidth, double minHeight, double maxWidth, double maxHeight) {
+    auto lower = [](double limit) { return std::isfinite(limit) ? int(std::ceil(std::clamp(limit, 0.0, double(QWIDGETSIZE_MAX)))) : 0; };
+    auto upper = [](double limit) { return std::isfinite(limit) ? int(std::floor(std::clamp(limit, 0.0, double(QWIDGETSIZE_MAX)))) : QWIDGETSIZE_MAX; };
+    QSize minimum(lower(minWidth), lower(minHeight));
+    QSize maximum = QSize(upper(maxWidth), upper(maxHeight)).expandedTo(minimum);
+    if (window->minimumSize() != minimum) window->setMinimumSize(minimum);
+    if (window->maximumSize() != maximum) window->setMaximumSize(maximum);
+}
 void qs_window_raise(QSWindow *window) {
     if (window->isMinimized()) window->showNormal(); else window->show();
     window->raise();
