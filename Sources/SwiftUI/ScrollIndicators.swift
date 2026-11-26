@@ -5,7 +5,8 @@ public struct ScrollIndicatorVisibility: Equatable, Sendable {
     public static var visible: Self { Self(policy: .visible) }
     public static var hidden: Self { Self(policy: .hidden) }
     public static var never: Self { Self(policy: .never) }
-    var showsBar: Bool { policy == .automatic || policy == .visible }
+    var qtPolicy: Int32 { policy == .automatic ? 1 : policy == .visible ? 2 : 0 }
+    var showsBar: Bool { qtPolicy != 0 }
 }
 
 extension View {

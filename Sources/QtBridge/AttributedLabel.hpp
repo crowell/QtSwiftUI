@@ -1,30 +1,43 @@
 #pragma once
 #include "RegisteredFonts.hpp"
-#include <QLabel>
+#include <QTextBrowser>
+#include <QPointer>
+#include <QScrollBar>
+#include <QWheelEvent>
 #include <QTextCursor>
 #include <QTextDocument>
 #include <QAbstractTextDocumentLayout>
 #include <QTextBlock>
 #include <cmath>
 
-// QLabel owns selection and link input. The same formatted document measures the label.
-class AttributedLabel final : public QLabel {
+// Keep native QTextCharFormats intact for painting, link hit testing and selection.
+class AttributedLabel final : public QTextBrowser {
 public:
-    explicit AttributedLabel(QWidget *parent) : QLabel(parent) {
-        setTextFormat(Qt::RichText);
-        setMargin(0);
-        setIndent(0);
+    explicit AttributedLabel(QWidget *parent) : QTextBrowser(parent) {
+        setFrameShape(QFrame::NoFrame);
+        setHorizontalScrollBarPolicy(Qt::ScrollBarAlwaysOff);
+        setVerticalScrollBarPolicy(Qt::ScrollBarAlwaysOff);
         setOpenExternalLinks(false);
+        setOpenLinks(false);
+        viewport()->setAutoFillBackground(false);
+    }
+
+    void setLayoutOptions(Qt::Alignment alignment, bool wrap) {
+        wraps = wrap;
+        option.setAlignment(alignment);
+        option.setWrapMode(wrap ? QTextOption::WrapAtWordBoundaryOrAnywhere : QTextOption::NoWrap);
     }
 
     void begin() {
+        pending.clear();
         content.clear();
+        content.setDefaultTextOption(option);
         content.setDocumentMargin(0);
         content.setDefaultFont(font());
         hasLinks = false;
     }
     void append(const QString &text, const char *link, const char *foreground, const char *background,
-                const char *family, double size, int weight, bool italic) {
+                const char *family, double size, int weight, bool italic, int underline, const char *underlineColor) {
         QTextCharFormat format;
         if (*link) {
             hasLinks = true;
@@ -40,21 +53,62 @@ public:
             face.setPixelSize(qMax(1, qRound(size)));
             format.setFont(face);
         }
+        if (underline) format.setUnderlineStyle(static_cast<QTextCharFormat::UnderlineStyle>(underline));
+        if (*underlineColor) format.setUnderlineColor(QColor(QString::fromUtf8(underlineColor)));
+        pending.append({text, format});
         QTextCursor cursor(&content);
         cursor.movePosition(QTextCursor::End);
         cursor.insertText(text, format);
     }
     void finish(bool selectable) {
+        // Qt 6.4's FreeType backend can report the height of an unscaled sbix
+        // strike even though it draws the glyph at the requested pixel size.
+        // Keep the original graphemes and anchors selectable in the text document.
+        for (auto block = content.begin(); block.isValid(); block = block.next()) {
+            bool oversizedStrike = false;
+            qreal lineHeight = QFontMetricsF(font()).height();
+            for (auto it = block.begin(); !it.atEnd(); ++it) {
+                const QFont face = it.fragment().charFormat().font().resolve(font());
+                const auto height = QFontMetricsF(face).height();
+                const auto size = face.pixelSize();
+                if (size > 0 && height > 3 * size && !QRawFont::fromFont(face).fontTable("sbix").isEmpty()) {
+                    oversizedStrike = true;
+                    lineHeight = qMax(lineHeight, qreal(size));
+                } else {
+                    lineHeight = qMax(lineHeight, height);
+                }
+            }
+            if (oversizedStrike) {
+                QTextCursor cursor(block);
+                auto format = block.blockFormat();
+                format.setLineHeight(std::ceil(lineHeight), QTextBlockFormat::FixedHeight);
+                cursor.setBlockFormat(format);
+            }
+        }
         auto flags = hasLinks ? Qt::LinksAccessibleByMouse | Qt::LinksAccessibleByKeyboard : Qt::NoTextInteraction;
         if (selectable) flags |= Qt::TextSelectableByMouse | Qt::TextSelectableByKeyboard;
         if (flags != textInteractionFlags()) setTextInteractionFlags(flags);
-        const QString html = content.toHtml();
-        if (html != text()) setText(html);
+        const auto alignment = option.alignment();
+        if (pending == displayed && font() == displayedFont && displayedAlignment == alignment && displayedWrap == wraps) return;
+        displayed = pending;
+        displayedFont = font();
+        displayedAlignment = alignment;
+        displayedWrap = wraps;
+        const auto selection = textCursor();
+        const int anchor = selection.anchor(), position = selection.position();
+        QPointer<QTextDocument> previous = document();
+        setDocument(content.clone(this));
+        if (previous && previous->parent() == this) delete previous;
+        QTextCursor cursor(document());
+        cursor.setPosition(qMin(anchor, document()->characterCount() - 1));
+        cursor.setPosition(qMin(position, document()->characterCount() - 1), QTextCursor::KeepAnchor);
+        setTextCursor(cursor);
+        alignDocument();
     }
     QSizeF measure(double width) {
         content.setTextWidth(-1);
         const auto ideal = std::ceil(content.idealWidth());
-        const auto available = wordWrap() && std::isfinite(width) && width >= 0 ? qMin(ideal, width) : ideal;
+        const auto available = wraps && std::isfinite(width) && width >= 0 ? qMin(ideal, width) : ideal;
         content.setTextWidth(available);
         return {available, std::ceil(content.size().height())};
     }
@@ -71,6 +125,24 @@ public:
     }
 
 private:
+    void resizeEvent(QResizeEvent *event) override {
+        QTextBrowser::resizeEvent(event);
+        alignDocument();
+    }
+    void wheelEvent(QWheelEvent *event) override { event->ignore(); }
+
+    void alignDocument() {
+        document()->setTextWidth(viewport()->width());
+        const int top = qMax(0, int((height() - document()->size().height()) / 2));
+        if (viewportMargins().top() != top) setViewportMargins(0, top, 0, 0);
+        verticalScrollBar()->setValue(0);
+    }
+
     QTextDocument content;
+    QList<QPair<QString, QTextCharFormat>> pending, displayed;
+    QFont displayedFont;
+    QTextOption option;
+    Qt::Alignment displayedAlignment;
+    bool wraps = true, displayedWrap = true;
     bool hasLinks = false;
 };

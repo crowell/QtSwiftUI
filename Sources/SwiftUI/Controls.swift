@@ -22,6 +22,7 @@ extension Context {
 }
 public struct Text: Primitive {
     nonisolated let string: String
+    nonisolated var underlineOverride: TextUnderline?
     nonisolated private(set) var attributed: AttributedString?
     public nonisolated init(_ attributedContent: AttributedString) {
         string = String(attributedContent.characters)
@@ -44,9 +45,17 @@ public struct Text: Primitive {
         return ctx
     }
     func elements(in context: Context) -> [Element] {
+        if context.environment.accessibilityTraits.contains(.isLink) {
+            let group = context.widget(QSGroup)
+            qs_group(group, 2, 0, 0, context.environment.accessibleValue)
+            var child = context
+            child.environment.accessibilityTraits.remove(.isLink)
+            child.environment.identifier = ""
+            return child.children(of: self, inside: group)
+        }
         let ctx = styled(context)
         let widget: UnsafeMutableRawPointer
-        if let attributed {
+        if let attributed = attributed ?? ((underlineOverride ?? ctx.environment.textUnderline) != nil ? AttributedString(string) : nil) {
             widget = ctx.widget(QSAttributedLabel, action: { value in
                 if let link = URL(string: value) { ctx.environment.openURL(link) }
             })
@@ -86,7 +95,7 @@ public struct Button<Label: View>: Primitive {
         }, action: { _ in action() })
         context.installShortcut(on: widget)
         qs_plain_button(widget, style != nil ? 1 : 0)
-        if style == nil, let text = label as? Text, text.attributed == nil {
+        if style == nil, let text = label as? Text, text.attributed == nil, text.underlineOverride == nil, context.environment.textUnderline == nil {
             qs_text(widget, text.string)
             return [text.styled(context).control(widget)]
         }
@@ -94,6 +103,7 @@ public struct Button<Label: View>: Primitive {
         ctx.parent = widget
         ctx.environment.identifier = ""
         ctx.environment.isLink = false
+        ctx.environment.accessibilityTraits.remove(.isLink)
         ctx.environment.focus = nil
         let configured = style?(.init(label: .init(content: AnyView(label)), isPressed: qs_button_down(widget) != 0), context)
         let child = stacked((configured ?? AnyView(label)).resolve(ctx.descending(.position(0))), axis: .horizontal, alignment: .center, spacing: 4, direction: ctx.environment.layoutDirection)
@@ -259,8 +269,9 @@ public struct ScrollView<Content: View>: Primitive {
         qs_scroll_input(widget, context.environment.isScrollEnabled ? 1 : 0)
         qs_scroll_bounce(widget, horizontal ? context.environment.horizontalScrollBounceBehavior.policy : -1,
                          vertical ? context.environment.verticalScrollBounceBehavior.policy : -1)
-        qs_scroll_axes(widget, context.environment.isScrollEnabled && showsIndicators && horizontal && context.environment.horizontalScrollIndicatorVisibility.showsBar ? 1 : 0,
-                       context.environment.isScrollEnabled && showsIndicators && vertical && context.environment.verticalScrollIndicatorVisibility.showsBar ? 1 : 0)
+        qs_scroll_axes(widget, context.environment.isScrollEnabled && showsIndicators && horizontal ? context.environment.horizontalScrollIndicatorVisibility.qtPolicy : 0,
+                       context.environment.isScrollEnabled && showsIndicators && vertical ? context.environment.verticalScrollIndicatorVisibility.qtPolicy : 0,
+                       context.environment.colorScheme == .dark ? 1 : 0)
         func offer(_ p: ProposedViewSize) -> ProposedViewSize { .init(width: horizontal ? nil : p.width, height: vertical ? nil : p.height) }
         return [Element { p in
             let ideal = view.measure(offer(p))

@@ -3,6 +3,7 @@ import QtBridge
 public struct AccessibilityTraits: OptionSet, Sendable {
     public var rawValue: UInt64
     public init(rawValue: UInt64) { self.rawValue = rawValue }
+    public static let isLink = Self(rawValue: 256)
     public static let isSearchField = Self(rawValue: 128)
     public static let isImage = Self(rawValue: 1)
     public static let updatesFrequently = Self(rawValue: 2)
@@ -28,15 +29,6 @@ extension View {
             return [child.grouped(in: widget)]
         }
     }
-    public func accessibilityAddTraits(_ traits: AccessibilityTraits) -> some View {
-        Transform(content: self) { view, ctx in
-            let inner = ctx.with(\.accessibilityTraits, ctx.environment.accessibilityTraits.union(traits))
-            guard !traits.intersection([.isHeader, .isModal]).isEmpty else { return view.resolve(inner) }
-            let group = ctx.widget(QSGroup)
-            qs_group_semantics(group, traits.contains(.isHeader) ? 1 : 0, traits.contains(.isModal) ? 1 : 0)
-            return inner.children(of: view, inside: group)
-        }
-    }
     public func accessibilityElement(children: AccessibilityChildBehavior = .ignore) -> some View {
         Transform(content: self) { view, ctx in
             let adjustment = ctx.environment.adjustment
@@ -53,6 +45,7 @@ extension View {
             inner.environment.label = ""
             inner.environment.identifier = ""
             inner.environment.accessibilityTraits = []
+            inner.environment.removedAccessibilityTraits = []
             inner.environment.accessibleValue = ""
             inner.environment.accessibleHint = ""
             inner.environment.adjustment = nil

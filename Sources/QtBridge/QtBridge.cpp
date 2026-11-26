@@ -56,8 +56,14 @@ namespace {
 QTransform transform(QSAffine t) { return QTransform(t.a, t.b, t.c, t.d, t.tx, t.ty); }
 class SwiftWidgetStyle final : public QProxyStyle {
 public:
+    int styleHint(StyleHint hint, const QStyleOption *option, const QWidget *item, QStyleHintReturn *data) const override {
+        if (hint == SH_ScrollBar_Transient && item && item->property("qsTransientBar").toBool()) return 1;
+        return QProxyStyle::styleHint(hint, option, item, data);
+    }
     int pixelMetric(PixelMetric metric, const QStyleOption *option, const QWidget *item) const override {
         const int base = QProxyStyle::pixelMetric(metric, option, item);
+        if (metric == PM_ScrollView_ScrollBarOverlap && item && item->property("qsTransientBar").toBool())
+            return QProxyStyle::pixelMetric(PM_ScrollBarExtent, option, item);
         const qreal scale = item ? item->property("qsControlScale").toDouble() : 0;
         if (scale == 0 || scale == 1) return base;
         switch (metric) {
@@ -161,6 +167,7 @@ public:
     QAccessible::Role role() const override {
         if (group->adjustable) return QAccessible::Slider;
         if (group->property("qsSearchField").toBool()) return QAccessible::EditableText;
+        if (group->property("qsAXLink").toBool()) return QAccessible::Link;
         if (group->property("qsAXToggle").toBool()) return QAccessible::CheckBox;
         if (group->property("qsAXButton").toBool()) return QAccessible::Button;
         if (group->modal) return QAccessible::Dialog;
@@ -218,6 +225,7 @@ public:
         if (group->accessibilityHidden) result.invisible = true;
         result.animated = group->updatesFrequently;
         result.modal = group->modal;
+        result.linked = role() == QAccessible::Link;
         result.selected = group->property("qsSelected").toBool();
         if (group->property("qsAXToggle").toBool()) { result.checkable = true; result.checked = result.selected; }
         return result;
@@ -330,13 +338,17 @@ private:
 class AccessibleButton final : public QAccessibleWidget {
 public:
     AccessibleButton(QPushButton *button, bool link)
-        : QAccessibleWidget(button, link ? QAccessible::Link : QAccessible::Button), button(button) {}
+        : QAccessibleWidget(button, QAccessible::Button), button(button) { button->setProperty("qsAXLink", link); }
+    QAccessible::Role role() const override { return button->property("qsAXLink").toBool() ? QAccessible::Link : QAccessible::Button; }
     QString text(QAccessible::Text kind) const override {
         const QString value = QAccessibleWidget::text(kind);
         if (kind != QAccessible::Name || !value.isEmpty()) return value;
         if (!button->text().isEmpty()) return button->text();
         QStringList parts;
-        for (const auto *label : button->findChildren<QLabel *>()) parts.append(label->text());
+        for (const auto *child : button->findChildren<QWidget *>()) {
+            if (auto *rich = qobject_cast<const QTextBrowser *>(child)) parts.append(rich->toPlainText());
+            else if (auto *label = qobject_cast<const QLabel *>(child)) parts.append(label->text());
+        }
         return parts.join(' ');
     }
     QStringList actionNames() const override { return {QAccessibleActionInterface::pressAction()}; }
@@ -750,8 +762,8 @@ QSWidget qs_create(QSWindow *window, QSWidget parent, QSKind kind, int id) {
     }
     case QSAttributedLabel: {
         auto *label = new AttributedLabel(container);
-        QObject::connect(label, &QLabel::linkActivated, window, [=](const QString &url) {
-            window->event(window->context, id, QSActivate, url.toUtf8().constData());
+        QObject::connect(label, &QTextBrowser::anchorClicked, window, [=](const QUrl &url) {
+            window->event(window->context, id, QSActivate, url.toEncoded().constData());
         });
         return label;
     }
@@ -881,8 +893,21 @@ void qs_scroll_bounce(QSWidget w, int horizontal, int vertical) {
     properties.setScrollMetric(P::VerticalOvershootPolicy, policy(vertical, P::VerticalOvershootPolicy));
     if (properties != scroller->scrollerProperties()) scroller->setScrollerProperties(properties);
 }
-void qs_scroll_axes(QSWidget w, int h, int v) {
+void qs_scroll_axes(QSWidget w, int h, int v, int dark) {
     auto *scroll = static_cast<QScrollArea *>(w);
+    QPalette palette = application().palette();
+    if (dark) {
+        palette.setColor(QPalette::Window, QColor(48, 48, 48));
+        palette.setColor(QPalette::Base, QColor(42, 42, 42));
+        palette.setColor(QPalette::Button, QColor(92, 92, 92));
+        palette.setColor(QPalette::WindowText, Qt::white);
+        palette.setColor(QPalette::ButtonText, Qt::white);
+    }
+    for (auto *bar : {scroll->horizontalScrollBar(), scroll->verticalScrollBar()}) {
+        const bool transient = (bar->orientation() == Qt::Horizontal ? h : v) == 1;
+        if (bar->property("qsTransientBar").toBool() != transient) bar->setProperty("qsTransientBar", transient);
+        if (bar->palette() != palette) bar->setPalette(palette);
+    }
     scroll->setHorizontalScrollBarPolicy(h ? Qt::ScrollBarAsNeeded : Qt::ScrollBarAlwaysOff);
     scroll->setVerticalScrollBarPolicy(v ? Qt::ScrollBarAsNeeded : Qt::ScrollBarAlwaysOff);
 }
@@ -897,8 +922,8 @@ void qs_text(QSWidget w, const char *s) {
 }
 void qs_attributed_begin(QSWidget w) { static_cast<AttributedLabel *>(w)->begin(); }
 void qs_attributed_append(QSWidget w, const char *text, size_t count, const char *link, const char *foreground, const char *background,
-                          const char *family, double size, int weight, int italic) {
-    static_cast<AttributedLabel *>(w)->append(QString::fromUtf8(text, qsizetype(count)), link, foreground, background, family, size, weight, italic);
+                          const char *family, double size, int weight, int italic, int underline, const char *underlineColor) {
+    static_cast<AttributedLabel *>(w)->append(QString::fromUtf8(text, qsizetype(count)), link, foreground, background, family, size, weight, italic, underline, underlineColor);
 }
 void qs_attributed_finish(QSWidget w, int selectable) { static_cast<AttributedLabel *>(w)->finish(selectable); }
 void qs_control_scale(QSWidget w, double scale) {
@@ -1027,7 +1052,9 @@ void qs_style(QSWidget w, const char *family, double points, int weight, int ita
             editor->document()->setDefaultTextOption(option);
         }
     }
-    if (auto *label = qobject_cast<QLabel *>(item)) {
+    if (auto *rich = dynamic_cast<AttributedLabel *>(item)) {
+        rich->setLayoutOptions(Qt::AlignAbsolute | (alignment < 0 ? Qt::AlignLeft : alignment > 0 ? Qt::AlignRight : Qt::AlignHCenter), wrap);
+    } else if (auto *label = qobject_cast<QLabel *>(item)) {
         label->setWordWrap(wrap);
         label->setAlignment(Qt::AlignAbsolute | Qt::AlignVCenter | (alignment < 0 ? Qt::AlignLeft : alignment > 0 ? Qt::AlignRight : Qt::AlignHCenter));
     }
@@ -1300,10 +1327,11 @@ void qs_focus(QSWidget w, int active) {
     else if (!active && item->hasFocus()) item->clearFocus();
 }
 void qs_enabled(QSWidget w, int enabled) { widget(w)->setEnabled(enabled); }
-void qs_accessible_control(QSWidget w, int selected, int button, int toggle) {
+void qs_accessible_control(QSWidget w, int selected, int button, int toggle, int link) {
     auto *item = widget(w);
     const bool changed = item->property("qsSelected").toBool() != bool(selected);
     item->setProperty("qsSelected", bool(selected));
+    item->setProperty("qsAXLink", bool(link));
     item->setProperty("qsAXButton", bool(button));
     item->setProperty("qsAXToggle", bool(toggle));
     if (changed) {
@@ -1652,10 +1680,12 @@ int qs_hover(QSWindow *window, const char *id, int inside) {
     return 0;
 }
 int qs_is_named_link(QSWindow *window, const char *id, const char *name) {
-    auto *item = window->findChild<QAbstractButton *>(QString::fromUtf8(id));
-    if (!item) return 0;
-    auto *accessible = QAccessible::queryAccessibleInterface(item);
-    return accessible && accessible->role() == QAccessible::Link && accessible->text(QAccessible::Name) == QString::fromUtf8(name);
+    for (auto *item : window->findChildren<QWidget *>(QString::fromUtf8(id))) {
+        auto *accessible = QAccessible::queryAccessibleInterface(item);
+        if (accessible && accessible->role() == QAccessible::Link && accessible->state().linked &&
+            accessible->text(QAccessible::Name) == QString::fromUtf8(name)) return 1;
+    }
+    return 0;
 }
 int qs_has_help(QSWindow *window, const char *id, const char *expected) {
     auto *item = window->findChild<QWidget *>(QString::fromUtf8(id));

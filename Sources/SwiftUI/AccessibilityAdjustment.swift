@@ -24,15 +24,28 @@ nonisolated public struct AccessibilityAttachmentModifier: PrimitiveModifier {
     fileprivate var adjustment: ((AccessibilityAdjustmentDirection) -> Void)?
     fileprivate var actions: [String: () -> Void] = [:]
     fileprivate var hint: String?
+    fileprivate var addedTraits: AccessibilityTraits = []
+    fileprivate var removedTraits: AccessibilityTraits = []
     public func body(content: Content) -> Never { fatalError("Accessibility attachments are rendered directly") }
 
     @MainActor func applying(to content: AnyView) -> any View {
         Transform(content: content) { view, context in
             var context = context
             if let hint { context.environment.accessibleHint = hint }
-            guard adjustment != nil || !actions.isEmpty else { return view.resolve(context) }
+            // The outermost attachment is the last modifier the caller applied.
+            let decided = context.environment.accessibilityTraits.union(context.environment.removedAccessibilityTraits)
+            let added = addedTraits.subtracting(decided)
+            context.environment.accessibilityTraits.formUnion(added)
+            context.environment.removedAccessibilityTraits.formUnion(removedTraits.subtracting(decided))
+            if adjustment == nil && actions.isEmpty {
+                guard !added.intersection([.isHeader, .isModal]).isEmpty else { return view.resolve(context) }
+                let group = context.widget(QSGroup)
+                qs_group_semantics(group, added.contains(.isHeader) ? 1 : 0, added.contains(.isModal) ? 1 : 0)
+                return context.children(of: view, inside: group)
+            }
             let target = AccessibleAdjustment(adjustment, actions: actions)
             let group = context.widget(QSGroup, adjustment: adjustment, accessibilityAction: { actions[$0]?() })
+            qs_group_semantics(group, added.contains(.isHeader) ? 1 : 0, added.contains(.isModal) ? 1 : 0)
             let children = context.with(\.adjustment, target).children(of: view, inside: group)
             // Explicit accessibility elements preserve their own names, values and children.
             // A bare view gets a combined element to own the adjustment actions.
@@ -46,6 +59,12 @@ nonisolated public struct AccessibilityAttachmentModifier: PrimitiveModifier {
 }
 
 extension View {
+    nonisolated public func accessibilityAddTraits(_ traits: AccessibilityTraits) -> ModifiedContent<Self, AccessibilityAttachmentModifier> {
+        .init(content: self, modifier: .init(addedTraits: traits))
+    }
+    nonisolated public func accessibilityRemoveTraits(_ traits: AccessibilityTraits) -> ModifiedContent<Self, AccessibilityAttachmentModifier> {
+        .init(content: self, modifier: .init(removedTraits: traits))
+    }
     nonisolated public func accessibilityAction(_ actionKind: AccessibilityActionKind = .default, _ handler: @escaping () -> Void) -> ModifiedContent<Self, AccessibilityAttachmentModifier> {
         .init(content: self, modifier: .init(actions: [actionKind.name: handler]))
     }
@@ -64,6 +83,18 @@ extension View {
     }
 }
 extension ModifiedContent where Modifier == AccessibilityAttachmentModifier {
+    nonisolated public func accessibilityAddTraits(_ traits: AccessibilityTraits) -> ModifiedContent<Content, Modifier> {
+        var attachment = modifier
+        attachment.addedTraits.formUnion(traits)
+        attachment.removedTraits.subtract(traits)
+        return .init(content: content, modifier: attachment)
+    }
+    nonisolated public func accessibilityRemoveTraits(_ traits: AccessibilityTraits) -> ModifiedContent<Content, Modifier> {
+        var attachment = modifier
+        attachment.removedTraits.formUnion(traits)
+        attachment.addedTraits.subtract(traits)
+        return .init(content: content, modifier: attachment)
+    }
     nonisolated public func accessibilityAction(_ actionKind: AccessibilityActionKind = .default, _ handler: @escaping () -> Void) -> ModifiedContent<Content, Modifier> {
         var attachment = modifier
         attachment.actions[actionKind.name] = handler

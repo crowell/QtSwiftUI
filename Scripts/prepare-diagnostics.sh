@@ -8,6 +8,7 @@ root=$(cd "$(dirname "$0")/.." && pwd)
 mkdir -p "$target/Sources/CallDiagnostics" "$target/Tests/ScreenTests"
 cp "$root"/Tests/SereinDiagnostics/*.swift "$target/Tests/ScreenTests/"
 ln -s "$checkout/Packages/SignalI18n" "$target/SignalI18n"
+ln -s "$checkout/Packages/SignalText" "$target/SignalText"
 codecs="$checkout/Packages/SignalCodecs"
 if [ "$(uname -s)" = Linux ]; then
     mkdir -p "$target/SignalCodecs"
@@ -204,6 +205,28 @@ cp "$source_dir/Calling/CallLinkDetails.swift" "$source_dir/Components/Conversat
 awk 'BEGIN { print "import SwiftUI\nextension CallLinkModel {" } /^    static let now =/ {copy=1; count++}
      copy {print} /^    nonisolated static let fun =/ {copy=0} END {print "}"; if (count!=1 || copy) exit 1}' \
     "$checkout/Packages/SignalUI/Tests/SignalUITests/Calling/CallLinkDetailsTests.swift" > "$target_dir/CallLinkSample.swift"
+cp "$source_dir/Components/Conversation/AboutContactModal.swift" "$source_dir/Components/Conversation/Emojify.swift" \
+   "$source_dir/Components/Fun/EmojiData.swift" "$source_dir/Resources/emoji-data.json" "$target_dir/"
+{
+    echo 'import Foundation'
+    echo 'import SwiftUI'
+    echo 'import SignalText'
+    echo 'import SignalI18n'
+    declarations '^extension RichText ' 1 "$source_dir/Components/Conversation/Notifications/ChatEventNotifications.swift"
+    declarations '^public struct Linkify:' 1 "$source_dir/Components/Conversation/Linkify.swift"
+    awk 'BEGIN {print "enum CSSTextLayout {"} /^    static func isEmoji\(/ {inside=1; count++}
+         inside {print} /^    }$/ {inside=0} END {print "}"; if (count!=1) exit 1}' "$source_dir/Theme/CSSText.swift"
+    awk 'BEGIN {print "extension EnvironmentValues {"} /@Entry public var brandLogo:/ {print; count++}
+         END {print "}"; if (count!=1) exit 1}' "$source_dir/Theme/PixelImage.swift"
+} > "$target_dir/ContactText.swift"
+# Route the two desktop URL launches through SwiftUI's injectable application action.
+{
+    cat "$source_dir/Components/About.swift"
+    declarations '^public struct NotePreviewModal:' 1 "$source_dir/Components/SmallDialogs.swift"
+} > "$target/ContactDialogs.swift"
+awk '!/^import AppKit$/ {printLine=$0; gsub(/NSWorkspace.shared.open/, "openURL", printLine); print printLine
+     if (/^public struct (About|NotePreviewModal):/) {print "    @Environment(\\.openURL) private var openURL"; count++}}
+     END {if (count!=2) exit 1}' "$target/ContactDialogs.swift" > "$target_dir/ContactDialogs.swift"
 # Keep all original item slots and use portable font metrics for the icon baseline.
 awk '!/^import CoreText$/ {
          if (/let font = CSSTextStyle.*\.ctFont/) { print "            let font = AxoFonts.interMetrics(size: size)"; metrics++; next }
@@ -218,20 +241,20 @@ awk '/^public struct AxoType: / { print "import SwiftUI"; inside = 1 }
      inside { print } inside && /^}$/ { complete = 1; exit } END { if (!complete) exit 1 }' \
     "$source_dir/Theme/AxoType.swift" > "$target_dir/AxoType.swift"
 mkdir -p "$target_dir/Fonts"
-cp "$source_dir"/Resources/Fonts/Inter-*.ttf "$source_dir/Resources/Fonts/SignalSymbolsVariable.ttf" "$target_dir/Fonts/"
+cp "$source_dir"/Resources/Fonts/Inter-*.ttf "$source_dir/Resources/Fonts/SignalSymbolsVariable.ttf" "$source_dir"/Resources/Fonts/SignalEmoji*.ttf "$target_dir/Fonts/"
 if [ "$(uname -s)" = Linux ]; then cp "$root/Package.resolved" "$target/Package.resolved"; fi
 cat > "$target/Package.swift" <<'SWIFT'
 // swift-tools-version: 6.2
 import PackageDescription
-var packages: [Package.Dependency] = [.package(path: "SignalI18n"), .package(path: "SignalCodecs")]
+var packages: [Package.Dependency] = [.package(path: "SignalI18n"), .package(path: "SignalText"), .package(path: "SignalCodecs")]
 var dependencies: [Target.Dependency] = [.product(name: "SignalI18n", package: "SignalI18n"),
-    .product(name: "CodecCore", package: "SignalCodecs"), .product(name: "ImagePNG", package: "SignalCodecs"),
+    .product(name: "SignalText", package: "SignalText"), .product(name: "CodecCore", package: "SignalCodecs"), .product(name: "ImagePNG", package: "SignalCodecs"),
     .product(name: "ImageBMP", package: "SignalCodecs")]
 #if os(Linux)
 packages.append(.package(name: "QtSwiftUI", path: "/src"))
 dependencies.append(.product(name: "SwiftUI", package: "QtSwiftUI"))
 #endif
 let package = Package(name: "CallDiagnostics", platforms: [.macOS("27.0")], dependencies: packages,
-                      targets: [.executableTarget(name: "CallDiagnostics", dependencies: dependencies, resources: [.copy("Fonts"), .copy("Media")]),
+                      targets: [.executableTarget(name: "CallDiagnostics", dependencies: dependencies, resources: [.copy("Fonts"), .copy("Media"), .copy("emoji-data.json")]),
                                 .testTarget(name: "ScreenTests", dependencies: ["CallDiagnostics"] + dependencies)])
 SWIFT

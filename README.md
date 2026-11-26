@@ -12,7 +12,7 @@ From a checkout with Docker running, this command builds the Ubuntu 24.04 image,
 ./Scripts/verify-linux.sh
 ```
 
-Pass a Serein checkout to render its call history, call-link details, nickname editor, call settings, data usage settings, call-quality survey, chat-color picker and custom editor, media gallery, voice-note controls, data-clearing and device-link screens, leave-call dialog, call diagnostics window, device card and artwork.
+Pass a Serein checkout to render its call history, call-link details, participant approval, contact details and note, About window, nickname editor, call settings, data usage settings, call-quality survey, chat-color picker and custom editor, media gallery, voice-note controls, data-clearing and device-link screens, leave-call dialog, call diagnostics window, device card and artwork.
 
 ```sh
 ./Scripts/verify-linux.sh ../serein
@@ -30,7 +30,7 @@ The call-quality survey runs Serein’s original three-page dialog, issue select
 
 [Opening question](Screenshots/call-quality-survey.png) · [Confirmation and sharing controls](Screenshots/call-survey-confirm.png)
 
-The 520 × 600 feedback screen differed from the macOS capture in 12,231 pixels (3.92%) at a threshold of 8/255 in any RGB channel. The preview uses the bundled Inter font for labels and each platform’s native multiline editor. Set `QTSWIFTUI_SURVEY_REFERENCE` to an existing directory to capture the same three stages with `Scripts/check-apple.sh ../serein`.
+The 520 × 600 feedback screen differed from the macOS capture in 11,144 pixels (3.57%) at a threshold of 8/255 in any RGB channel. The preview uses the bundled Inter font for labels and each platform’s native multiline editor. Set `QTSWIFTUI_SURVEY_REFERENCE` to an existing directory to capture the same three stages with `Scripts/check-apple.sh ../serein`.
 
 Serein’s leave-call fixture runs its unchanged `ConfirmLeaveCallModal`, `AxoConfirmDialog`, `AxoAlertDialog` and `AxoPopper`. It uses the original dialog host, panel, scrolling layout and actions. Linux omits the optional AppKit backdrop blur, which Serein disables by default. The preview uses the same portable text leaves as the diagnostics window. The Ubuntu tests click both buttons through Qt. Apple and Ubuntu tests check the panel edges, shadow and floating-layer placement. To save the Apple rendering of this fixture, set `QTSWIFTUI_DIALOG_REFERENCE` to an absolute PNG path when running `Scripts/check-apple.sh ../serein`.
 
@@ -88,9 +88,15 @@ The `--nickname` example opens Serein’s nickname and note editor. Its note fie
 
 [Link management](Screenshots/call-link-manager.png) · [Rename dialog](Screenshots/call-link-rename.png) · [Nickname and note editor](Screenshots/nickname-and-note.png)
 
-The `--join-request` example runs Serein’s participant approval dialog with a sample contact, a bundled avatar, and two shared groups. Qt and AppKit tests click the contact name, Approve entry, Deny entry, and Close and check the callback order. The dialog uses first-text-baseline alignment to place its name, contact emblem, and chevron. Shared layout tests cover single-line and multiline text, padding, framed text, shapes, nested stacks, and overlays. The 520 × 510 Ubuntu and Apple captures differed by 1.50/255 per RGB channel on average. The shared-group description wraps differently. Set `QTSWIFTUI_REQUEST_REFERENCE` to an existing directory for the Apple capture.
+The `--join-request` example runs Serein’s participant approval dialog with a sample contact, a bundled avatar, and two shared groups. Qt and AppKit tests click the contact name, Approve entry, Deny entry, and Close and check the callback order. The dialog uses first-text-baseline alignment to place its name, contact emblem, and chevron. Shared layout tests cover single-line and multiline text, padding, framed text, shapes, nested stacks, and overlays. The 520 × 510 Ubuntu and Apple captures differed by 1.51/255 per RGB channel on average. The shared-group description wraps differently. Set `QTSWIFTUI_REQUEST_REFERENCE` to an existing directory for the Apple capture.
 
 ![Serein participant approval dialog on Ubuntu](Screenshots/join-request.png)
+
+Click the participant name to open Serein’s contact details, then click its note to follow a link or edit the note. The preview retains saved edits until the window closes. The `--about-contact`, `--note-preview` and `--about` options open the contact, note and application About screens directly. These fixtures compile Serein’s dialog bodies, SignalText link detection, emoji data and bundled fonts. They send URL actions through SwiftUI’s `openURL` environment. The shared tests intercept those actions and exercise the editor with real pointer and keyboard input. The mean absolute RGB difference from the Apple captures was 1.79/255 for contact details, 2.20/255 for the note and 1.28/255 for About. Set `QTSWIFTUI_CONTACT_REFERENCE` to an existing directory to capture the Apple reference screens.
+
+![Serein contact details on Ubuntu](Screenshots/about-contact.png)
+
+[Contact note](Screenshots/note-preview.png) · [Application About window](Screenshots/about.png)
 
 The Calls and Data usage fixtures compile Serein’s original settings pages, scroll area, list rows, switches, and device and quality selectors. They run as standalone settings panes with Serein’s example devices. SwiftUI bindings hold the changes for the lifetime of the window. Both test suites operate all seven switches, choose devices and media quality, open the quality menu with Down Arrow, and dismiss it with an outside click. At 640 × 567, the mean absolute RGB difference from the Apple SDK rendering was 1.61/255 for Calls and 0.88/255 for Data usage. Set `QTSWIFTUI_SETTINGS_REFERENCE` to an existing directory to capture the two pages and their open menus on macOS.
 
@@ -144,7 +150,7 @@ The target is source compatibility with Apple's public SwiftUI APIs. The impleme
 
 `./Scripts/check-apple.sh ../serein` type-checks the example source with Apple's SwiftUI module on a Mac with Xcode. `./Scripts/check-api.sh` extracts public symbol graphs from Xcode and the Linux image. Pass `--missing` to list missing declaration paths. The inventory groups declarations by symbol kind and path, counts overload spellings separately, and excludes underscored and synthesized members. A shared name alone cannot establish matching signatures, constraints, availability or behavior.
 
-The inventory against the macOS 27.2 SDK found 1,170 shared declaration paths out of 7,627 and 730 identical declaration spellings out of 8,735. The examples exercise a smaller set at runtime. Navigation, multiwindow scenes, broader animation support, text shaping parity, gestures and platform integration remain substantial gaps. Font metrics, control appearance and several layout behaviors differ from Apple's implementation.
+The inventory against the macOS 27.2 SDK found 1,190 shared declaration paths out of 7,627 and 750 identical declaration spellings out of 8,735. The examples exercise a smaller set at runtime. Navigation, multiwindow scenes, broader animation support, text shaping parity, gestures and platform integration remain substantial gaps. Font metrics, control appearance and several layout behaviors differ from Apple's implementation.
 
 After capturing the Linux examples, run `./Scripts/compare-artwork.sh ../serein` on macOS to render both illustrations with Apple's `ImageRenderer`. At a threshold of 8/255 in any RGB channel, 101 of 119,680 account artwork pixels (0.084%) and 91 of 49,928 key transparency pixels (0.182%) differed. The mean absolute channel differences were 0.104/255 and 0.095/255 respectively. Both reference images are saved in `.build/artwork/`.
 

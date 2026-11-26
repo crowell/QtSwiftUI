@@ -60,6 +60,10 @@ public struct CSSTextRun: Hashable, Sendable {
     public var color: AxoColor?
     public var action: String?
     public var background: AxoColor?
+    public var underline = false
+    public var emojify = false
+    public var emojiSize: CGFloat?
+    public var emojiTopMargin: CGFloat?
     public var breakAll = false
     public init(_ text: String, color: AxoColor? = nil) { self.text = text; self.color = color }
     public init(_ text: String, fontName: String) { self.text = text; self.fontName = fontName }
@@ -156,7 +160,7 @@ struct CSSText: View {
         }
         self.init(displayed.map(\.text).joined(), type: style.type, wrap: wrap, alignment: alignment, color: color)
         self.tabular = style.tabular
-        if runs.contains(where: { $0.action != nil || $0.color != nil || $0.background != nil || $0.fontName != nil }) { self.runs = displayed }
+        if runs.contains(where: { $0.action != nil || $0.color != nil || $0.background != nil || $0.fontName != nil || $0.underline || ($0.emojify && $0.text.contains(where: CSSTextLayout.isEmoji)) }) { self.runs = displayed }
     }
     init(runs: [CSSTextRun], style: CSSTextStyle, color: AxoColor? = nil, alignment: TextAlignment = .leading, onTap: ((String) -> Void)?) {
         self.init(runs: runs, style: style, wrap: .wrap, color: color, alignment: alignment)
@@ -176,6 +180,16 @@ struct CSSText: View {
                 url.host = "text-action"
                 url.queryItems = [URLQueryItem(name: "action", value: action)]
                 part.link = url.url
+            }
+            if run.underline { part.underlineStyle = .single }
+            if run.emojify {
+                let size = run.emojiSize ?? (type.size * 1.4).rounded()
+                var index = part.startIndex
+                for ch in run.text {
+                    let end = part.characters.index(after: index)
+                    if CSSTextLayout.isEmoji(ch) { part[index..<end].font = .custom("SignalEmojiLarge", fixedSize: size) }
+                    index = end
+                }
             }
             attributed += part
         }
