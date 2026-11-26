@@ -80,7 +80,7 @@ private protocol TypedPasteAction {
     @MainActor func deliver(_ items: [NSItemProvider])
 }
 
-private struct TypedPaste<Value: Transferable>: TypedPasteAction {
+struct TypedPaste<Value: Transferable>: TypedPasteAction {
     let onPaste: ([Value]) -> Void
 
     @MainActor func deliver(_ items: [NSItemProvider]) {

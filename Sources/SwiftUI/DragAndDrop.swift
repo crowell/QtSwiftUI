@@ -154,6 +154,15 @@ struct TransferAction {
     }
 }
 
+private nonisolated struct PasteDestination<Content: View, T: Transferable>: View {
+    let content: Content
+    let paste: TypedPaste<T>
+
+    @MainActor var body: some View {
+        content.onPasteCommand(of: T.importedContentTypes()) { items in paste.deliver(items) }
+    }
+}
+
 private nonisolated struct TransferView<Content: View>: Primitive {
     let content: Content
     let transfer: TransferAction
@@ -191,6 +200,15 @@ extension View {
             return true
         }))
     }
+    nonisolated public func pasteDestination<T>(for payloadType: T.Type = T.self, action: @escaping ([T]) -> Void,
+                                                validator: @escaping ([T]) -> [T] = { $0 }) -> some View where T: Transferable {
+        let paste = TypedPaste<T> { items in
+            let accepted = validator(items)
+            if !accepted.isEmpty { action(accepted) }
+        }
+        return PasteDestination(content: self, paste: paste)
+    }
+
     nonisolated public func dropDestination(for payloadType: URL.Type = URL.self,
                                              action: @escaping ([URL], CGPoint) -> Bool,
                                              isTargeted: @escaping (Bool) -> Void = { _ in }) -> some View {

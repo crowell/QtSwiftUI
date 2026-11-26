@@ -3,6 +3,41 @@ import XCTest
 @testable @_spi(Qt) import SwiftUI
 
 final class ClipboardCommandTests: XCTestCase {
+    @MainActor func testPasteDestinationFiltersItemsFromKeyboardAndEditMenu() async throws {
+        var batches: [[String]] = []
+        var validations = 0
+        let host = Host(title: "Paste destination") { context in
+            VStack {
+                Button("Copy values") {}.onCopyCommand {
+                    ["first", "skip", "last"].map { NSItemProvider(object: $0 as NSString) }
+                }
+                Button("Destination") {}
+                    .pasteDestination(for: String.self) { batches.append($0) } validator: { values in
+                        validations += 1
+                        return values.filter { $0 != "skip" }
+                    }
+            }.resolve(context)
+        }
+        defer { host.close() }
+        host.open(width: 180, height: 100)
+        _ = qs_click_point(host.window, 90, 34)
+        XCTAssertTrue(QtDesktop.perform(.copy))
+        _ = qs_click_point(host.window, 90, 66)
+        XCTAssertTrue(QtDesktop.perform(.paste))
+        for _ in 0..<30 where validations < 1 { try await Task.sleep(for: .milliseconds(10)) }
+        XCTAssertEqual(batches, [["first", "last"]])
+
+        QtDesktop.copy("skip")
+        _ = qs_send_key_sequence(host.window, "Ctrl+V")
+        for _ in 0..<30 where validations < 2 { try await Task.sleep(for: .milliseconds(10)) }
+        XCTAssertEqual(validations, 2)
+        XCTAssertEqual(batches.count, 1)
+
+        // The paste scope belongs to the second control only.
+        _ = qs_click_point(host.window, 90, 34)
+        XCTAssertFalse(QtDesktop.perform(.paste))
+    }
+
     @MainActor func testComposerAcceptsCopiedFileURLs() async {
         let path = URL(fileURLWithPath: "/tmp/A picture.png")
         var received: [NSItemProvider] = []
