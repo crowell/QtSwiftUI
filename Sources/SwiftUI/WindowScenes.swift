@@ -9,6 +9,7 @@ import QtBridge
     var valueType: ObjectIdentifier?
     var initialValue: (() -> AnyHashable)?
     var size: CGSize?
+    var appDefaults: UserDefaults?
     var resizability = WindowResizability.automatic
     let content: (Context) -> [Element]
     var commands: (Context, MenuEntries) -> Void = { _, _ in }

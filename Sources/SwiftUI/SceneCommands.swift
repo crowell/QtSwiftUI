@@ -134,7 +134,9 @@ extension Scene {
 }
 
 extension WindowScene {
-    func windowContent(in context: Context) -> [Element] {
+    func windowContent(in source: Context) -> [Element] {
+        var context = source
+        if let appDefaults { context.environment.appDefaults = appDefaults }
         let items = MenuEntries()
         let menuContext = context.descending(.property("window commands"))
         if let open = context.environment.presentSettings {

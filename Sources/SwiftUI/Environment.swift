@@ -89,6 +89,7 @@ public struct EnvironmentValues {
     public var isFocusEffectEnabled = true
     var submit: (() -> Void)?
     public internal(set) var isPresented = false
+    var appDefaults = UserDefaults.standard
     var canPresentWindow = false
     var presentSettings: (@MainActor () -> Void)?
     var presentWindow: @MainActor (WindowRequest) -> Void = { _ in }

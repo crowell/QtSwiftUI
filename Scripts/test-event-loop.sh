@@ -16,3 +16,7 @@ grep -Fx 'Second window observed shared state after first closed' "$tmp/windows"
 timeout 10 "$probe" --settings > "$tmp/settings"
 grep -Fx 'Opened settings from a presented scene' "$tmp/settings"
 if grep -Fq 'Unexpected initial window' "$tmp/settings"; then exit 1; fi
+XDG_CONFIG_HOME="$tmp/config" timeout 10 "$probe" --stored > "$tmp/storage-first"
+XDG_CONFIG_HOME="$tmp/config" timeout 10 "$probe" --stored > "$tmp/storage-second"
+grep -Fx 'Stored count 0 -> 1' "$tmp/storage-first"
+grep -Fx 'Stored count 1 -> 2' "$tmp/storage-second"

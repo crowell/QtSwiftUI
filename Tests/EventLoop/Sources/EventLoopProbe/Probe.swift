@@ -96,9 +96,29 @@ private struct PreferencesProbe: App {
     }
 }
 
+private struct SavedPreference: View {
+    @AppStorage("launch-count") var count = 0
+    @Environment(\.dismissWindow) var dismiss
+    var body: some View {
+        Text("Count \(count)").task {
+            let previous = count
+            count += 1
+            print("Stored count \(previous) -> \(count)")
+            dismiss()
+        }
+    }
+}
+private struct StorageProbe: App {
+    var body: some Scene {
+        Window("Preferences", id: "stored") { SavedPreference() }
+            .defaultAppStorage(UserDefaults(suiteName: "org.qtswiftui.event-loop-test")!)
+    }
+}
+
 @main private enum Driver {
     @MainActor static func main() {
         if CommandLine.arguments.contains("--settings") { PreferencesProbe.main() }
+        else if CommandLine.arguments.contains("--stored") { StorageProbe.main() }
         else { Probe.main() }
     }
 }
