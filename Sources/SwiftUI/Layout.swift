@@ -64,6 +64,7 @@ public enum Axis: Int8, CaseIterable, Sendable {
     var sizesGroupToPositionedContent = false
     var isSpacer = false
     var priority: Double = 0
+    var zIndex: Double = 0
     private var measured: [ProposedViewSize: CGSize] = [:]
     init(size: @escaping (ProposedViewSize) -> CGSize, place: @escaping (CGRect, ProposedViewSize) -> Void) {
         self.sizing = size; self.place = place
@@ -76,6 +77,7 @@ public enum Axis: Int8, CaseIterable, Sendable {
         wrapper.values = values
         wrapper.isSpacer = isSpacer
         wrapper.priority = priority
+        wrapper.zIndex = zIndex
         return wrapper
     }
     func measure(_ proposal: ProposedViewSize) -> CGSize {
@@ -86,20 +88,23 @@ public enum Axis: Int8, CaseIterable, Sendable {
     }
 }
 
-private enum ZIndexKey: LayoutValueKey { static let defaultValue = 0.0 }
-
 extension View {
-    public func zIndex(_ value: Double) -> some View { layoutValue(key: ZIndexKey.self, value: value) }
+    public func zIndex(_ value: Double) -> some View {
+        Transform(content: self) { view, context in
+            let children = view.resolve(context)
+            for child in children { child.zIndex = value }
+            return children
+        }
+    }
 }
 
 @MainActor private struct Placement {
     let child: Element
     let rect: CGRect
     let proposal: ProposedViewSize
-    var depth: Double { child.values[ObjectIdentifier(ZIndexKey.self)] as? Double ?? 0 }
 
     static func draw(_ placements: [Self]) {
-        let ordered = placements.contains { $0.depth != 0 } ? placements.sorted { $0.depth < $1.depth } : placements
+        let ordered = placements.contains { $0.child.zIndex != 0 } ? placements.sorted { $0.child.zIndex < $1.child.zIndex } : placements
         for item in ordered { item.child.place(item.rect, item.proposal) }
     }
 }

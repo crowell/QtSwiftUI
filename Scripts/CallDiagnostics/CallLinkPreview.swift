@@ -5,20 +5,22 @@ import QtBridge
 import AppKit
 #endif
 
+@MainActor func copyPreviewText(_ text: String) {
+    #if os(Linux)
+    qs_clipboard_text(text)
+    #else
+    NSPasteboard.general.clearContents()
+    NSPasteboard.general.setString(text, forType: .string)
+    #endif
+}
+
 @MainActor @Observable final class CallLinkModel {
     enum Dialog { case manage, rename }
     var link: CallLinkInfo?
     var dialog: Dialog?
     var returnToManager = false
     var activeOnServer = false
-    var onCopy: (String) -> Void = { url in
-        #if os(Linux)
-        qs_clipboard_text(url)
-        #else
-        NSPasteboard.general.clearContents()
-        NSPasteboard.general.setString(url, forType: .string)
-        #endif
-    }
+    var onCopy: (String) -> Void = { copyPreviewText($0) }
     var onShare: () -> Void = {}
     var onJoin: () -> Void = {}
 

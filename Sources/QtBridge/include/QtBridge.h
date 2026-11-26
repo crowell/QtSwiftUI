@@ -47,6 +47,8 @@ QSBaselines qs_text_baselines(QSWidget, double width, double height);
 double qs_line_height(QSWidget);
 void qs_autocorrection(QSWidget, int disabled);
 void qs_clipboard_text(const char *text);
+// The caller frees the selected UTF-8 path. Cancel returns NULL.
+char *qs_choose_save_path(const char *filename, const char *filter);
 void qs_field_style(QSWidget, int plain);
 void qs_scroll_input(QSWidget, int enabled);
 void qs_scroll_bounce(QSWidget, int horizontal, int vertical);

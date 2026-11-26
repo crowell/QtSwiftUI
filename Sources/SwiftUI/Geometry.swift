@@ -67,6 +67,9 @@ private struct GeometryObserver<Content: View, Value: Equatable & Sendable>: Pri
                     context.host.afterLayout { change(previous ?? value, value) }
                 }
             }
+            // The observing view is the subview presented to the enclosing layout.
+            element.values.removeAll()
+            element.priority = 0
             return element
         }
     }

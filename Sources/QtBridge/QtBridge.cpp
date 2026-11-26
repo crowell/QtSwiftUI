@@ -20,6 +20,8 @@
 #include "PathTrim.hpp"
 #include "RasterWidget.hpp"
 #include <QApplication>
+#include <QFileDialog>
+#include <string.h>
 #include <QAccessibleWidget>
 #include <QCheckBox>
 #include <QDir>
@@ -1234,6 +1236,10 @@ void qs_autocorrection(QSWidget w, int disabled) {
     auto hints = item->inputMethodHints();
     hints.setFlag(Qt::ImhNoPredictiveText, disabled || (edit && edit->echoMode() == QLineEdit::Password));
     item->setInputMethodHints(hints);
+}
+char *qs_choose_save_path(const char *filename, const char *filter) {
+    const QString path = QFileDialog::getSaveFileName(application().activeWindow(), {}, QString::fromUtf8(filename), QString::fromUtf8(filter));
+    return path.isEmpty() ? nullptr : strdup(path.toUtf8().constData());
 }
 void qs_clipboard_text(const char *text) { application().clipboard()->setText(QString::fromUtf8(text)); }
 void qs_hint(QSWidget w, const char *s) {

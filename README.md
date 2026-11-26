@@ -72,6 +72,14 @@ The `--username-card` example displays Serein’s branded username QR card for i
 
 The integration tests write the production PNG when `QTSWIFTUI_USERNAME_REFERENCE` names an existing directory. The Apple check also scans the Ubuntu export in `Screenshots/` when present.
 
+The `--username-link` example runs Serein’s unchanged `UsernameLinkEditor` with a local username and link. Copy uses the system clipboard. Save opens the native file chooser and writes Serein’s printable PNG in the chosen color. Reset replaces the local fixture link after confirmation.
+
+![Serein username link color editor on Ubuntu](Screenshots/username-link-color.png)
+
+[Username link](Screenshots/username-link.png) · [Reset confirmation](Screenshots/username-link-reset.png)
+
+Apple and Ubuntu tests click through copy, color selection, cancel, export and reset. The purple color picker differs from the Apple capture in 2,081 of 280,800 pixels by more than 8/255 in any RGB channel. Shared geometry tests exercise eager `Grid`, `GridRow`, and `AnyLayout(GridLayout())` with spans, unsized axes, cell anchors, column and row alignment, explicit guides, and right-to-left placement. Overlapping flexible spans and control-specific default spacing still need parity work.
+
 The `--share-picker` example runs Serein’s `CallingSelectPresentingSourcesModal` with the screen and four windows from its snapshot test. Its two grids use `LazyVGrid` and four flexible `GridItem` columns. The fixture reads the original PNG thumbnails when present. A missing thumbnail displays Serein’s warning icon. Selecting a source enables Start sharing and passes its ID to the local callback. Desktop capture is outside this example.
 
 Tests on Apple and Ubuntu choose a screen, switch to a window, submit a source with a missing thumbnail, and exercise both dismiss buttons. In the 840 × 620 selected-window capture, the mean absolute RGB difference from the Apple rendering was 1.84/255. Both renderers truncate the long window title with an ellipsis. Thumbnail sampling and card shadows still differ. Set `QTSWIFTUI_SHARE_REFERENCE` to an existing directory to capture the picker during tests.
@@ -197,7 +205,7 @@ The target is source compatibility with Apple's public SwiftUI APIs. The impleme
 
 `./Scripts/check-apple.sh ../serein` type-checks the example source with Apple's SwiftUI module on a Mac with Xcode. `./Scripts/check-api.sh` extracts public symbol graphs from Xcode and the Linux image. Pass `--missing` to list missing declaration paths. The inventory groups declarations by symbol kind and path, counts overload spellings separately, and excludes underscored and synthesized members. A shared name alone cannot establish matching signatures, constraints, availability or behavior.
 
-The inventory against the macOS 27.2 SDK found 1,310 shared declaration paths out of 7,627 and 829 identical declaration spellings out of 8,735. The examples exercise a smaller set at runtime. Navigation, multiwindow scenes, broader animation support, text shaping parity, gestures and platform integration remain substantial gaps. Font metrics, control appearance and several layout behaviors differ from Apple's implementation.
+The inventory against the macOS 27.2 SDK found 1,328 shared declaration paths out of 7,627 and 837 identical declaration spellings out of 8,735. The examples exercise a smaller set at runtime. Navigation, multiwindow scenes, broader animation support, text shaping parity, gestures and platform integration remain substantial gaps. Font metrics, control appearance and several layout behaviors differ from Apple's implementation.
 
 After capturing the Linux examples, run `./Scripts/compare-artwork.sh ../serein` on macOS to render both illustrations with Apple's `ImageRenderer`. At a threshold of 8/255 in any RGB channel, 101 of 119,680 account artwork pixels (0.084%) and 91 of 49,928 key transparency pixels (0.182%) differed. The mean absolute channel differences were 0.104/255 and 0.095/255 respectively. Both reference images are saved in `.build/artwork/`.
 
