@@ -68,6 +68,8 @@ void qs_hint(QSWidget, const char *);
 enum QSTextTruncation { QSTruncateHead, QSTruncateMiddle, QSTruncateTail };
 QSSize qs_measure_text(QSWidget, double width, int limit, enum QSTextTruncation mode);
 void qs_text_display(QSWidget, int limit, enum QSTextTruncation mode, int automaticName);
+typedef void (*QSAppendTextRun)(void *, const char *, size_t, const char *, const char *, const char *,
+                                const char *, double, int, int, int, const char *, int, const char *);
 void qs_attributed_begin(QSWidget);
 void qs_attributed_append(QSWidget, const char *utf8, size_t count, const char *link, const char *foreground, const char *background,
                           const char *family, double size, int weight, int italic, int underline, const char *underlineColor, int strike, const char *strikeColor);
@@ -92,7 +94,7 @@ void qs_editor_indicators(QSWidget, int vertical);
 void qs_checked(QSWidget, int);
 void qs_value(QSWidget, double);
 int qs_register_font(const char *path);
-typedef struct { double ascent, descent, xHeight; } QSFontMetrics;
+typedef struct { double ascent, descent, xHeight, leading; } QSFontMetrics;
 double qs_text_width(const char *text, const char *family, double size, double spacing);
 QSSize qs_text_ink(const char *text, size_t count, const char *family, double size);
 QSFontMetrics qs_font_metrics(const char *family, double size);
@@ -102,6 +104,12 @@ QSTextParagraph *qs_text_paragraph(const char *family, double size, int weight, 
 void qs_paragraph_append(QSTextParagraph *, const char *text, size_t length, const char *family, double size, int weight, int italic);
 void qs_paragraph_measure(QSTextParagraph *, double width, int breakWords, void *context, QSMeasuredLine receive);
 void qs_paragraph_free(QSTextParagraph *);
+void qs_canvas_text_append(void *, const char *utf8, size_t count, const char *link, const char *foreground, const char *background,
+                           const char *family, double size, int weight, int italic, int underline, const char *underlineColor, int strike, const char *strikeColor);
+typedef struct { double width, height, firstBaseline, lastBaseline; } QSCanvasTextMetrics;
+QSCanvasTextMetrics qs_canvas_text_fit(QSTextParagraph *, double width, double height, int alignment, double spacing, int limit, enum QSTextTruncation);
+void qs_canvas_text_outline(QSTextParagraph *, const char *color, double width);
+void qs_canvas_text_take(QSWidget, QSTextParagraph *);
 void qs_style(QSWidget, const char *family, double points, int weight, int italic, double tracking, const char *color, int alignment, int wrap);
 void qs_selectable(QSWidget, int enabled);
 void qs_exit_scope(QSWidget, int enabled);
@@ -120,12 +128,16 @@ typedef struct {
     double left, top, right, bottom;
     int tile;
 } QSRasterImage;
+typedef void (*QSDataBytes)(void *context, const unsigned char *bytes, size_t count);
+int qs_raster_pdf(QSRasterImage, double pageWidth, double pageHeight, void *context, QSDataBytes receive);
 void qs_raster_image(QSWidget, QSRasterImage);
 void qs_canvas_image(QSWidget, QSRasterImage, int shaded);
 void qs_surface(QSWidget, const char *color, double radius);
 QSPath *qs_path_new(void);
 void qs_path_delete(QSPath *);
 QSRect qs_path_bounds(const QSPath *);
+typedef void (*QSPathVisitor)(void *, int op, double x, double y, double a, double b, double c, double d);
+void qs_path_visit(const QSPath *, int closeContours, void *, QSPathVisitor);
 QSSize qs_path_position(const QSPath *);
 int qs_path_contains(const QSPath *, double x, double y, int evenOdd);
 void qs_path_step(QSPath *, int op, double x, double y, double a, double b, double c, double d);
@@ -180,6 +192,7 @@ int qs_has_pointer_style(QSWindow *, int x, int y, QSPointer);
 int qs_direct_adjust(QSWindow *, const char *value, int increment);
 void qs_direct_touch(QSWidget, int enabled);
 void qs_group_focus(QSWidget, int enabled, int interactions);
+int qs_keyboard_modifiers(void);
 int qs_keyboard_focus_visible(void);
 void qs_focus_effect(QSWidget, int enabled);
 void qs_help(QSWidget, const char *text);

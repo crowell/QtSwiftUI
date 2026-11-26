@@ -41,6 +41,12 @@ extension AttributeDynamicLookup {
 extension Text {
     func configure(_ text: AttributedString, on widget: UnsafeMutableRawPointer, in environment: EnvironmentValues) {
         qs_attributed_begin(widget)
+        appendRuns(text, to: widget, in: environment, using: qs_attributed_append)
+        qs_attributed_finish(widget, environment.selectableText ? 1 : 0, environment.lineSpacing)
+    }
+
+    func appendRuns(_ text: AttributedString, to target: UnsafeMutableRawPointer, in environment: EnvironmentValues,
+                    using append: QSAppendTextRun) {
         for run in text.runs {
             let value = String(text[run.range].characters)
             let font = run.font
@@ -51,14 +57,13 @@ extension Text {
             let underline = resolved(underlineOverride ?? environment.textUnderline, run.underlineStyle)
             let strike = resolved(strikethroughOverride ?? environment.textStrikethrough, run.strikethroughStyle)
             value.withCString { bytes in
-                qs_attributed_append(widget, bytes, value.utf8.count, run.link?.absoluteString ?? "",
-                                     run.foregroundColor?.hex(environment.colorScheme) ?? "",
+                append(target, bytes, value.utf8.count, run.link?.absoluteString ?? "",
+                                     (run.foregroundColor ?? foregroundOverride)?.hex(environment.colorScheme) ?? "",
                                      run.backgroundColor?.hex(environment.colorScheme) ?? "",
                                      font?.qtFamily ?? "", Double(font?.size ?? 0), font?.qtWeight ?? 400, font?.slanted == true ? 1 : 0,
                                      underline?.pattern.qt ?? 0, underline?.color?.hex(environment.colorScheme) ?? "",
                                      strike?.pattern.qt ?? 0, strike?.color?.hex(environment.colorScheme) ?? "")
             }
         }
-        qs_attributed_finish(widget, environment.selectableText ? 1 : 0, environment.lineSpacing)
     }
 }

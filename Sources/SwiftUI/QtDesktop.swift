@@ -1,6 +1,7 @@
 import QtBridge
 
 @_spi(Qt) @MainActor public enum QtDesktop {
+    public static var keyboardModifiers: EventModifiers { EventModifiers(rawValue: Int(qs_keyboard_modifiers())) }
     public static var keyboardFocusVisible: Bool { qs_keyboard_focus_visible() != 0 }
 
     public static var primaryScreenSize: CGSize? {

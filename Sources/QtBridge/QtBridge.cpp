@@ -66,6 +66,7 @@
 #include <QSlider>
 #include <QTimer>
 #include <cmath>
+#include <QFile>
 #include <optional>
 #include <vector>
 
@@ -73,6 +74,11 @@ struct QSPath : QPainterPath {};
 
 namespace {
 QTransform transform(QSAffine t) { return QTransform(t.a, t.b, t.c, t.d, t.tx, t.ty); }
+int eventModifierFlags(Qt::KeyboardModifiers modifiers) {
+    return (modifiers & Qt::ShiftModifier ? 2 : 0) | (modifiers & Qt::ControlModifier ? 4 : 0)
+         | (modifiers & Qt::AltModifier ? 8 : 0) | (modifiers & Qt::MetaModifier ? 16 : 0)
+         | (modifiers & Qt::KeypadModifier ? 32 : 0);
+}
 class SwiftWidgetStyle final : public QProxyStyle {
 public:
     int styleHint(StyleHint hint, const QStyleOption *option, const QWidget *item, QStyleHintReturn *data) const override {
@@ -100,6 +106,18 @@ public:
 };
 QApplication *ownedApplication = nullptr;
 int liveWindows = 0;
+
+// Registration lasts for the Swift process. The Qt font database is recreated
+// when an offscreen renderer releases the last window and another one opens.
+struct RegisteredFont { QString path; QByteArray data; };
+QList<RegisteredFont> registeredFonts;
+bool installFont(QApplication &app, const QByteArray &data) {
+    const int id = QFontDatabase::addApplicationFontFromData(data);
+    if (id < 0) return false;
+    registerFontNames(app, QRawFont(data, 16), QFontDatabase::applicationFontFamilies(id));
+    return true;
+}
+
 QApplication &application() {
     static int argc = 1;
     static char name[] = "QtSwiftUI";
@@ -107,6 +125,7 @@ QApplication &application() {
     if (!qApp) {
         ownedApplication = new QApplication(argc, argv);
         ownedApplication->setStyle(new SwiftWidgetStyle());
+        for (const auto &font : registeredFonts) installFont(*ownedApplication, font.data);
     }
     return *qApp;
 }
@@ -517,6 +536,7 @@ struct Drawing {
     std::optional<QPainterPath> clip;
     std::vector<CanvasBlur> filters;
     std::optional<RasterContent> image;
+    std::shared_ptr<QSTextParagraph> text;
     bool shadeImage = false;
     double materialRadius = 0;
     MaterialBackdrop backdrop;
@@ -565,6 +585,20 @@ private:
             mapping.scale(double(backdrop.region.width()) / backdrop.pixels.width(), double(backdrop.region.height()) / backdrop.pixels.height());
             brush.setTransform(mapping * drawing.matrix.inverted());
             painter.setRenderHint(QPainter::SmoothPixmapTransform);
+        }
+        if (drawing.text) {
+            auto &doc = drawing.text->visible();
+            const auto rect = drawing.path.boundingRect();
+            painter.setClipRect(rect, Qt::IntersectClip);
+            painter.translate(rect.topLeft());
+            QAbstractTextDocumentLayout::PaintContext context;
+            QTransform space;
+            space.translate(-rect.x(), -rect.y());
+            brush.setTransform(brush.transform() * space);
+            context.palette.setBrush(QPalette::Text, brush);
+            doc.documentLayout()->draw(&painter, context);
+            if (drawing.text->customStrikes) drawTextStrikes(painter, doc, context.palette);
+            return;
         }
         if (drawing.image) {
             const auto rect = drawing.path.boundingRect();
@@ -647,10 +681,7 @@ struct QSWindow final : QWidget {
             const bool release = input->type() == QEvent::KeyRelease;
             if (!(release && key->isAutoRepeat())) {
                 const auto chars = WindowShortcuts::characters(key->key(), key->text()).toUtf8();
-                auto modifiers = key->modifiers();
-                const int flags = (modifiers & Qt::ShiftModifier ? 2 : 0) | (modifiers & Qt::ControlModifier ? 4 : 0)
-                                | (modifiers & Qt::AltModifier ? 8 : 0) | (modifiers & Qt::MetaModifier ? 16 : 0)
-                                | (modifiers & Qt::KeypadModifier ? 32 : 0);
+                const int flags = eventModifierFlags(key->modifiers());
                 if (!chars.isEmpty() && keyHandler(context, source->property("swiftId").toInt(),
                                                     release ? 4 : key->isAutoRepeat() ? 2 : 1, chars.constData(), flags)) {
                     input->accept();
@@ -1439,13 +1470,12 @@ void qs_selectable(QSWidget w, int enabled) {
 int qs_register_font(const char *path) {
     auto &app = application();
     const QString font = QString::fromUtf8(path);
-    auto loaded = app.property("qsFonts").toStringList();
-    if (loaded.contains(font)) return 1;
-    const int id = QFontDatabase::addApplicationFont(font);
-    if (id < 0) return 0;
-    registerFontNames(app, QRawFont(font, 16), QFontDatabase::applicationFontFamilies(id));
-    loaded.append(font);
-    app.setProperty("qsFonts", loaded);
+    for (const auto &entry : registeredFonts) if (entry.path == font) return 1;
+    QFile file(font);
+    if (!file.open(QIODevice::ReadOnly)) return 0;
+    const auto bytes = file.readAll();
+    if (!installFont(app, bytes)) return 0;
+    registeredFonts.append({font, bytes});
     return 1;
 }
 QSTextParagraph *qs_text_paragraph(const char *family, double size, int weight, int italic, double tracking) {
@@ -1470,7 +1500,7 @@ QSFontMetrics qs_font_metrics(const char *family, double size) {
     const auto font = resolveFont(application().font(), QString::fromUtf8(family), -1, false);
     auto raw = QRawFont::fromFont(font);
     raw.setPixelSize(size);
-    return {raw.ascent(), raw.descent(), raw.xHeight()};
+    return {raw.ascent(), raw.descent(), raw.xHeight(), raw.leading()};
 }
 void qs_style(QSWidget w, const char *family, double points, int weight, int italic, double tracking,
               const char *color, int alignment, int wrap) {
@@ -1517,6 +1547,21 @@ QSRect qs_path_bounds(const QSPath *path) {
     if (path->elementCount() == 0) return {0, 0, -1, -1};
     const auto rect = path->boundingRect();
     return {rect.x(), rect.y(), rect.width(), rect.height()};
+}
+void qs_path_visit(const QSPath *path, int closeContours, void *context, QSPathVisitor visit) {
+    for (int i = 0; i < path->elementCount(); ++i) {
+        const auto point = path->elementAt(i);
+        if (point.isMoveTo()) {
+            if (i && closeContours) visit(context, 4, 0, 0, 0, 0, 0, 0);
+            visit(context, 0, point.x, point.y, 0, 0, 0, 0);
+        } else if (point.isLineTo()) {
+            visit(context, 1, point.x, point.y, 0, 0, 0, 0);
+        } else if (point.isCurveTo() && i + 2 < path->elementCount()) {
+            const auto second = path->elementAt(++i), end = path->elementAt(++i);
+            visit(context, 3, end.x, end.y, point.x, point.y, second.x, second.y);
+        }
+    }
+    if (closeContours && !path->isEmpty()) visit(context, 4, 0, 0, 0, 0, 0, 0);
 }
 QSSize qs_path_position(const QSPath *path) {
     if (path->elementCount() == 0) return {NAN, NAN};
@@ -1615,6 +1660,9 @@ void qs_canvas_path(QSWidget w, const QSPath *path, QSAffine t, double opacity, 
     auto *canvas = static_cast<CanvasWidget *>(w);
     auto &drawing = canvas->drawings.emplace_back(Drawing{*path, transform(t), opacity, lineWidth, bool(antialias), Qt::black, {}});
     drawing.path.setFillRule(evenOdd ? Qt::OddEvenFill : Qt::WindingFill);
+}
+void qs_canvas_text_take(QSWidget w, QSTextParagraph *paragraph) {
+    static_cast<CanvasWidget *>(w)->drawings.back().text.reset(paragraph);
 }
 void qs_canvas_image(QSWidget w, QSRasterImage source, int shaded) {
     auto &drawing = static_cast<CanvasWidget *>(w)->drawings.back();
@@ -1748,6 +1796,7 @@ void qs_group_shape(QSWidget w, const QSPath *path, int evenOdd) {
     group->contentShape = *path;
     group->contentShape->setFillRule(evenOdd ? Qt::OddEvenFill : Qt::WindingFill);
 }
+int qs_keyboard_modifiers(void) { return eventModifierFlags(QGuiApplication::keyboardModifiers()); }
 int qs_keyboard_focus_visible(void) {
     const auto *window = QApplication::activeWindow();
     return window && window->testAttribute(Qt::WA_KeyboardFocusChange);
@@ -2120,7 +2169,10 @@ void qs_place(QSWidget w, double x, double y, double width, double height) {
     const bool enclose = painted || dynamic_cast<GroupWidget *>(item);
     const int left = enclose ? qFloor(origin.x()) : qRound(origin.x());
     const int top = enclose ? qFloor(origin.y()) : qRound(origin.y());
-    const int right = enclose ? qCeil(origin.x() + width) : qRound(origin.x() + width);
+    // A text line measured at a fractional width can wrap its final word if
+    // rounding both edges gives the native document less than that width.
+    const bool textLabel = dynamic_cast<AttributedLabel *>(item) || dynamic_cast<PlainLabel *>(item);
+    const int right = enclose ? qCeil(origin.x() + width) : textLabel ? left + qCeil(width) : qRound(origin.x() + width);
     const int bottom = enclose ? qCeil(origin.y() + height) : qRound(origin.y() + height);
     item->setProperty("qsFraction", origin - QPointF(left, top));
     if (painted) item->setProperty("qsSize", QSizeF(width, height));

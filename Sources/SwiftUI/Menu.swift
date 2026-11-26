@@ -86,7 +86,7 @@ extension Toggle: MenuEntrySource {
     }
 }
 extension Text: MenuEntrySource {
-    func collect(in context: Context, into entries: MenuEntries) {
+    @MainActor func collect(in context: Context, into entries: MenuEntries) {
         entries.rows.append(.init(title: string, enabled: false))
     }
 }

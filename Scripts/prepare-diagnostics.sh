@@ -132,7 +132,14 @@ awk '/CSSTextLayout.make\(runs:/ {print "        AxoFonts.width(text, style: sty
     echo 'import SwiftUI'
     echo 'import CodecCore'
     echo 'import CoreFoundation'
+    echo '#if os(Linux)'
+    echo '@_spi(Qt) import CoreGraphics'
+    echo '#endif'
     echo 'enum MediaEditorExport {'
+    if grep -q 'image.dataProvider?.bytes' "$source_dir/Components/MediaEditor/MediaEditorExport.swift"; then
+        awk '/^    static func pixels\(_ image: CGImage\)/ {inside=1; count++} inside {print}
+             /^    }$/ {inside=0} END {if (count != 1 || inside) exit 1}' "$source_dir/Components/MediaEditor/MediaEditorExport.swift"
+    else
     awk '/^    static func pixels\(_ image: CGImage\)/ {inside=1; count++}
          inside && /let data = image.dataProvider/ {
             print "#if os(Linux)\n        guard image.bitsPerComponent == 8, image.bitsPerPixel == 32, let data = image.dataProvider?.data else { return nil }\n#else"
@@ -142,6 +149,7 @@ awk '/CSSTextLayout.make\(runs:/ {print "        AxoFonts.width(text, style: sty
             print; print "#endif"; bytes++; next }
          inside {print} /^    }$/ {inside=0} END {if (count != 1 || bytes != 1 || inside) exit 1}' \
         "$source_dir/Components/MediaEditor/MediaEditorExport.swift"
+    fi
     echo '}'
 } > "$target_dir/UsernameCardExport.swift"
 sed 's/@testable import SignalUI/@testable import CallDiagnostics/' \
@@ -230,11 +238,15 @@ awk '
 ' "$source_dir/Components/Lightbox.swift" > "$target_dir/Lightbox.swift"
 # Serein observes AppKit's app-deactivation notification to save the recording draft.
 # The Linux scene supplies the same transition from Qt window and application events.
-awk '/^public struct CompositionRecording: View/ { print; print "#if os(Linux)\n    @Environment(\\.scenePhase) var phase\n#endif"; next }
+if grep -q '\.onChange(of: scenePhase)' "$source_dir/Components/CompositionRecording.swift"; then
+    cp "$source_dir/Components/CompositionRecording.swift" "$target_dir/"
+else
+    awk '/^public struct CompositionRecording: View/ { print; print "#if os(Linux)\n    @Environment(\\.scenePhase) var phase\n#endif"; next }
      /NSApplication.didResignActiveNotification/ {
          print "#if os(Linux)\n        .onChange(of: phase) { old, new in if old == .active && new != .active { saveDraftRecordingIfNeeded() } }\n#else"
          print; print "#endif"; found=1; next }
      { print } END { if (!found) exit 1 }' "$source_dir/Components/CompositionRecording.swift" > "$target_dir/CompositionRecording.swift"
+fi
 awk 'BEGIN { print "import Foundation" } /^func durationToPlaybackText\(/ { inside=1 }
      inside { print } inside && /^}$/ { done=1; exit } END { if (!done) exit 1 }' \
     "$source_dir/Components/Conversation/Message/MessageAudio.swift" > "$target_dir/PlaybackTime.swift"

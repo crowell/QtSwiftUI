@@ -60,6 +60,18 @@ xvfb-run -a sh Scripts/ComposerCheck/exercise-x11.sh /tmp/serein-composer/.build
 
 ![Serein message composer on Ubuntu](Screenshots/composer-draft.png)
 
+Serein’s account-key view renders its bundled Signal font, illustration and selectable key cards in Qt. The Save button runs the production account-key exporter. The fixture uses sample values and verifies a single US Letter raster PDF. Its media editor check draws a clock, outlined text and a pen stroke using Serein’s renderer and exports JPEG pixels and a blur hash.
+
+```sh
+sh Scripts/prepare-media.sh ../serein /tmp/serein-media
+swift build --package-path /tmp/serein-media --product MediaCheck
+xvfb-run -a sh Scripts/MediaCheck/exercise-x11.sh /tmp/serein-media/.build/debug/MediaCheck /tmp/serein-test-exports
+```
+
+![Serein account keys on Ubuntu](Screenshots/account-keys.png)
+
+[Serein media editor canvas on Ubuntu](Screenshots/media-editor-canvas.png)
+
 [Qt file chooser opened by Serein’s Photo button](Screenshots/group-avatar-file-import.png)
 
 The `--call-participants` example displays Serein’s group-call tiles for a blocked participant and a participant with a raised hand. “More Info” opens Serein’s localized alert in a window-modal Qt dialog. Ubuntu tests dismiss it and open it again. Apple and Qt tests both activate the raised-hand control. The alert capture was taken from an X11 display in Docker.
@@ -290,7 +302,7 @@ The target is source compatibility with Apple's public SwiftUI APIs. The impleme
 
 `./Scripts/check-apple.sh ../serein` type-checks the example source with Apple's SwiftUI module on a Mac with Xcode. `./Scripts/check-api.sh` extracts public symbol graphs from Xcode and the Linux image. Pass `--missing` to list missing declaration paths. The inventory groups declarations by symbol kind and path, counts overload spellings separately, and excludes underscored and synthesized members. A shared name alone cannot establish matching signatures, constraints, availability or behavior.
 
-The inventory against the macOS 27.2 SDK found 1,487 shared declaration paths out of 7,627 and 979 identical declaration spellings out of 8,735. The examples exercise a smaller set at runtime. Navigation, multiwindow scenes, broader animation support, text shaping parity, gestures and platform integration remain substantial gaps. Font metrics, control appearance and several layout behaviors differ from Apple's implementation.
+The inventory against the macOS 27.2 SDK found 1,524 shared declaration paths out of 7,627 and 1,020 identical declaration spellings out of 8,735. The examples exercise a smaller set at runtime. Navigation, multiwindow scenes, broader animation support, text shaping parity, gestures and platform integration remain substantial gaps. Font metrics, control appearance and several layout behaviors differ from Apple's implementation.
 
 After capturing the Linux examples, run `./Scripts/compare-artwork.sh ../serein` on macOS to render both illustrations with Apple's `ImageRenderer`. At a threshold of 8/255 in any RGB channel, 101 of 119,680 account artwork pixels (0.084%) and 91 of 49,928 key transparency pixels (0.182%) differed. The mean absolute channel differences were 0.104/255 and 0.095/255 respectively. Both reference images are saved in `.build/artwork/`.
 

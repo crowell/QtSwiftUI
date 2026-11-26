@@ -20,7 +20,7 @@ extension Context {
         } place: { rect, _ in qs_place(widget, rect.minX, rect.minY, rect.width, rect.height) }
     }
 }
-public struct Text: Primitive {
+public nonisolated struct Text: Primitive {
     nonisolated let string: String
     nonisolated var underlineOverride: TextLineDecoration?
     nonisolated var strikethroughOverride: TextLineDecoration?
@@ -29,23 +29,35 @@ public struct Text: Primitive {
         string = String(attributedContent.characters)
         attributed = attributedContent
     }
+    private(set) var foregroundOverride: Color?
     private var attributes: [(inout EnvironmentValues) -> Void] = []
     public nonisolated init<S: StringProtocol>(_ content: S) { string = String(content) }
     public nonisolated init(verbatim content: String) { string = content }
     public func font(_ font: Font?) -> Text { modified { $0.font = font } }
+    public func tracking(_ tracking: CGFloat) -> Text { modified { $0.tracking = tracking } }
     public func fontWeight(_ weight: Font.Weight?) -> Text { modified { $0.font = ($0.font ?? .body).weight(weight ?? .regular) } }
     public func bold(_ active: Bool = true) -> Text { modified { if active { $0.font = ($0.font ?? .body).bold() } } }
     public func italic(_ active: Bool = true) -> Text { modified { if active { $0.font = ($0.font ?? .body).italic() } } }
-    public func foregroundColor(_ color: Color?) -> Text { modified { $0.foreground = color ?? .primary } }
+    public func foregroundColor(_ color: Color?) -> Text {
+        var copy = self
+        copy.foregroundOverride = color
+        return copy
+    }
     private func modified(_ change: @escaping (inout EnvironmentValues) -> Void) -> Self {
         var copy = self; copy.attributes.append(change); return copy
     }
-    func styled(_ context: Context) -> Context {
+    func styledEnvironment(_ environment: EnvironmentValues) -> EnvironmentValues {
+        var result = environment
+        for attribute in attributes { attribute(&result) }
+        if let foregroundOverride { result.foreground = foregroundOverride }
+        return result
+    }
+    @MainActor func styled(_ context: Context) -> Context {
         var ctx = context
-        for attribute in attributes { attribute(&ctx.environment) }
+        ctx.environment = styledEnvironment(ctx.environment)
         return ctx
     }
-    func elements(in context: Context) -> [Element] {
+    @MainActor func elements(in context: Context) -> [Element] {
         if context.environment.accessibilityTraits.contains(.isLink) {
             let group = context.widget(QSGroup)
             qs_group(group, 2, 0, 0, context.environment.accessibleValue)

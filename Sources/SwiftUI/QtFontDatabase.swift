@@ -14,6 +14,11 @@ import QtBridge
         return CGSize(width: ink.width, height: ink.height)
     }
 
+    public static func normalLineHeight(family: String, size: CGFloat) -> CGFloat {
+        let metrics = qs_font_metrics(family, size)
+        return metrics.ascent.rounded() + metrics.descent.rounded() + metrics.leading.rounded()
+    }
+
     public static func metrics(family: String, size: CGFloat) -> (ascent: CGFloat, descent: CGFloat, xHeight: CGFloat) {
         let metrics = qs_font_metrics(family, size)
         return (metrics.ascent, metrics.descent, metrics.xHeight)

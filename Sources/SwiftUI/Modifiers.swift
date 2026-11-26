@@ -5,6 +5,26 @@ public struct EdgeInsets: Equatable, Sendable {
     }
     public init() { self.init(top: 0, leading: 0, bottom: 0, trailing: 0) }
 }
+@frozen public enum HorizontalEdge: Int8, CaseIterable, Codable, Sendable {
+    case leading, trailing
+    @frozen public struct Set: OptionSet, Sendable {
+        public let rawValue: Int8
+        public init(rawValue: Int8) { self.rawValue = rawValue }
+        public init(_ edge: HorizontalEdge) { self.init(rawValue: 1 << edge.rawValue) }
+        public static let leading = Self(.leading), trailing = Self(.trailing)
+        public static let all: Self = [.leading, .trailing]
+    }
+}
+@frozen public enum VerticalEdge: Int8, CaseIterable, Codable, Sendable {
+    case top, bottom
+    @frozen public struct Set: OptionSet, Sendable {
+        public let rawValue: Int8
+        public init(rawValue: Int8) { self.rawValue = rawValue }
+        public init(_ edge: VerticalEdge) { self.init(rawValue: 1 << edge.rawValue) }
+        public static let top = Self(.top), bottom = Self(.bottom)
+        public static let all: Self = [.top, .bottom]
+    }
+}
 public enum Edge: Int8, CaseIterable, Sendable {
     case top, leading, bottom, trailing
     public struct Set: OptionSet, Sendable {

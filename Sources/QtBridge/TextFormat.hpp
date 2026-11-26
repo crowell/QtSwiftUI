@@ -1,6 +1,7 @@
 #pragma once
 #include "RegisteredFonts.hpp"
 #include "TextStrike.hpp"
+#include <QPalette>
 
 inline QTextCharFormat swiftTextFormat(const QFont &base, const QPalette &palette, const char *link, const char *foreground,
                                        const char *background, const char *family, double size, int weight, bool italic,

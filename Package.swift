@@ -19,7 +19,7 @@ let package = Package(
         ]),
         .systemLibrary(name: "CQtWidgets", pkgConfig: "Qt6Widgets", providers: [.apt(["qt6-base-dev"])]),
         .target(name: "QtBridge", dependencies: ["CQtWidgets"]),
-        .target(name: "CoreGraphics"),
+        .target(name: "CoreGraphics", dependencies: ["QtBridge"]),
         .target(name: "UniformTypeIdentifiers"),
         .target(name: "SwiftUI", dependencies: ["QtBridge", "CoreGraphics", "UniformTypeIdentifiers", "QtSwiftUIMacros"]),
         .executableTarget(name: "Conversation", dependencies: ["SwiftUI"], path: "Examples/Conversation"),

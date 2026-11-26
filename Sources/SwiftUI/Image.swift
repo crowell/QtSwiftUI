@@ -1,6 +1,22 @@
 import CoreFoundation
 import QtBridge
 
+extension CGImage {
+    @_spi(Qt) public static func rgba8(_ pixels: Data, width: Int, height: Int) -> CGImage? {
+        guard width > 0, height > 0, width <= Int(Int32.max), height <= Int(Int32.max), width <= Int.max / 4 else { return nil }
+        let rowBytes = width * 4
+        guard pixels.count.isMultiple(of: rowBytes), pixels.count / rowBytes == height else { return nil }
+        let data = pixels.withUnsafeBytes { bytes in
+            CFDataCreate(nil, bytes.bindMemory(to: UInt8.self).baseAddress, bytes.count)
+        }
+        guard let data, let provider = CGDataProvider(data: data), let space = CGColorSpace(name: CGColorSpace.sRGB) else { return nil }
+        return CGImage(width: width, height: height, bitsPerComponent: 8, bitsPerPixel: 32,
+                               bytesPerRow: rowBytes, space: space,
+                               bitmapInfo: CGBitmapInfo(rawValue: CGImageAlphaInfo.last.rawValue),
+                               provider: provider, decode: nil, shouldInterpolate: true, intent: .defaultIntent)
+    }
+}
+
 public nonisolated struct Image: View, Equatable, Sendable {
     public enum Orientation: UInt8, CaseIterable, Hashable, Sendable {
         case up, upMirrored, down, downMirrored, left, leftMirrored, right, rightMirrored
@@ -25,17 +41,7 @@ public nonisolated struct Image: View, Equatable, Sendable {
     }
 
     @_spi(Qt) public init?(rgba8 pixels: Data, width: Int, height: Int, scale: CGFloat = 1, orientation: Orientation = .up) {
-        guard width > 0, height > 0, width <= Int(Int32.max), height <= Int(Int32.max), width <= Int.max / 4 else { return nil }
-        let rowBytes = width * 4
-        guard pixels.count.isMultiple(of: rowBytes), pixels.count / rowBytes == height else { return nil }
-        let data = pixels.withUnsafeBytes { bytes in
-            CFDataCreate(nil, bytes.bindMemory(to: UInt8.self).baseAddress, bytes.count)
-        }
-        guard let data, let provider = CGDataProvider(data: data), let space = CGColorSpace(name: CGColorSpace.sRGB),
-              let cg = CGImage(width: width, height: height, bitsPerComponent: 8, bitsPerPixel: 32,
-                               bytesPerRow: rowBytes, space: space,
-                               bitmapInfo: CGBitmapInfo(rawValue: CGImageAlphaInfo.last.rawValue),
-                               provider: provider, decode: nil, shouldInterpolate: true, intent: .defaultIntent) else { return nil }
+        guard let cg = CGImage.rgba8(pixels, width: width, height: height) else { return nil }
         self.init(decorative: cg, scale: scale, orientation: orientation)
     }
 

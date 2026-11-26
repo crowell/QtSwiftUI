@@ -17,6 +17,19 @@ public final class ImageRenderer<Content: View> {
 
     @MainActor deinit { host?.close() }
 
+    /// A single raster page in PDF points, rendered in memory at the receiver's scale.
+    @_spi(Qt) @MainActor public final func pdfData(pageSize: CGSize) -> Data? {
+        guard let cgImage else { return nil }
+        var result: Data?
+        Image(decorative: cgImage, scale: scale).withRaster(in: EnvironmentValues()) { raster in
+            _ = qs_raster_pdf(raster, pageSize.width, pageSize.height, &result) { context, base, count in
+                guard let context, let base else { return }
+                context.assumingMemoryBound(to: Data?.self).pointee = Data(bytes: base, count: count)
+            }
+        }
+        return result
+    }
+
     @MainActor public final var cgImage: CGImage? {
         guard scale.isFinite, scale > 0 else { return nil }
         let renderer: Host

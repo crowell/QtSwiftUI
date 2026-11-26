@@ -83,7 +83,7 @@ public struct GraphicsContext {
         }
     }
     fileprivate struct Draw {
-        enum Source { case shading(Shading), image(ResolvedImage) }
+        enum Source { case shading(Shading), image(ResolvedImage), text(ResolvedText, CGSize) }
         let path: Path, source: Source, fill: FillStyle, transform: CGAffineTransform
         let opacity: Double, lineWidth: CGFloat?
         let environment: EnvironmentValues
@@ -127,6 +127,56 @@ public struct GraphicsContext {
             record(.shading(shading), path: path, style: FillStyle(), lineWidth: lineWidth)
         }
     }
+    public struct ResolvedText {
+        fileprivate let text: Text
+        fileprivate let environment: EnvironmentValues
+        public var shading: Shading
+        fileprivate var outline: (color: Color, width: CGFloat)?
+
+        @_spi(Qt) public mutating func strokeGlyphs(color: Color, lineWidth: CGFloat) {
+            outline = lineWidth > 0 ? (color, lineWidth) : nil
+        }
+
+        fileprivate func paragraph(in size: CGSize) -> (OpaquePointer, QSCanvasTextMetrics) {
+            let font = environment.font ?? .body
+            let paragraph = qs_text_paragraph(font.qtFamily, font.size, font.qtWeight, font.slanted ? 1 : 0, environment.tracking)!
+            text.appendRuns(text.attributed ?? AttributedString(text.string), to: UnsafeMutableRawPointer(paragraph),
+                            in: environment, using: qs_canvas_text_append)
+            if let outline { qs_canvas_text_outline(paragraph, outline.color.hex(environment.colorScheme), outline.width) }
+            let leading: Int32 = environment.layoutDirection == .rightToLeft ? 1 : -1
+            let alignment = environment.multilineTextAlignment
+            let metrics = qs_canvas_text_fit(paragraph, size.width, size.height, alignment == .center ? 0 : alignment == .leading ? leading : -leading,
+                                             environment.lineSpacing, Int32(clamping: environment.lineLimit ?? 0), environment.truncationMode.nativeMode)
+            return (paragraph, metrics)
+        }
+        private func metrics(in size: CGSize) -> QSCanvasTextMetrics {
+            let (paragraph, metrics) = paragraph(in: size)
+            qs_paragraph_free(paragraph)
+            return metrics
+        }
+        public func measure(in size: CGSize) -> CGSize {
+            let value = metrics(in: size)
+            return CGSize(width: value.width, height: value.height)
+        }
+        public func firstBaseline(in size: CGSize) -> CGFloat { metrics(in: size).firstBaseline }
+        public func lastBaseline(in size: CGSize) -> CGFloat { metrics(in: size).lastBaseline }
+    }
+
+    public func resolve(_ text: Text) -> ResolvedText {
+        ResolvedText(text: text, environment: text.styledEnvironment(environment), shading: .color(environment.foreground))
+    }
+    public func draw(_ text: Text, in rect: CGRect) { draw(resolve(text), in: rect) }
+    public func draw(_ text: Text, at point: CGPoint, anchor: UnitPoint = .center) { draw(resolve(text), at: point, anchor: anchor) }
+    public func draw(_ text: ResolvedText, in rect: CGRect) {
+        guard !rect.isEmpty else { return }
+        record(.text(text, rect.size), path: Path(rect), style: FillStyle())
+    }
+    public func draw(_ text: ResolvedText, at point: CGPoint, anchor: UnitPoint = .center) {
+        let size = text.measure(in: CGSize(width: CGFloat.infinity, height: CGFloat.infinity))
+        let origin = CGPoint(x: point.x - size.width * anchor.x, y: point.y - size.height * anchor.y)
+        draw(text, in: CGRect(origin: origin, size: size))
+    }
+
     public struct ResolvedImage {
         fileprivate let image: Image
         fileprivate let environment: EnvironmentValues
@@ -177,6 +227,10 @@ public struct GraphicsContext {
             let environment = drawing.environment
             let shading: Shading
             switch drawing.source {
+            case .text(let text, let size):
+                let (paragraph, _) = text.paragraph(in: size)
+                qs_canvas_text_take(widget, paragraph)
+                shading = text.shading
             case .image(let resolved):
                 resolved.image.withRaster(in: resolved.environment) { qs_canvas_image(widget, $0, resolved.shading == nil ? 0 : 1) }
                 guard let tint = resolved.shading else { continue }

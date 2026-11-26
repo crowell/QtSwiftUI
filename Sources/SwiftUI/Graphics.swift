@@ -65,7 +65,7 @@ public struct Color: ShapeStyle, Primitive, Hashable, Sendable {
         return Color(light: faded(light), dark: faded(dark))
     }
     nonisolated func argb(_ scheme: ColorScheme) -> UInt32 { scheme == .dark ? dark : light }
-    func hex(_ scheme: ColorScheme) -> String { String(format: "#%08x", argb(scheme)) }
+    nonisolated func hex(_ scheme: ColorScheme) -> String { String(format: "#%08x", argb(scheme)) }
     public struct Resolved: ShapeStyle, Hashable, Sendable {
         public var red, green, blue, opacity: Float
         public init(red: Float, green: Float, blue: Float, opacity: Float = 1) {
