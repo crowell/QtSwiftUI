@@ -87,7 +87,7 @@ void qs_group_rotation(QSWidget, double degrees, double anchorX, double anchorY)
 void qs_group_shape(QSWidget, const QSPath *, int evenOdd);
 void qs_group_clip(QSWidget, const QSPath *, int evenOdd, int antialias);
 void qs_group_semantics(QSWidget, int heading, int modal);
-void qs_group_finish_layout(QSWidget);
+void qs_group_finish_layout(QSWidget, int sizeToPositionedContent);
 void qs_match_place(QSWidget drawing, QSWidget marker, double x, double y, double width, double height);
 void qs_group_focus(QSWidget, int enabled, int interactions);
 void qs_focus_effect(QSWidget, int enabled);

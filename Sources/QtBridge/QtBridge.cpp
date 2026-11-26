@@ -67,6 +67,8 @@ class GroupWidget final : public QWidget {
 public:
     using QWidget::QWidget;
     QRect layoutRect;
+    bool sizedToContent = false;
+    QRect hitBounds() const { return sizedToContent ? rect() : layoutRect; }
     bool exposeChildren = true, combineChildren = false;
     bool windowDrag = false, trackingDrag = false, simultaneous = false;
     QPointF dragOrigin;
@@ -127,7 +129,8 @@ class AccessibleGroup final : public QAccessibleWidget {
 public:
     explicit AccessibleGroup(GroupWidget *group) : QAccessibleWidget(group), group(group) {}
     QRect rect() const override {
-        return QRect(group->mapToGlobal(group->layoutRect.topLeft()), group->layoutRect.size());
+        const QRect bounds = group->hitBounds();
+        return QRect(group->mapToGlobal(bounds.topLeft()), bounds.size());
     }
     QAccessible::Role role() const override {
         if (group->adjustable) return QAccessible::Slider;
@@ -444,11 +447,11 @@ struct QSWindow final : QWidget {
                 if (parent == source || (scope->simultaneous && tracking)) scope->cancelPointer();
             }
         }
-        if (group && group->layoutRect != group->rect() &&
+        if (group && group->hitBounds() != group->rect() &&
             (input->type() == QEvent::MouseButtonPress || input->type() == QEvent::MouseButtonRelease ||
              input->type() == QEvent::MouseButtonDblClick || input->type() == QEvent::MouseMove)) {
             auto *mouse = static_cast<QMouseEvent *>(input);
-            if (!group->pointerDrag.tracking && !group->layoutRect.contains(mouse->position().toPoint())) {
+            if (!group->pointerDrag.tracking && !group->hitBounds().contains(mouse->position().toPoint())) {
                 const auto at = mapFromGlobal(mouse->globalPosition().toPoint());
                 // Paint overflow is transparent to input. Find the sibling underneath.
                 group->setAttribute(Qt::WA_TransparentForMouseEvents);
@@ -500,10 +503,21 @@ struct QSWindow final : QWidget {
             group->gestureDevice = deviceId;
         }
         if (group->pointerDrag.threshold >= 0) {
-            const bool inside = group->layoutRect.contains(point.toPoint());
+            const bool inside = group->hitBounds().contains(point.toPoint());
             const bool tracking = group->pointerDrag.tracking;
             const auto sample = group->pointerDrag.update(*mouse, mapFromGlobal(mouse->globalPosition()), inside);
             if (sample && dragHandler) dragHandler(context, group->property("swiftId").toInt(), *sample);
+            // A press below the drag threshold can still complete an enclosing tap.
+            // Once the drag wins, discard that tap for the remainder of the sequence.
+            if (tracking || group->pointerDrag.tracking) {
+                for (auto *parent = group->parentWidget(); parent && parent != this; parent = parent->parentWidget()) {
+                    auto *tap = dynamic_cast<GroupWidget *>(parent);
+                    if (!tap || !tap->tapCount || tap->simultaneous) continue;
+                    if (group->pointerDrag.recognized) tap->trackingTap = false;
+                    else recognize(tap, mouse);
+                    break;
+                }
+            }
             if (mouse->button() == Qt::LeftButton || mouse->type() == QEvent::MouseMove)
                 return tracking || group->pointerDrag.tracking;
         }
@@ -522,7 +536,7 @@ struct QSWindow final : QWidget {
         const bool moved = (point - group->pressPosition).manhattanLength() > QApplication::startDragDistance();
         if (type == QEvent::MouseMove && moved) group->trackingTap = false;
         if (mouse->button() != Qt::LeftButton) return false;
-        const bool inside = group->layoutRect.contains(point.toPoint());
+        const bool inside = group->hitBounds().contains(point.toPoint());
         if (press) {
             if (!group->lastTap.isValid() || group->lastTap.elapsed() > QApplication::doubleClickInterval() || moved)
                 group->consecutiveTaps = 0;
@@ -959,7 +973,6 @@ void qs_path_step(QSPath *target, int op, double x, double y, double a, double b
     case 4: path.closeSubpath(); break;
     case 5: path.addRect(x, y, a, b); break;
     case 6: path.addEllipse(x, y, a, b); break;
-    case 7: path.addRoundedRect(QRectF(x, y, a, b), c, d); break;
     }
 }
 void qs_group(QSWidget w, int behavior, int isImage, int updatesFrequently, const char *value) {
@@ -1167,8 +1180,9 @@ void qs_match_place(QSWidget drawing, QSWidget marker, double x, double y, doubl
         }
     }
 }
-void qs_group_finish_layout(QSWidget w) {
+void qs_group_finish_layout(QSWidget w, int sizeToPositionedContent) {
     auto *group = static_cast<GroupWidget *>(w);
+    group->sizedToContent = sizeToPositionedContent && !group->graphicsEffect() && !group->contentShape;
     // A frame around paint-only descendants must leave the controls underneath reachable.
     const auto children = group->findChildren<QWidget *>(QString(), Qt::FindDirectChildrenOnly);
     if (!group->tapCount && !group->windowDrag && group->pointerDrag.threshold < 0 && !group->property("qsHover").toBool() &&
@@ -1179,9 +1193,16 @@ void qs_group_finish_layout(QSWidget w) {
     // groups (focus, accessibility, hover) must allow child paint to overflow.
     if (group->graphicsEffect() || group->contentShape) return;
     const QRect viewport(group->mapFrom(group->window(), QPoint()), group->window()->size());
-    QRect paint = group->rect();
+    // A positioned child can claim the complete layout proposal while occupying a
+    // small part of it. Keep its logical origin for gesture coordinates but bound
+    // the native event and accessibility target to the positioned content.
+    QRect paint = group->sizedToContent ? QRect() : group->rect();
     for (auto *child : children) {
-        if (!child->isHidden()) paint = paint.united(child->geometry().intersected(viewport));
+        if (child->isHidden()) continue;
+        QRect footprint = child->geometry();
+        if (group->sizedToContent && child->graphicsEffect())
+            footprint = child->graphicsEffect()->boundingRectFor(child->rect()).translated(child->pos()).toAlignedRect();
+        paint = paint.united(footprint.intersected(viewport));
     }
     if (paint == group->rect()) return;
     const QPoint offset = -paint.topLeft();

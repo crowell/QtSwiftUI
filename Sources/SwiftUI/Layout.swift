@@ -57,6 +57,7 @@ public enum Axis: Int8, CaseIterable, Sendable {
     let sizing: (ProposedViewSize) -> CGSize
     let place: (CGRect, ProposedViewSize) -> Void
     var values: [ObjectIdentifier: Any] = [:]
+    var sizesGroupToPositionedContent = false
     var isSpacer = false
     var priority: Double = 0
     private var measured: [ProposedViewSize: CGSize] = [:]

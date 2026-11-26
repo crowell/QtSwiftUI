@@ -96,7 +96,7 @@ extension View {
                         qs_match_place(drawing, marker, frame.minX, frame.minY, frame.width, frame.height)
                         let offer = frame.size == bounds.size ? proposal : ProposedViewSize(frame.size)
                         content.place(CGRect(origin: .zero, size: frame.size), offer)
-                        qs_group_finish_layout(drawing)
+                        qs_group_finish_layout(drawing, 0)
                     })
             }]
         }

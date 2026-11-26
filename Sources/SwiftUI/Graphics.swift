@@ -107,7 +107,7 @@ extension ShapeStyle where Self == Color {
 public struct Path: Equatable, Sendable {
     enum Command: Equatable, Sendable {
         case move(CGPoint), line(CGPoint), quad(CGPoint, CGPoint), cubic(CGPoint, CGPoint, CGPoint)
-        case close, rect(CGRect), ellipse(CGRect), rounded(CGRect, CGSize)
+        case close, rect(CGRect), ellipse(CGRect)
         indirect case transformed(Path, CGAffineTransform)
         indirect case stroked(Path, StrokeStyle)
         indirect case trimmed(Path, CGFloat, CGFloat)
@@ -118,10 +118,16 @@ public struct Path: Equatable, Sendable {
     public init(_ rect: CGRect) { commands = [.rect(rect)] }
     public init(ellipseIn rect: CGRect) { commands = [.ellipse(rect)] }
     public init(roundedRect rect: CGRect, cornerRadius: CGFloat, style: RoundedCornerStyle = .continuous) {
-        commands = [.rounded(rect, CGSize(width: cornerRadius, height: cornerRadius))]
+        self.init(roundedRect: rect, cornerSize: CGSize(width: cornerRadius, height: cornerRadius), style: style)
     }
     public init(roundedRect rect: CGRect, cornerSize: CGSize, style: RoundedCornerStyle = .continuous) {
-        commands = [.rounded(rect, cornerSize)]
+        guard !rect.isNull, !rect.isInfinite else { self.init(); return }
+        let width = max(0, cornerSize.width), height = max(0, cornerSize.height)
+        guard width > 0 || height > 0 else { self.init(rect); return }
+        let r = rect.standardized
+        let scale = min(1, width > 0 ? r.width / width / 2 : 1, height > 0 ? r.height / height / 2 : 1)
+        let size = CGSize(width: width * scale, height: height * scale)
+        self.init(cornersIn: r, topLeading: size, topTrailing: size, bottomTrailing: size, bottomLeading: size, style: style)
     }
     public func applying(_ transform: CGAffineTransform) -> Path {
         if isEmpty || transform.isIdentity { return self }
@@ -151,6 +157,10 @@ public struct Path: Equatable, Sendable {
         move(to: first)
         for point in lines.dropFirst() { addLine(to: point) }
     }
+    public mutating func addRoundedRect(in rect: CGRect, cornerSize: CGSize, style: RoundedCornerStyle = .continuous,
+                                        transform: CGAffineTransform = .identity) {
+        addPath(Path(roundedRect: rect, cornerSize: cornerSize, style: style), transform: transform)
+    }
     public mutating func addRect(_ rect: CGRect) { commands.append(.rect(rect)) }
     public mutating func addEllipse(in rect: CGRect) { commands.append(.ellipse(rect)) }
     public mutating func move(to point: CGPoint) { commands.append(.move(point)) }
@@ -176,7 +186,6 @@ public struct Path: Equatable, Sendable {
             case .close: qs_path_step(w, 4, 0, 0, 0, 0, 0, 0)
             case .rect(let r): qs_path_step(w, 5, r.minX, r.minY, r.width, r.height, 0, 0)
             case .ellipse(let r): qs_path_step(w, 6, r.minX, r.minY, r.width, r.height, 0, 0)
-            case .rounded(let r, let s): qs_path_step(w, 7, r.minX, r.minY, r.width, r.height, s.width, s.height)
             }
         }
         return body(w)
@@ -279,12 +288,34 @@ public struct RoundedRectangle: Shape {
         self.cornerSize = .init(width: cornerRadius, height: cornerRadius); self.style = style
     }
     public nonisolated init(cornerSize: CGSize, style: RoundedCornerStyle = .continuous) { self.cornerSize = cornerSize; self.style = style }
-    public nonisolated func path(in rect: CGRect) -> Path { var p = Path(); p.commands = [.rounded(rect, cornerSize)]; return p }
+    public nonisolated var animatableData: CGSize.AnimatableData {
+        get { cornerSize.animatableData }
+        set { cornerSize.animatableData = newValue }
+    }
+    public nonisolated func path(in rect: CGRect) -> Path { Path(roundedRect: rect, cornerSize: cornerSize, style: style) }
 }
 public struct Capsule: Shape {
     public nonisolated var layoutDirectionBehavior: LayoutDirectionBehavior { .fixed }
-    public nonisolated init(style: RoundedCornerStyle = .continuous) {}
-    public nonisolated func path(in rect: CGRect) -> Path { RoundedRectangle(cornerRadius: min(rect.width, rect.height) / 2).path(in: rect) }
+    public var style: RoundedCornerStyle
+    public nonisolated init(style: RoundedCornerStyle = .continuous) { self.style = style }
+    public nonisolated func path(in rect: CGRect) -> Path { Path(roundedRect: rect, cornerRadius: min(rect.width, rect.height) / 2, style: style) }
+}
+extension Shape where Self == Rectangle {
+    public static var rect: Self { Self() }
+}
+extension Shape where Self == RoundedRectangle {
+    public static func rect(cornerRadius: CGFloat, style: RoundedCornerStyle = .continuous) -> Self { .init(cornerRadius: cornerRadius, style: style) }
+    public static func rect(cornerSize: CGSize, style: RoundedCornerStyle = .continuous) -> Self { .init(cornerSize: cornerSize, style: style) }
+}
+extension Shape where Self == Capsule {
+    public static var capsule: Self { .init() }
+    public static func capsule(style: RoundedCornerStyle) -> Self { .init(style: style) }
+}
+extension Shape where Self == Circle {
+    public static var circle: Self { .init() }
+}
+extension Shape where Self == Ellipse {
+    public static var ellipse: Self { .init() }
 }
 public struct Divider: View {
     @Environment(\.stackAxis) private var axis
