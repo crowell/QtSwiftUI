@@ -98,7 +98,7 @@ public struct GraphicsContext {
             defer { qs_path_delete(local) }
             qs_path_append(local, clip, transform.inverted().native)
             let r = qs_path_bounds(local)
-            return CGRect(x: r.x, y: r.y, width: r.width, height: r.height)
+            return r.width < 0 ? .null : CGRect(x: r.x, y: r.y, width: r.width, height: r.height)
         }
     }
     public mutating func clip(to path: Path, style: FillStyle = FillStyle(), options: ClipOptions = []) {

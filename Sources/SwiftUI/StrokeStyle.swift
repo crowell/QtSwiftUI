@@ -29,6 +29,15 @@ public struct StrokeStyle: Equatable, Sendable {
 }
 
 extension Path {
+    public func trimmedPath(from start: CGFloat, to end: CGFloat) -> Path {
+        let from = start.isNaN ? 0 : start
+        let to = end.isNaN ? 1 : end
+        if from >= to || isEmpty { return Path() }
+        if from <= 0 && to >= 1 { return self }
+        var result = Path()
+        result.commands = [.trimmed(self, from, to)]
+        return result
+    }
     public func strokedPath(_ style: StrokeStyle) -> Path {
         var result = Path()
         if !isEmpty && style.lineWidth > 0 { result.commands = [.stroked(self, style)] }
@@ -42,7 +51,17 @@ private struct StrokedShape<Base: Shape>: Shape {
     nonisolated func path(in rect: CGRect) -> Path { base.path(in: rect).strokedPath(style) }
 }
 
+private struct TrimmedShape<Base: Shape>: Shape {
+    let base: Base
+    let from: CGFloat
+    let to: CGFloat
+    nonisolated func path(in rect: CGRect) -> Path { base.path(in: rect).trimmedPath(from: from, to: to) }
+}
+
 extension Shape {
+    public nonisolated func trim(from startFraction: CGFloat = 0, to endFraction: CGFloat = 1) -> some Shape {
+        TrimmedShape(base: self, from: startFraction, to: endFraction)
+    }
     public nonisolated func stroke(style: StrokeStyle) -> some Shape { StrokedShape(base: self, style: style) }
     public nonisolated func stroke(lineWidth: CGFloat = 1) -> some Shape { stroke(style: StrokeStyle(lineWidth: lineWidth)) }
     public func stroke<S: ShapeStyle>(_ content: S, style: StrokeStyle, antialiased: Bool = true) -> some View {

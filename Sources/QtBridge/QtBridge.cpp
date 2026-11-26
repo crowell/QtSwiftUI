@@ -1,5 +1,6 @@
 #include "QtBridge.h"
 #include "CanvasBlur.hpp"
+#include "PathTrim.hpp"
 #include <QApplication>
 #include <QAccessibleWidget>
 #include <QCheckBox>
@@ -408,10 +409,12 @@ void qs_surface(QSWidget w, const char *color, double radius) {
 QSPath *qs_path_new() { return new QSPath(); }
 void qs_path_delete(QSPath *path) { delete path; }
 QSRect qs_path_bounds(const QSPath *path) {
-    auto rect = path->boundingRect();
+    if (path->elementCount() == 0) return {0, 0, -1, -1};
+    const auto rect = path->boundingRect();
     return {rect.x(), rect.y(), rect.width(), rect.height()};
 }
 QSSize qs_path_position(const QSPath *path) {
+    if (path->elementCount() == 0) return {NAN, NAN};
     auto point = path->currentPosition();
     return {point.x(), point.y()};
 }
@@ -444,6 +447,9 @@ void qs_path_stroke(QSPath *target, const QSPath *source, double width, int cap,
         }
     }
     target->addPath(stroke.createStroke(*source));
+}
+void qs_path_trim(QSPath *target, const QSPath *source, double from, double to) {
+    target->addPath(trimmed(*source, from, to));
 }
 void qs_path_clip(QSPath *target, const QSPath *source, int evenOdd, int inverse) {
     QPainterPath shape = *source;

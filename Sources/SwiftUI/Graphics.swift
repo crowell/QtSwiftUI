@@ -96,6 +96,7 @@ public struct Path: Equatable, Sendable {
         case close, rect(CGRect), ellipse(CGRect), rounded(CGRect, CGSize)
         indirect case transformed(Path, CGAffineTransform)
         indirect case stroked(Path, StrokeStyle)
+        indirect case trimmed(Path, CGFloat, CGFloat)
     }
     var commands: [Command] = []
     public init() {}
@@ -119,12 +120,12 @@ public struct Path: Equatable, Sendable {
     public var boundingRect: CGRect {
         guard !isEmpty else { return .null }
         let r = withNativePath(qs_path_bounds)
-        return CGRect(x: r.x, y: r.y, width: r.width, height: r.height)
+        return r.width < 0 ? .null : CGRect(x: r.x, y: r.y, width: r.width, height: r.height)
     }
     public var currentPoint: CGPoint? {
         guard !isEmpty else { return nil }
         let p = withNativePath(qs_path_position)
-        return CGPoint(x: p.width, y: p.height)
+        return p.width.isNaN ? nil : CGPoint(x: p.width, y: p.height)
     }
     public func contains(_ p: CGPoint, eoFill: Bool = false) -> Bool {
         withNativePath { qs_path_contains($0, p.x, p.y, eoFill ? 1 : 0) != 0 }
@@ -152,6 +153,8 @@ public struct Path: Equatable, Sendable {
             case .line(let p): qs_path_step(w, 1, p.x, p.y, 0, 0, 0, 0)
             case .quad(let a, let p): qs_path_step(w, 2, a.x, a.y, p.x, p.y, 0, 0)
             case .cubic(let a, let b, let p): qs_path_step(w, 3, a.x, a.y, b.x, b.y, p.x, p.y)
+            case .trimmed(let path, let from, let to):
+                path.withNativePath { qs_path_trim(w, $0, from, to) }
             case .stroked(let path, let style):
                 path.withNativePath { style.appendOutline(of: $0, to: w) }
             case .transformed(let path, let transform):
