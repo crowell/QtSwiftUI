@@ -33,6 +33,20 @@ final class GestureTests: XCTestCase {
     }
 
     #if os(Linux)
+    @MainActor func testSimultaneousTapsAndNativeButtonShareClicks() async {
+        var clicks = 0, taps = 0, doubleTaps = 0
+        let view = Button("Play") { clicks += 1 }
+            .simultaneousGesture(TapGesture().onEnded { taps += 1 })
+            .simultaneousGesture(DoubleTap().onEnded { doubleTaps += 1 })
+        let host = Host(title: "Simultaneous taps") { view.resolve($0) }
+        host.open(width: 120, height: 50)
+        defer { host.close() }
+        for _ in 0..<2 { XCTAssertEqual(qs_click_named_button(host.window, "Play"), 1) }
+        XCTAssertEqual(clicks, 2)
+        XCTAssertEqual(taps, 2)
+        XCTAssertEqual(doubleTaps, 1)
+    }
+
     @MainActor func testCombinedAccessibilityActions() async {
         var presses = 0
         let view = VStack {

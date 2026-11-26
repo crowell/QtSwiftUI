@@ -65,7 +65,7 @@ public:
     using QWidget::QWidget;
     QRect layoutRect;
     bool exposeChildren = true, combineChildren = false;
-    bool windowDrag = false, trackingDrag = false;
+    bool windowDrag = false, trackingDrag = false, simultaneous = false;
     QPointF dragOrigin;
     bool isImage = false;
     bool heading = false;
@@ -396,44 +396,17 @@ struct QSWindow final : QWidget {
                 return true;
             }
         }
-        if (group && group->windowDrag && (input->type() == QEvent::MouseButtonPress ||
-            input->type() == QEvent::MouseButtonRelease)) {
+        if (input->type() == QEvent::MouseButtonPress || input->type() == QEvent::MouseButtonDblClick ||
+            input->type() == QEvent::MouseButtonRelease || input->type() == QEvent::MouseMove) {
+            auto *target = qobject_cast<QWidget *>(source);
             auto *mouse = static_cast<QMouseEvent *>(input);
-            if (mouse->button() == Qt::LeftButton) {
-                if (input->type() == QEvent::MouseButtonPress) {
-                    group->dragOrigin = mouse->globalPosition();
-                    group->trackingDrag = windowHandle() && windowHandle()->startSystemMove();
-                } else {
-                    const bool dragged = (mouse->globalPosition() - group->dragOrigin).manhattanLength() >= QApplication::startDragDistance();
-                    if (group->trackingDrag && dragged)
-                        event(context, group->property("swiftId").toInt(), QSActivate, "");
-                    group->trackingDrag = false;
-                }
-                input->accept();
-                return true;
+            // A native control can consume the event before it propagates to its parent.
+            for (QWidget *ancestor = target; ancestor && ancestor != this; ancestor = ancestor->parentWidget()) {
+                auto *observer = dynamic_cast<GroupWidget *>(ancestor);
+                if (observer && observer->simultaneous && observer->isEnabled())
+                    recognize(observer, mouse);
             }
-        }
-        if (group && group->tapCount > 0 && (input->type() == QEvent::MouseButtonPress ||
-            input->type() == QEvent::MouseButtonDblClick || input->type() == QEvent::MouseButtonRelease ||
-            input->type() == QEvent::MouseMove)) {
-            const auto *mouse = static_cast<QMouseEvent *>(input);
-            const auto point = mouse->position();
-            const bool moved = (point - group->pressPosition).manhattanLength() > QApplication::startDragDistance();
-            if (input->type() == QEvent::MouseMove && moved) group->trackingTap = false;
-            if (mouse->button() == Qt::LeftButton) {
-                if (input->type() != QEvent::MouseButtonRelease) {
-                    if (!group->lastTap.isValid() || group->lastTap.elapsed() > QApplication::doubleClickInterval() || moved)
-                        group->consecutiveTaps = 0;
-                    group->trackingTap = true;
-                    group->pressPosition = point;
-                } else if (group->trackingTap && !moved && group->rect().contains(point.toPoint())) {
-                    group->trackingTap = false;
-                    group->lastTap.start();
-                    if (++group->consecutiveTaps == group->tapCount) {
-                        group->consecutiveTaps = 0;
-                        event(context, source->property("swiftId").toInt(), QSActivate, "");
-                    }
-                }
+            if (group && !group->simultaneous && recognize(group, mouse)) {
                 input->accept();
                 return true;
             }
@@ -443,6 +416,44 @@ struct QSWindow final : QWidget {
                   input->type() == QEvent::FocusIn ? "1" : "0");
         }
         return false;
+    }
+    bool recognize(GroupWidget *group, QMouseEvent *mouse) {
+        const auto type = mouse->type();
+        const auto point = group->mapFromGlobal(mouse->globalPosition());
+        const bool press = type == QEvent::MouseButtonPress || type == QEvent::MouseButtonDblClick;
+        if (group->windowDrag && mouse->button() == Qt::LeftButton) {
+            if (press && !group->trackingDrag) {
+                group->dragOrigin = mouse->globalPosition();
+                group->trackingDrag = windowHandle() && windowHandle()->startSystemMove();
+            } else if (type == QEvent::MouseButtonRelease) {
+                const bool dragged = (mouse->globalPosition() - group->dragOrigin).manhattanLength() >= QApplication::startDragDistance();
+                if (group->trackingDrag && dragged) event(context, group->property("swiftId").toInt(), QSActivate, "");
+                group->trackingDrag = false;
+            }
+            return true;
+        }
+        if (group->tapCount <= 0) return false;
+        const bool moved = (point - group->pressPosition).manhattanLength() > QApplication::startDragDistance();
+        if (type == QEvent::MouseMove && moved) group->trackingTap = false;
+        if (mouse->button() != Qt::LeftButton) return false;
+        const bool inside = group->layoutRect.contains(point.toPoint());
+        if (press) {
+            if (!group->lastTap.isValid() || group->lastTap.elapsed() > QApplication::doubleClickInterval() || moved)
+                group->consecutiveTaps = 0;
+            group->trackingTap = inside;
+            group->pressPosition = point;
+        } else if (type == QEvent::MouseButtonRelease) {
+            const bool tapped = group->trackingTap && !moved && inside;
+            group->trackingTap = false;
+            if (tapped) {
+                group->lastTap.start();
+                if (++group->consecutiveTaps == group->tapCount) {
+                    group->consecutiveTaps = 0;
+                    event(context, group->property("swiftId").toInt(), QSActivate, "");
+                }
+            }
+        }
+        return true;
     }
     void observeFocus(QWidget *item, int id) {
         item->setProperty("swiftId", id);
@@ -507,22 +518,36 @@ void qs_animation_frame(QSWindow *window) {
     });
 }
 void qs_flush() { application().processEvents(); }
+int qs_dark_ink(QSWindow *window, int x, int y, int width, int height) {
+    const auto image = window->grab(QRect(x, y, width, height)).toImage();
+    for (int row = 0; row < image.height(); ++row)
+        for (int col = 0; col < image.width(); ++col)
+            if (qBlue(image.pixel(col, row)) < 125) return 1;
+    return 0;
+}
+int qs_capture(QSWindow *window, const char *path) {
+    return window->grab().save(QString::fromUtf8(path), "PNG");
+}
 int qs_run(QSWindow *window, const char *screenshot, QSPump pump) {
     // Swift's main actor and Foundation timers share the GUI thread with Qt.
     QTimer swiftEvents;
     QObject::connect(&swiftEvents, &QTimer::timeout, window, [pump] { pump(); });
     swiftEvents.start(16);
     if (screenshot) {
-        auto capture = [window, path = QString::fromUtf8(screenshot)] {
-            application().exit(window->grab().save(path, "PNG") ? 0 : 1);
+        auto capture = [window, path = QByteArray(screenshot)] {
+            application().exit(qs_capture(window, path.constData()) ? 0 : 1);
         };
         QTimer::singleShot(qMax(0, qEnvironmentVariableIntValue("QTSWIFTUI_CAPTURE_DELAY_MS")), window, capture);
     }
     return application().exec();
 }
 double qs_window_scale(QSWindow *window) { return window->devicePixelRatioF(); }
-void qs_group_tap(QSWidget w, int count) { static_cast<GroupWidget *>(w)->tapCount = count; }
-void qs_group_window_drag(QSWidget w, int enabled) { static_cast<GroupWidget *>(w)->windowDrag = enabled; }
+void qs_group_gesture(QSWidget w, int taps, int drag, int simultaneous) {
+    auto *group = static_cast<GroupWidget *>(w);
+    group->tapCount = taps;
+    group->windowDrag = drag;
+    group->simultaneous = simultaneous;
+}
 void qs_close(QSWindow *window) {
     delete window;
     if (--liveWindows == 0) {

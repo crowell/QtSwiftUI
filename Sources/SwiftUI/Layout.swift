@@ -57,6 +57,7 @@ public enum Axis: Int8, CaseIterable, Sendable {
     let sizing: (ProposedViewSize) -> CGSize
     let place: (CGRect, ProposedViewSize) -> Void
     var values: [ObjectIdentifier: Any] = [:]
+    var isSpacer = false
     var priority: Double = 0
     private var measured: [ProposedViewSize: CGSize] = [:]
     init(size: @escaping (ProposedViewSize) -> CGSize, place: @escaping (CGRect, ProposedViewSize) -> Void) {
@@ -65,6 +66,7 @@ public enum Axis: Int8, CaseIterable, Sendable {
     func wrapping(size: @escaping (ProposedViewSize) -> CGSize, place: @escaping (CGRect, ProposedViewSize) -> Void) -> Element {
         let wrapper = Element(size: size, place: place)
         wrapper.values = values
+        wrapper.isSpacer = isSpacer
         wrapper.priority = priority
         return wrapper
     }
@@ -111,18 +113,25 @@ extension View {
         let flexibility = children.enumerated().map { $0.element.measure(high)[keyPath: axis.main] - minimum[$0.offset] }
         let order = children.indices.sorted { a, b in
             if children[a].priority != children[b].priority { return children[a].priority > children[b].priority }
+            if children[a].isSpacer != children[b].isSpacer { return children[b].isSpacer }
             return flexibility[a] < flexibility[b]
         }
         var result = [(CGSize, ProposedViewSize)](repeating: (.zero, proposal), count: children.count)
         var spare = available - minimum.reduce(0, +) - gap
-        var remaining = Dictionary(grouping: children.indices, by: { children[$0].priority }).mapValues(\.count)
+        var remainingContent: [Double: Int] = [:], remainingSpacers: [Double: Int] = [:]
+        for child in children {
+            if child.isSpacer { remainingSpacers[child.priority, default: 0] += 1 }
+            else { remainingContent[child.priority, default: 0] += 1 }
+        }
         for i in order {
             let priority = children[i].priority
             var p = proposal
-            p[keyPath: axis.proposed] = max(0, minimum[i] + max(0, spare) / CGFloat(remaining[priority]!))
+            let count = children[i].isSpacer ? remainingSpacers[priority]! : remainingContent[priority]!
+            p[keyPath: axis.proposed] = max(0, minimum[i] + max(0, spare) / CGFloat(count))
             let size = children[i].measure(p)
             spare -= size[keyPath: axis.main] - minimum[i]
-            remaining[priority]! -= 1
+            if children[i].isSpacer { remainingSpacers[priority]! -= 1 }
+            else { remainingContent[priority]! -= 1 }
             result[i] = (size, p)
         }
         return result
@@ -247,10 +256,12 @@ public struct Spacer: Primitive {
     public init(minLength: CGFloat? = nil) { self.minLength = minLength }
     func elements(in context: Context) -> [Element] {
         let axis = context.environment.stackAxis
-        return [Element { p in
+        let spacer = Element { p in
             var size = CGSize.zero
             size[keyPath: axis.main] = max(minLength ?? 8, p[keyPath: axis.proposed] ?? 0)
             return size
-        } place: { _, _ in }]
+        } place: { _, _ in }
+        spacer.isSpacer = true
+        return [spacer]
     }
 }

@@ -31,9 +31,13 @@ fi
 
 diagnostics="$preview/diagnostics"
 sh /src/Scripts/prepare-diagnostics.sh "$checkout" "$diagnostics"
+if [ -n "${QTSWIFTUI_SCREENSHOT:-}" ]; then
+    export QTSWIFTUI_GALLERY_MENU_CAPTURE="$(dirname "$QTSWIFTUI_SCREENSHOT")/media-gallery-sort.png"
+fi
 swift test --package-path "$diagnostics"
 binary=$(swift build --package-path "$diagnostics" --show-bin-path)/CallDiagnostics
 if [ -n "${QTSWIFTUI_SCREENSHOT:-}" ]; then
+    QTSWIFTUI_SCREENSHOT="$(dirname "$QTSWIFTUI_SCREENSHOT")/media-gallery.png" "$binary" --gallery
     QTSWIFTUI_SCREENSHOT="$(dirname "$QTSWIFTUI_SCREENSHOT")/call-diagnostics.png" "$binary"
     QTSWIFTUI_SCREENSHOT="$(dirname "$QTSWIFTUI_SCREENSHOT")/confirm-leave-call.png" "$binary" --leave-call
     QTSWIFTUI_SCREENSHOT="$(dirname "$QTSWIFTUI_SCREENSHOT")/link-device.png" "$binary" --link-device

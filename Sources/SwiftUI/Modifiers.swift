@@ -14,9 +14,13 @@ public enum Edge: Int8, CaseIterable, Sendable {
         public static let horizontal: Self = [.leading, .trailing], vertical: Self = [.top, .bottom], all: Self = [.horizontal, .vertical]
     }
 }
-struct Transform<Content: View>: Primitive {
+struct Transform<Content: View>: Primitive, SubviewSource {
     let content: Content
-    let transform: (Content, Context) -> [Element]
+    var readingContext: (Context) -> Context = { $0 }
+    let transform: (any View, Context) -> [Element]
+    func subviews(in context: Context) -> [Subview] {
+        content.collectSubviews(in: readingContext(context)).map { $0.applying(transform) }
+    }
     func elements(in context: Context) -> [Element] { transform(content, context) }
 }
 @MainActor @preconcurrency public protocol ViewModifier {
@@ -33,7 +37,10 @@ public struct ModifiedContent<Content, Modifier> {
     public let modifier: Modifier
     public init(content: Content, modifier: Modifier) { self.content = content; self.modifier = modifier }
 }
-extension ModifiedContent: Primitive, View where Content: View, Modifier: ViewModifier {
+extension ModifiedContent: Primitive, View, SubviewSource where Content: View, Modifier: ViewModifier {
+    func subviews(in context: Context) -> [Subview] {
+        context.preparing(modifier).body(content: .init(view: AnyView(content))).collectSubviews(in: context)
+    }
     func elements(in context: Context) -> [Element] {
         context.preparing(modifier).body(content: .init(view: AnyView(content))).resolve(context)
     }
@@ -41,7 +48,7 @@ extension ModifiedContent: Primitive, View where Content: View, Modifier: ViewMo
 extension View {
     public func modifier<M: ViewModifier>(_ modifier: M) -> ModifiedContent<Self, M> { .init(content: self, modifier: modifier) }
     public func environment<V>(_ keyPath: WritableKeyPath<EnvironmentValues, V>, _ value: V) -> some View {
-        Transform(content: self) { $0.resolve($1.with(keyPath, value)) }
+        Transform(content: self, readingContext: { $0.with(keyPath, value) }) { $0.resolve($1.with(keyPath, value)) }
     }
     public func id<ID: Hashable>(_ id: ID) -> some View { Transform(content: self) { $0.resolve($1.descending(.id(AnyHashable(id)))) } }
     public func font(_ font: Font?) -> some View { environment(\.font, font) }

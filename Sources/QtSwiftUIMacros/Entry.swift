@@ -30,17 +30,19 @@ public struct EntryMacro: AccessorMacro, PeerMacro {
                                  in context: some MacroExpansionContext) throws -> [DeclSyntax] {
         let entry = try EntryDeclaration(declaration)
         let key = "__Key_" + entry.name
+        let container = context.lexicalContext.compactMap { $0.as(ExtensionDeclSyntax.self)?.extendedType.trimmedDescription }.first
+        let protocolName = container?.split(separator: ".").last == "ContainerValues" ? "ContainerValueKey" : "EnvironmentKey"
         if let type = entry.type {
             let initial = entry.initial ?? "nil"
             return ["""
-                private enum \(raw: key): SwiftUI.EnvironmentKey {
+                private enum \(raw: key): SwiftUI.\(raw: protocolName) {
                     static var defaultValue: \(type) { \(initial) }
                 }
                 """]
         }
         guard let initial = entry.initial else { throw MacroExpansionErrorMessage("@Entry requires a type or initial value") }
         return ["""
-            private enum \(raw: key): SwiftUI.EnvironmentKey {
+            private enum \(raw: key): SwiftUI.\(raw: protocolName) {
                 static let defaultValue = \(initial)
             }
             """]

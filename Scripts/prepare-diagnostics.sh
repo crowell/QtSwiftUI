@@ -18,6 +18,17 @@ target_dir="$target/Sources/CallDiagnostics"
 cp "$source_dir/Axo/Internal/AxoBaseSegmentedControl.swift" "$source_dir/Axo/AxoSegmentedControl.swift" \
    "$source_dir/Axo/AxoBadge.swift" "$source_dir/Theme/CSSFlex.swift" \
    "$source_dir/Components/Conversation/MediaGallery/MediaGalleryEmptyState.swift" "$target_dir/"
+cp "$source_dir/Axo/AxoBaseMenu.swift" "$source_dir/Axo/AxoDropdownMenu.swift" "$source_dir/Axo/AxoIconButton.swift" "$target_dir/"
+# The empty-gallery fixture uses the production panel and all of its header controls.
+awk 'BEGIN { print "import SwiftUI\nimport SignalI18n" }
+     /^public enum MediaSortOrder:/ { print; count++ }
+     /^public struct (ConversationPanel<|MediaGalleryPanelHeader:)/ { inside=1; count++ }
+     inside { print } /^}$/ { inside=0 } END { if (count!=3) exit 1 }' \
+    "$source_dir/Components/Conversation/MediaGallery/MediaGallery.swift" > "$target_dir/GalleryPanel.swift"
+awk 'BEGIN { print "extension AxoSymbol {" }
+     /^    public static func (icon|inlineGlyph)\(/ { inside=1; count++ }
+     inside { print } /^    }$/ { inside=0 } END { print "}"; if (count!=2) exit 1 }' \
+    "$source_dir/Axo/AxoSymbol.swift" > "$target_dir/SymbolLookup.swift"
 cp "$source_dir/Axo/Chat/AxoChatDateSection.swift" "$target_dir/"
 cp "$source_dir/Calling/CallingAudioIndicator.swift" "$source_dir/Theme/SignalIcon.swift" \
    "$source_dir/Axo/SVGPathData.swift" "$source_dir/Tokens/SignalIcons.generated.swift" \

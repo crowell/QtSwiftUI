@@ -82,13 +82,21 @@ nonisolated public struct _EndedGesture<Content: Gesture>: Gesture, NativeGestur
 
 extension View {
     public func gesture<T: Gesture>(_ gesture: T, including mask: GestureMask = .all) -> some View {
+        recognizing(gesture, mask: mask, simultaneous: false)
+    }
+    public func simultaneousGesture<T: Gesture>(_ gesture: T, including mask: GestureMask = .all) -> some View {
+        recognizing(gesture, mask: mask, simultaneous: true)
+    }
+    public func simultaneousGesture<T: Gesture>(_ gesture: T, isEnabled: Bool) -> some View {
+        simultaneousGesture(gesture, including: isEnabled ? .all : .subviews)
+    }
+    private func recognizing<T: Gesture>(_ gesture: T, mask: GestureMask, simultaneous: Bool) -> some View {
         Transform(content: self) { view, ctx in
             let inner = ctx.with(\.gesturesEnabled, ctx.environment.gesturesEnabled && mask.contains(.subviews))
             let enabled = ctx.environment.gesturesEnabled && mask.contains(.gesture)
             let recognizer = enabled ? gesture.resolve { _ in } : nil
             let group = ctx.widget(QSGroup, action: { _ in recognizer?.ended() })
-            qs_group_tap(group, Int32(clamping: recognizer?.taps ?? 0))
-            qs_group_window_drag(group, recognizer?.movesWindow == true ? 1 : 0)
+            qs_group_gesture(group, Int32(clamping: recognizer?.taps ?? 0), recognizer?.movesWindow == true ? 1 : 0, simultaneous ? 1 : 0)
             return inner.children(of: view, inside: group)
         }
     }

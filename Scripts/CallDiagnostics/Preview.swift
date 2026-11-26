@@ -8,9 +8,11 @@ struct DiagnosticPreview: App {
         let linking = linkError || CommandLine.arguments.contains("--link-device")
         let leaveCall = CommandLine.arguments.contains("--leave-call")
         let clearing = CommandLine.arguments.contains("--clearing-data")
+        let gallery = CommandLine.arguments.contains("--gallery")
         let arabic = CommandLine.arguments.contains("--arabic")
-        WindowGroup(clearing ? "Clearing data" : linking ? "Link device" : leaveCall ? "Leave current call" : "Call diagnostics") {
-            if clearing {
+        WindowGroup(gallery ? "All media" : clearing ? "Clearing data" : linking ? "Link device" : leaveCall ? "Leave current call" : "Call diagnostics") {
+            if gallery { GalleryPreview() }
+            else if clearing {
                 ClearingData(step: .deletingData)
                     .background(AxoColor.surfacePrimary)
                     .environment(\.layoutDirection, arabic ? .rightToLeft : .leftToRight)
@@ -21,6 +23,28 @@ struct DiagnosticPreview: App {
             else { DiagnosticContent() }
         }
         .defaultSize(width: linking || clearing ? 680 : 520, height: linking || clearing ? 420 : 440)
+    }
+}
+
+struct GalleryPreview: View {
+    @State private var tab: MediaGalleryTab = .media
+    @State private var order: MediaSortOrder = .date
+    @Environment(\.dismiss) var dismiss
+    var body: some View { GalleryPanel(tab: $tab, order: $order, onBack: { dismiss() }) }
+}
+
+struct GalleryPanel: View {
+    @Binding var tab: MediaGalleryTab
+    @Binding var order: MediaSortOrder
+    var onBack: () -> Void
+
+    var body: some View {
+        ConversationPanel(onBack: onBack) {
+            MediaGalleryPanelHeader(tab: $tab, sortOrder: $order)
+        } content: {
+            MediaGalleryEmptyState(tab: tab)
+        }
+        .axoLayerHost()
     }
 }
 

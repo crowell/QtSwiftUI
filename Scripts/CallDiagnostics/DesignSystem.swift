@@ -92,8 +92,8 @@ struct CSSText: View {
     init(_ value: String, style: CSSTextStyle, wrap: PreviewWrap = .wrap, alignment: TextAlignment = .leading, color: AxoColor? = nil) {
         self.init(value, type: style.type, wrap: wrap, alignment: alignment, color: color)
     }
-    init(runs: [CSSTextRun], style: CSSTextStyle, wrap: PreviewWrap) {
-        self.init(runs.map(\.text).joined(), type: style.type, wrap: wrap)
+    init(runs: [CSSTextRun], style: CSSTextStyle, wrap: PreviewWrap, color: AxoColor? = nil) {
+        self.init(runs.map(\.text).joined(), type: style.type, wrap: wrap, color: color)
     }
     init(runs: [CSSTextRun], style: CSSTextStyle, onTap: ((String) -> Void)?) {
         // This preview only supplies plain localized strings to the production dialog.
@@ -119,7 +119,26 @@ struct CSSText: View {
 }
 public enum AxoSymbol {
     public typealias Name = String
+    struct Icon: View {
+        let symbol: Name
+        let size: CGFloat
+        let label: String?
+        @Environment(\.layoutDirection) var direction
+        init(_ symbol: Name, size: CGFloat, label: String?) {
+            self.symbol = symbol
+            self.size = size
+            self.label = label
+        }
+        var body: some View {
+            let _ = AxoFonts.register()
+            Text(verbatim: String(AxoSymbol.icon(symbol, rtl: direction == .rightToLeft)))
+                .font(.custom("Signal Symbols", fixedSize: size))
+                .frame(width: size, height: size)
+                .accessibilityLabel(label ?? "").accessibilityHidden(label == nil)
+        }
+    }
     struct InlineGlyph: View {
+        @Environment(\.layoutDirection) var direction
         let symbol: String
         let size: CGFloat
         let weight: Int
@@ -130,7 +149,7 @@ public enum AxoSymbol {
         }
         var body: some View {
             let _ = AxoFonts.register()
-            Text(verbatim: AxoSymbolDefs.base[symbol].map(String.init) ?? "")
+            Text(verbatim: String(AxoSymbol.inlineGlyph(symbol, rtl: direction == .rightToLeft)))
                 .font(.custom("Signal Symbols", fixedSize: size).weight(weight >= 600 ? .semibold : .regular))
                 .frame(height: size).accessibilityHidden(true)
         }
