@@ -249,7 +249,6 @@ protocol MountedProperty: DynamicProperty {
     private let link: Link
     public init(wrappedValue: Value) { link = Link(Cell(wrappedValue)) }
     public init(initialValue: Value) { self.init(wrappedValue: initialValue) }
-    public init() where Value: ExpressibleByNilLiteral { self.init(wrappedValue: nil) }
     public var wrappedValue: Value {
         get { link.cell.value }
         nonmutating set { link.cell.value = newValue }
@@ -262,4 +261,8 @@ protocol MountedProperty: DynamicProperty {
         else { host.storage[context.path] = link.cell }
         link.cell.attach(to: host)
     }
+}
+
+extension State where Value: ExpressibleByNilLiteral {
+    public init() { self.init(wrappedValue: nil) }
 }

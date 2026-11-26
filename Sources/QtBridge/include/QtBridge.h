@@ -60,10 +60,12 @@ void qs_canvas_color(QSWidget, const char *color);
 void qs_canvas_gradient(QSWidget, double x1, double y1, double x2, double y2);
 void qs_canvas_stop(QSWidget, double location, const char *color);
 void qs_hit_testing(QSWidget, int enabled);
-void qs_group(QSWidget, int exposeChildren, int isImage, int updatesFrequently, const char *value);
+void qs_group(QSWidget, int behavior, int isImage, int updatesFrequently, const char *value);
 void qs_group_hidden(QSWidget, int hidden);
 void qs_group_hover(QSWidget, int enabled);
 void qs_group_tap(QSWidget, int count);
+void qs_group_window_drag(QSWidget, int enabled);
+void qs_group_spin(QSWidget, int milliseconds);
 void qs_group_opacity(QSWidget, double value);
 void qs_group_rotation(QSWidget, double degrees, double anchorX, double anchorY);
 void qs_group_shape(QSWidget, const QSPath *, int evenOdd);
@@ -85,6 +87,7 @@ void qs_place(QSWidget, double x, double y, double width, double height);
 
 // Drive the native controls in the offscreen integration tests.
 void qs_flush(void);
+int qs_accessible_element(QSWindow *, const char *name, int childCount, const char *action);
 int qs_click(QSWindow *, const char *identifier);
 int qs_enter(QSWindow *, const char *identifier, const char *value);
 int qs_read_text(QSWindow *, const char *identifier, const char *expected);

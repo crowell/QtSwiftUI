@@ -2,6 +2,10 @@ import Foundation
 import SwiftUI
 #if os(Linux)
 import QtBridge
+@_spi(Qt) import SwiftUI
+extension View {
+    func caSpin(period: Double) -> some View { qtContinuousRotation(period: period) }
+}
 #else
 import CoreText
 #endif
@@ -24,6 +28,9 @@ enum AxoFonts {
     }()
     static func register() { _ = registered }
     #endif
+    static func interName(weight: Int) -> String {
+        weight >= 600 ? "Inter-SemiBold" : weight >= 500 ? "Inter-Medium" : "Inter-Regular"
+    }
     static func inter(size: CGFloat, weight: Int) -> Font {
         let weight: Font.Weight = weight >= 600 ? .semibold : weight >= 500 ? .medium : .regular
         return Font.custom("Inter", fixedSize: size).weight(weight)
@@ -38,11 +45,29 @@ public struct CSSTextRun {
     let text: String
     public init(_ text: String) { self.text = text }
 }
-struct CSSTextStyle {
-    let type: AxoType
-    init(_ type: AxoType) { self.type = type }
+public struct CSSTextStyle {
+    var fontName: String
+    var size: CGFloat
+    var lineHeight: CGFloat
+    var letterSpacing: CGFloat
+
+    init(_ type: AxoType) {
+        self.init(fontName: AxoFonts.interName(weight: type.weight), size: type.size,
+                  lineHeight: type.lineHeight, letterSpacing: type.tracking * type.size)
+    }
+    init(fontName: String, size: CGFloat, lineHeight: CGFloat, letterSpacing: CGFloat) {
+        self.fontName = fontName
+        self.size = size
+        self.lineHeight = lineHeight
+        self.letterSpacing = letterSpacing
+    }
+    var type: AxoType {
+        let weight = fontName == "Inter-SemiBold" ? 600 : fontName == "Inter-Medium" ? 500 : 400
+        return AxoType(size: size, lineHeight: lineHeight, weight: weight, tracking: size > 0 ? letterSpacing / size : 0)
+    }
 }
 extension EnvironmentValues {
+    @Entry var titleBarDragAreaHeight: CGFloat = 0
     @Entry var cssTextColor: AxoColor = .labelPrimary
     @Entry var cssTextWrapWidth: CGFloat? = nil
     @Entry var axoInheritedTextSize: (size: CGFloat, lineHeight: CGFloat) = (14, 20)
@@ -63,6 +88,9 @@ struct CSSText: View {
         self.wrap = wrap
         self.alignment = alignment
         self.color = color
+    }
+    init(_ value: String, style: CSSTextStyle, alignment: TextAlignment, color: AxoColor? = nil) {
+        self.init(value, type: style.type, alignment: alignment, color: color)
     }
     init(runs: [CSSTextRun], style: CSSTextStyle, wrap: PreviewWrap) {
         self.init(runs.map(\.text).joined(), type: style.type, wrap: wrap)

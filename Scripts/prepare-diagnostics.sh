@@ -22,6 +22,18 @@ cp "$source_dir/Calling/CallingAudioIndicator.swift" "$source_dir/Theme/SignalIc
 cp "$source_dir/Calling/ConfirmLeaveCallModal.swift" "$source_dir/Axo/AxoAlertDialog.swift" \
    "$source_dir/Axo/AxoConfirmDialog.swift" "$source_dir/Theme/CSSShapes.swift" \
    "$source_dir/Axo/AxoPopper.swift" "$target_dir/"
+cp "$source_dir/Axo/AxoBrand.swift" "$source_dir/Axo/AxoDragRegion.swift" \
+   "$source_dir/Components/Button.swift" "$source_dir/Components/Spinner.swift" \
+   "$source_dir/Components/LegacyType.swift" "$source_dir/Components/LegacyIcon.swift" "$target_dir/"
+awk 'BEGIN { print "import SwiftUI" } /^public struct TitlebarDragArea:/{ found=1 }
+     found { print } END { if (!found) exit 1 }' "$source_dir/Components/App.swift" > "$target_dir/TitlebarDragArea.swift"
+# Dispatch the two AppKit URL calls through the desktop environment on Linux.
+awk '/^import AppKit/ { print "#if canImport(AppKit)"; print; print "#endif"; next }
+     /^public struct InstallScreenErrorStep:/ { print; print "#if os(Linux)\n    @Environment(\\.openURL) var openURL\n#endif"; next }
+     /NSWorkspace.shared.open/ { print "#if os(Linux)"; line=$0; gsub(/NSWorkspace.shared.open/, "openURL", line)
+         print line; print "#else"; print; print "#endif"; next }
+     { print }' "$source_dir/Components/InstallScreen/InstallScreen.swift" > "$target_dir/InstallScreen.swift"
+{ echo '#if canImport(AppKit)'; cat "$source_dir/Theme/CASpin.swift"; echo '#endif'; } > "$target_dir/CASpin.swift"
 # CallingAudioIndicator shares this color initializer with the call controls.
 awk '/^extension Color \{/ { print "import SwiftUI"; inside = 1 }
      inside { print } inside && /^}$/ { complete = 1; exit } END { if (!complete) exit 1 }' \

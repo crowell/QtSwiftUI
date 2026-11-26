@@ -28,11 +28,7 @@ extension View {
         }
     }
     public func onTapGesture(count: Int = 1, perform action: @escaping () -> Void) -> some View {
-        Transform(content: self) { view, ctx in
-            let group = ctx.widget(QSGroup, action: { _ in action() })
-            qs_group_tap(group, Int32(clamping: count))
-            return ctx.children(of: view, inside: group)
-        }
+        gesture(TapGesture(count: count).onEnded(action))
     }
     public func onHover(perform action: @escaping (Bool) -> Void) -> some View {
         Transform(content: self) { view, ctx in

@@ -7,6 +7,9 @@
 #include <QDir>
 #include <QDesktopServices>
 #include <QUrl>
+#include <QWindow>
+#include <QVariantAnimation>
+#include <algorithm>
 #include <QLabel>
 #include <QFontInfo>
 #include <QFontDatabase>
@@ -60,7 +63,9 @@ class GroupWidget final : public QWidget {
 public:
     using QWidget::QWidget;
     QRect layoutRect;
-    bool exposeChildren = true;
+    bool exposeChildren = true, combineChildren = false;
+    bool windowDrag = false, trackingDrag = false;
+    QPointF dragOrigin;
     bool isImage = false;
     bool heading = false;
     bool modal = false;
@@ -115,12 +120,29 @@ public:
         return group->isImage ? QAccessible::Graphic : QAccessible::Grouping;
     }
     QString text(QAccessible::Text kind) const override {
-        if (kind == QAccessible::Value) return group->accessibleValue;
+        if (kind == QAccessible::Value && !group->accessibleValue.isEmpty()) return group->accessibleValue;
         auto value = QAccessibleWidget::text(kind);
         if (kind == QAccessible::Name && value.isEmpty() && group->heading) {
             if (auto *label = group->findChild<QLabel *>()) return label->text();
         }
+        if (group->combineChildren && value.isEmpty() && (kind == QAccessible::Name || kind == QAccessible::Value)) {
+            QStringList parts;
+            for (int i = 0; i < QAccessibleWidget::childCount(); ++i)
+                collectText(QAccessibleWidget::child(i), kind, parts);
+            return parts.join(QStringLiteral(", "));
+        }
         return value;
+    }
+    QStringList actionNames() const override {
+        auto names = QAccessibleWidget::actionNames();
+        for (const auto &entry : combinedActions()) names.append(entry.first);
+        return names;
+    }
+    void doAction(const QString &action) override {
+        for (const auto &entry : combinedActions()) {
+            if (entry.first == action) { entry.second->click(); return; }
+        }
+        QAccessibleWidget::doAction(action);
     }
     QAccessible::State state() const override {
         auto result = QAccessibleWidget::state();
@@ -132,6 +154,30 @@ public:
     int childCount() const override { return group->exposeChildren && !group->accessibilityHidden ? QAccessibleWidget::childCount() : 0; }
     QAccessibleInterface *child(int index) const override { return group->exposeChildren && !group->accessibilityHidden ? QAccessibleWidget::child(index) : nullptr; }
 private:
+    static void collectText(QAccessibleInterface *child, QAccessible::Text kind, QStringList &parts) {
+        if (!child || child->state().invisible) return;
+        const auto text = child->text(kind);
+        if (!text.isEmpty()) parts.append(text);
+        else for (int i = 0; i < child->childCount(); ++i) collectText(child->child(i), kind, parts);
+    }
+    using Actions = QList<QPair<QString, QAbstractButton *>>;
+    static void collectActions(QAccessibleInterface *child, Actions &actions) {
+        if (!child || child->state().invisible || child->state().disabled) return;
+        if (auto *button = qobject_cast<QAbstractButton *>(child->object())) {
+            actions.append({child->text(QAccessible::Name), button});
+            return;
+        }
+        for (int i = 0; i < child->childCount(); ++i) collectActions(child->child(i), actions);
+    }
+    Actions combinedActions() const {
+        Actions actions;
+        if (group->combineChildren) {
+            for (int i = 0; i < QAccessibleWidget::childCount(); ++i)
+                collectActions(QAccessibleWidget::child(i), actions);
+        }
+        if (actions.size() == 1) actions.first().first = QAccessibleActionInterface::pressAction();
+        return actions;
+    }
     GroupWidget *group;
 };
 class ShapeClipEffect final : public QGraphicsEffect {
@@ -339,6 +385,23 @@ struct QSWindow final : QWidget {
                 return true;
             }
         }
+        if (group && group->windowDrag && (input->type() == QEvent::MouseButtonPress ||
+            input->type() == QEvent::MouseButtonRelease)) {
+            auto *mouse = static_cast<QMouseEvent *>(input);
+            if (mouse->button() == Qt::LeftButton) {
+                if (input->type() == QEvent::MouseButtonPress) {
+                    group->dragOrigin = mouse->globalPosition();
+                    group->trackingDrag = windowHandle() && windowHandle()->startSystemMove();
+                } else {
+                    const bool dragged = (mouse->globalPosition() - group->dragOrigin).manhattanLength() >= QApplication::startDragDistance();
+                    if (group->trackingDrag && dragged)
+                        event(context, group->property("swiftId").toInt(), QSActivate, "");
+                    group->trackingDrag = false;
+                }
+                input->accept();
+                return true;
+            }
+        }
         if (group && group->tapCount > 0 && (input->type() == QEvent::MouseButtonPress ||
             input->type() == QEvent::MouseButtonDblClick || input->type() == QEvent::MouseButtonRelease ||
             input->type() == QEvent::MouseMove)) {
@@ -443,6 +506,7 @@ int qs_run(QSWindow *window, const char *screenshot, QSPump pump) {
 }
 double qs_window_scale(QSWindow *window) { return window->devicePixelRatioF(); }
 void qs_group_tap(QSWidget w, int count) { static_cast<GroupWidget *>(w)->tapCount = count; }
+void qs_group_window_drag(QSWidget w, int enabled) { static_cast<GroupWidget *>(w)->windowDrag = enabled; }
 void qs_close(QSWindow *window) {
     delete window;
     if (--liveWindows == 0) {
@@ -726,9 +790,10 @@ void qs_path_step(QSPath *target, int op, double x, double y, double a, double b
     case 7: path.addRoundedRect(QRectF(x, y, a, b), c, d); break;
     }
 }
-void qs_group(QSWidget w, int exposeChildren, int isImage, int updatesFrequently, const char *value) {
+void qs_group(QSWidget w, int behavior, int isImage, int updatesFrequently, const char *value) {
     auto *group = static_cast<GroupWidget *>(w);
-    group->exposeChildren = exposeChildren;
+    group->exposeChildren = behavior == 1;
+    group->combineChildren = behavior == 2;
     group->isImage = isImage;
     group->updatesFrequently = updatesFrequently;
     group->accessibleValue = QString::fromUtf8(value);
@@ -771,6 +836,27 @@ void qs_group_rotation(QSWidget w, double degrees, double anchorX, double anchor
         item->setGraphicsEffect(effect);
     }
     effect->setRotation(degrees, QPointF(anchorX, anchorY));
+}
+void qs_group_spin(QSWidget w, int milliseconds) {
+    auto *item = widget(w);
+    if (milliseconds <= 0) { item->setGraphicsEffect(nullptr); return; }
+    auto *effect = dynamic_cast<RotationEffect *>(item->graphicsEffect());
+    if (!effect) {
+        effect = new RotationEffect(item);
+        item->setGraphicsEffect(effect);
+    }
+    auto *animation = effect->findChild<QVariantAnimation *>();
+    if (!animation) {
+        animation = new QVariantAnimation(effect);
+        animation->setStartValue(0.0);
+        animation->setEndValue(360.0);
+        animation->setLoopCount(-1);
+        QObject::connect(animation, &QVariantAnimation::valueChanged, effect, [effect](const QVariant &value) {
+            effect->setRotation(value.toDouble(), QPointF(0.5, 0.5));
+        });
+    }
+    animation->setDuration(milliseconds);
+    if (animation->state() != QAbstractAnimation::Running) animation->start();
 }
 void qs_group_opacity(QSWidget w, double value) {
     auto *item = widget(w);
@@ -858,11 +944,16 @@ void qs_place(QSWidget w, double x, double y, double width, double height) {
 
 void qs_group_finish_layout(QSWidget w) {
     auto *group = static_cast<GroupWidget *>(w);
+    // A frame around paint-only descendants must leave the controls underneath reachable.
+    const auto children = group->findChildren<QWidget *>(QString(), Qt::FindDirectChildrenOnly);
+    if (!group->tapCount && !group->windowDrag && !group->property("qsHover").toBool() &&
+        std::all_of(children.begin(), children.end(), [](QWidget *child) {
+            return child->isHidden() || child->testAttribute(Qt::WA_TransparentForMouseEvents);
+        })) group->setAttribute(Qt::WA_TransparentForMouseEvents);
     // A clip or transform has its own drawing coordinate space. Structural
     // groups (focus, accessibility, hover) must allow child paint to overflow.
     if (group->graphicsEffect() || group->contentShape) return;
     const QRect viewport(group->mapFrom(group->window(), QPoint()), group->window()->size());
-    const auto children = group->findChildren<QWidget *>(QString(), Qt::FindDirectChildrenOnly);
     QRect paint = group->rect();
     for (auto *child : children) {
         if (!child->isHidden()) paint = paint.united(child->geometry().intersected(viewport));
@@ -874,6 +965,21 @@ void qs_group_finish_layout(QSWidget w) {
     for (auto *child : children) child->move(child->pos() + offset);
 }
 
+int qs_accessible_element(QSWindow *window, const char *name, int childCount, const char *action) {
+    for (auto *widget : window->findChildren<QWidget *>()) {
+        auto *group = dynamic_cast<GroupWidget *>(widget);
+        if (!group || !group->combineChildren) continue;
+        auto *object = QAccessible::queryAccessibleInterface(group);
+        if (!object || object->text(QAccessible::Name) != QString::fromUtf8(name) || object->childCount() != childCount) continue;
+        if (action) {
+            auto *actions = object->actionInterface();
+            if (!actions || !actions->actionNames().contains(QString::fromUtf8(action))) return 0;
+            actions->doAction(QString::fromUtf8(action));
+        }
+        return 1;
+    }
+    return 0;
+}
 int qs_click(QSWindow *window, const char *id) {
     auto *button = window->findChild<QAbstractButton *>(QString::fromUtf8(id));
     if (!button || !button->isEnabled()) return 0;

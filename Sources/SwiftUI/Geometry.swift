@@ -121,6 +121,16 @@ extension View {
             }]
         }
     }
+    /// Qt platform adapter for content which uses a repeating compositor animation on macOS.
+    @_spi(Qt) public func qtContinuousRotation(period: TimeInterval) -> some View {
+        Transform(content: self) { view, ctx in
+            let group = ctx.widget(QSGroup)
+            let milliseconds = period.isFinite && period > 0 ? max(1, min(period * 1000, Double(Int32.max))) : 0
+            qs_group_spin(group, Int32(milliseconds))
+            return ctx.children(of: view, inside: group)
+        }
+    }
+
     public func rotationEffect(_ angle: Angle, anchor: UnitPoint = .center) -> some View {
         Transform(content: self) { view, ctx in
             let group = ctx.widget(QSGroup)

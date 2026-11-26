@@ -8,8 +8,10 @@ public struct AccessibilityTraits: OptionSet, Sendable {
     public static let isHeader = Self(rawValue: 4), isModal = Self(rawValue: 8)
 }
 public struct AccessibilityChildBehavior: Equatable, Sendable {
-    var exposesChildren: Bool
-    public static let ignore = Self(exposesChildren: false), contain = Self(exposesChildren: true)
+    fileprivate let behavior: Int32
+    public static let ignore = Self(behavior: 0)
+    public static let contain = Self(behavior: 1)
+    public static let combine = Self(behavior: 2)
 }
 extension View {
     public func accessibilityValue(_ value: Text) -> some View { environment(\.accessibleValue, value.string) }
@@ -24,6 +26,7 @@ extension View {
             return [child.wrapping(size: child.measure) { bounds, proposal in
                 qs_place(widget, bounds.minX, bounds.minY, bounds.width, bounds.height)
                 child.place(CGRect(origin: .zero, size: bounds.size), proposal)
+                qs_group_finish_layout(widget)
             }]
         }
     }
@@ -40,7 +43,7 @@ extension View {
         Transform(content: self) { view, ctx in
             let widget = ctx.widget(QSGroup)
             let traits = ctx.environment.accessibilityTraits
-            qs_group(widget, children.exposesChildren ? 1 : 0, traits.contains(.isImage) ? 1 : 0,
+            qs_group(widget, children.behavior, traits.contains(.isImage) ? 1 : 0,
                      traits.contains(.updatesFrequently) ? 1 : 0, ctx.environment.accessibleValue)
             var inner = ctx.descending(.position(0))
             inner.parent = widget
@@ -52,6 +55,7 @@ extension View {
             return [child.wrapping(size: child.measure) { bounds, p in
                 qs_place(widget, bounds.minX, bounds.minY, bounds.width, bounds.height)
                 child.place(CGRect(origin: .zero, size: bounds.size), p)
+                qs_group_finish_layout(widget)
             }]
         }
     }

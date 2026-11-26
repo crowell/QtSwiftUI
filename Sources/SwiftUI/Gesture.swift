@@ -1,0 +1,98 @@
+import QtBridge
+
+@MainActor public protocol Gesture<Value> {
+    associatedtype Value = Body.Value
+    associatedtype Body: Gesture
+    var body: Body { get }
+}
+
+extension Never: Gesture {
+    public typealias Value = Never
+}
+
+public struct GestureMask: OptionSet, Sendable {
+    public let rawValue: UInt32
+    public init(rawValue: UInt32) { self.rawValue = rawValue }
+    public static let none: Self = []
+    public static let gesture = Self(rawValue: 1)
+    public static let subviews = Self(rawValue: 2)
+    public static let all: Self = [.gesture, .subviews]
+}
+
+private struct Recognizer {
+    var taps = 0
+    var movesWindow = false
+    var ended: () -> Void
+}
+
+@MainActor private protocol NativeGesture {
+    func recognizer(ended: @escaping (Any) -> Void) -> Recognizer
+}
+
+extension Gesture {
+    fileprivate func resolve(ended: @escaping (Any) -> Void) -> Recognizer {
+        if let primitive = self as? any NativeGesture { return primitive.recognizer(ended: ended) }
+        return body.resolve(ended: ended)
+    }
+    nonisolated public func onEnded(_ action: @escaping (Value) -> Void) -> _EndedGesture<Self> {
+        _EndedGesture(content: self, action: action)
+    }
+}
+
+extension Gesture where Body == Never {
+    public var body: Never { fatalError("Primitive gestures are recognized by Qt") }
+}
+
+nonisolated public struct TapGesture: Gesture, NativeGesture {
+    public typealias Value = Void
+    public typealias Body = Never
+    public var count: Int
+    public init(count: Int = 1) { self.count = count }
+    fileprivate func recognizer(ended: @escaping (Any) -> Void) -> Recognizer {
+        Recognizer(taps: count) { ended(()) }
+    }
+}
+
+private struct WindowMove: Gesture, NativeGesture {
+    typealias Body = Never
+    typealias Value = WindowDragGesture.Value
+    func recognizer(ended: @escaping (Any) -> Void) -> Recognizer {
+        Recognizer(movesWindow: true) { ended(Value()) }
+    }
+}
+
+nonisolated public struct WindowDragGesture: Gesture {
+    public struct Value: Equatable {}
+    public init() {}
+    public var body: some Gesture<Value> { WindowMove() }
+}
+
+nonisolated public struct _EndedGesture<Content: Gesture>: Gesture, NativeGesture {
+    public typealias Body = Never
+    public typealias Value = Content.Value
+    fileprivate let content: Content
+    fileprivate let action: (Value) -> Void
+    @MainActor fileprivate func recognizer(ended: @escaping (Any) -> Void) -> Recognizer {
+        content.resolve { value in
+            if let typed = value as? Value { action(typed) }
+            ended(value)
+        }
+    }
+}
+
+extension View {
+    public func gesture<T: Gesture>(_ gesture: T, including mask: GestureMask = .all) -> some View {
+        Transform(content: self) { view, ctx in
+            let inner = ctx.with(\.gesturesEnabled, ctx.environment.gesturesEnabled && mask.contains(.subviews))
+            let enabled = ctx.environment.gesturesEnabled && mask.contains(.gesture)
+            let recognizer = enabled ? gesture.resolve { _ in } : nil
+            let group = ctx.widget(QSGroup, action: { _ in recognizer?.ended() })
+            qs_group_tap(group, Int32(clamping: recognizer?.taps ?? 0))
+            qs_group_window_drag(group, recognizer?.movesWindow == true ? 1 : 0)
+            return inner.children(of: view, inside: group)
+        }
+    }
+    public func gesture<T: Gesture>(_ gesture: T, isEnabled: Bool) -> some View {
+        self.gesture(gesture, including: isEnabled ? .all : .subviews)
+    }
+}

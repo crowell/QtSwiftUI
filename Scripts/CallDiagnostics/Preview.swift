@@ -3,10 +3,29 @@ import SwiftUI
 @main
 struct DiagnosticPreview: App {
     var body: some Scene {
-        WindowGroup(CommandLine.arguments.contains("--leave-call") ? "Leave current call" : "Call diagnostics") {
-            if CommandLine.arguments.contains("--leave-call") { LeaveCallPreview() } else { DiagnosticContent() }
+        let linkError = CommandLine.arguments.contains("--link-error")
+        let linking = linkError || CommandLine.arguments.contains("--link-device")
+        let leaveCall = CommandLine.arguments.contains("--leave-call")
+        WindowGroup(linking ? "Link device" : leaveCall ? "Leave current call" : "Call diagnostics") {
+            if linking { DeviceLinkPreview(showError: linkError) }
+            else if leaveCall { LeaveCallPreview() }
+            else { DiagnosticContent() }
         }
-            .defaultSize(width: 520, height: 440)
+        .defaultSize(width: linking ? 680 : 520, height: linking ? 420 : 440)
+    }
+}
+
+struct DeviceLinkPreview: View {
+    @State private var showError: Bool
+
+    init(showError: Bool) { _showError = State(initialValue: showError) }
+
+    var body: some View {
+        if showError {
+            InstallScreenErrorStep(error: .connectionFailed, tryAgain: { showError = false })
+        } else {
+            InstallScreenLinkInProgressStep()
+        }
     }
 }
 
