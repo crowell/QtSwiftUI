@@ -3,6 +3,8 @@
 #include <QAccessibleWidget>
 #include <QCheckBox>
 #include <QDir>
+#include <QDesktopServices>
+#include <QUrl>
 #include <QLabel>
 #include <QFontInfo>
 #include <QGraphicsOpacityEffect>
@@ -57,6 +59,28 @@ public:
     QAccessibleInterface *child(int index) const override { return group->exposeChildren && !group->accessibilityHidden ? QAccessibleWidget::child(index) : nullptr; }
 private:
     GroupWidget *group;
+};
+class AccessibleLink final : public QAccessibleWidget {
+public:
+    explicit AccessibleLink(QPushButton *button) : QAccessibleWidget(button, QAccessible::Link), button(button) {}
+    QString text(QAccessible::Text kind) const override {
+        const QString value = QAccessibleWidget::text(kind);
+        if (kind != QAccessible::Name || !value.isEmpty()) return value;
+        QStringList parts;
+        for (const auto *label : button->findChildren<QLabel *>()) parts.append(label->text());
+        return parts.join(' ');
+    }
+    QStringList actionNames() const override { return {QAccessibleActionInterface::pressAction()}; }
+    void doAction(const QString &action) override {
+        if (action == QAccessibleActionInterface::pressAction() && button->isEnabled()) button->click();
+    }
+    QAccessible::State state() const override {
+        auto state = QAccessibleWidget::state();
+        state.linked = true;
+        return state;
+    }
+private:
+    QPushButton *button;
 };
 class Surface final : public QWidget {
 public:
@@ -181,6 +205,10 @@ void qs_open(QSWindow *window, int width, int height) {
     qs_flush();
 }
 void qs_request_close(QSWindow *window) { window->close(); }
+int qs_open_url(const char *url) {
+    const QUrl destination = QUrl::fromEncoded(QByteArray(url), QUrl::StrictMode);
+    return destination.isValid() && !destination.isRelative() && QDesktopServices::openUrl(destination);
+}
 void qs_update(QSWindow *window) { window->schedule(); }
 void qs_flush() { application().processEvents(); }
 int qs_run(QSWindow *window, const char *screenshot, QSPump pump) {
@@ -214,8 +242,12 @@ QSWidget qs_create(QSWindow *window, QSWidget parent, QSKind kind, int id) {
         label->setMargin(0);
         return label;
     }
-    case QSButton: {
+    case QSLink: case QSButton: {
         auto *button = new QPushButton(container);
+        if (kind == QSLink) {
+            button->setCursor(Qt::PointingHandCursor);
+            QAccessible::registerAccessibleInterface(new AccessibleLink(button));
+        }
         window->observeFocus(button, id);
         QObject::connect(button, &QPushButton::clicked, window, [=] { window->event(window->context, id, QSActivate, ""); });
         QObject::connect(button, &QPushButton::pressed, window, [=] { window->event(window->context, id, QSPressedChanged, "1"); });
@@ -588,6 +620,12 @@ int qs_hover(QSWindow *window, const char *id, int inside) {
         return 1;
     }
     return 0;
+}
+int qs_is_named_link(QSWindow *window, const char *id, const char *name) {
+    auto *item = window->findChild<QAbstractButton *>(QString::fromUtf8(id));
+    if (!item) return 0;
+    auto *accessible = QAccessible::queryAccessibleInterface(item);
+    return accessible && accessible->role() == QAccessible::Link && accessible->text(QAccessible::Name) == QString::fromUtf8(name);
 }
 int qs_has_help(QSWindow *window, const char *id, const char *expected) {
     auto *item = window->findChild<QWidget *>(QString::fromUtf8(id));

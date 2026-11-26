@@ -23,9 +23,14 @@ public struct EnvironmentValues {
     var foreground = Color.primary
 
     var buttonStyle: ((ButtonStyleConfiguration) -> AnyView)?
+    var isLink = false
     var focus: FocusLink?
     var submit: (() -> Void)?
     var closePresentation: @MainActor () -> Void = {}
+    var urlAction: OpenURLAction?
+    public var calendar: Calendar = .autoupdatingCurrent
+    public var locale: Locale = .autoupdatingCurrent
+    public var timeZone: TimeZone = .autoupdatingCurrent
     var accessibilityTraits: AccessibilityTraits = []
     var stackAxis = Axis.vertical
     var label = "", identifier = "", helpText = ""

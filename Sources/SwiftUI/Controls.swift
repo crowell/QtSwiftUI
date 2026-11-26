@@ -55,7 +55,7 @@ public struct Button<Label: View>: Primitive {
     }
     func elements(in context: Context) -> [Element] {
         let style = context.environment.buttonStyle
-        let widget = context.widget(QSButton, pressed: { [weak host = context.host] _ in
+        let widget = context.widget(context.environment.isLink ? QSLink : QSButton, pressed: { [weak host = context.host] _ in
             if style != nil { host?.update() }
         }, action: { _ in action() })
         qs_plain_button(widget, style != nil ? 1 : 0)
@@ -66,6 +66,7 @@ public struct Button<Label: View>: Primitive {
         var ctx = context
         ctx.parent = widget
         ctx.environment.identifier = ""
+        ctx.environment.isLink = false
         ctx.environment.focus = nil
         let configured = style?(.init(label: .init(content: AnyView(label)), isPressed: qs_button_down(widget) != 0))
         let child = stacked((configured ?? AnyView(label)).resolve(ctx.descending(.position(0))), axis: .horizontal, alignment: .center, spacing: 4)

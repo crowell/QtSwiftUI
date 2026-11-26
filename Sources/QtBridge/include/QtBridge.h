@@ -13,7 +13,7 @@ typedef struct QSPath QSPath;
 typedef void (*QSRender)(void *context, int width, int height);
 enum QSEventKind { QSActivate, QSFocusChanged, QSSubmit, QSPressedChanged, QSExitCommand, QSHoverChanged };
 typedef void (*QSEvent)(void *context, int id, enum QSEventKind kind, const char *value);
-enum QSKind { QSLabel, QSButton, QSToggle, QSEdit, QSSecureEdit, QSSurface, QSScroll, QSSlider, QSProgress, QSGroup, QSCanvas };
+enum QSKind { QSLabel, QSButton, QSToggle, QSEdit, QSSecureEdit, QSSurface, QSScroll, QSSlider, QSProgress, QSGroup, QSCanvas, QSLink };
 
 QSWindow *qs_window(const char *title, void *context, QSRender render, QSEvent event);
 void qs_open(QSWindow *, int width, int height);
@@ -34,6 +34,7 @@ void qs_style(QSWidget, const char *family, double points, int weight, int itali
 void qs_selectable(QSWidget, int enabled);
 void qs_exit_scope(QSWidget, int enabled);
 void qs_request_close(QSWindow *);
+int qs_open_url(const char *url);
 void qs_surface(QSWidget, const char *color, double radius);
 QSPath *qs_path_new(void);
 void qs_path_delete(QSPath *);
@@ -78,6 +79,7 @@ int qs_key_escape(QSWindow *);
 int qs_scroll_to_end(QSWindow *);
 int qs_hover(QSWindow *, const char *identifier, int inside);
 int qs_has_help(QSWindow *, const char *identifier, const char *expected);
+int qs_is_named_link(QSWindow *, const char *identifier, const char *name);
 int qs_select_text(QSWindow *, const char *identifier, int start, int length, const char *expected);
 int qs_fixed_font(QSWindow *, const char *identifier);
 int qs_has_focus(QSWindow *, const char *identifier);
