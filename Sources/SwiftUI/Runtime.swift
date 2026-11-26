@@ -75,6 +75,7 @@ enum Part: Hashable {
         qs_enabled(entry.widget, environment.isEnabled ? 1 : 0)
         qs_accessibility(entry.widget, environment.label, environment.identifier)
         qs_help(entry.widget, environment.helpText)
+        qs_focus_effect(entry.widget, environment.isFocusEffectEnabled ? 1 : 0)
         if let focus { qs_focus(entry.widget, focus.active() ? 1 : 0) }
         return entry.widget
     }

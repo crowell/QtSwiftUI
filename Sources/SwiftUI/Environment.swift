@@ -25,6 +25,7 @@ public struct EnvironmentValues {
     var buttonStyle: ((ButtonStyleConfiguration) -> AnyView)?
     var isLink = false
     var focus: FocusLink?
+    public var isFocusEffectEnabled = true
     var submit: (() -> Void)?
     var closePresentation: @MainActor () -> Void = {}
     var urlAction: OpenURLAction?
@@ -110,6 +111,7 @@ public struct Font: Hashable, Sendable {
         return font
     }
     public static func custom(_ name: String, size: CGFloat) -> Self { Self(size: size, weight: .regular, family: name) }
+    public static func custom(_ name: String, fixedSize: CGFloat) -> Self { Self(size: fixedSize, weight: .regular, family: name) }
     public func monospaced() -> Self { var copy = self; copy.design = .monospaced; copy.family = nil; return copy }
     public static let largeTitle = system(size: 34), title = system(size: 28), title2 = system(size: 22)
     public static let title3 = system(size: 20), headline = system(size: 17, weight: .semibold), body = system(size: 17)

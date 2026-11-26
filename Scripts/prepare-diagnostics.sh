@@ -12,7 +12,15 @@ cp "$source_dir/Calling/CallDiagnosticWindow.swift" "$source_dir/Theme/I18nEnvir
     "$source_dir/Theme/AxoColor.swift" "$source_dir/Theme/AxoFocusRing.swift" \
     "$source_dir/Theme/AxoShadow.swift" "$source_dir/Tokens/AxoTokens.generated.swift" \
     "$source_dir/Theme/AxoMotion.swift" "$source_dir/Axo/Status/AxoBaseSpinner.swift" \
+    "$source_dir/Axo/AxoButton.swift" "$source_dir/Tokens/AxoSymbolDefs.generated.swift" \
     "$root"/Scripts/CallDiagnostics/*.swift "$target/Sources/CallDiagnostics/"
+target_dir="$target/Sources/CallDiagnostics"
+# AxoButton uses the type scale. The rest of AxoType.swift defines a CoreText modifier.
+awk '/^public struct AxoType: / { print "import SwiftUI"; inside = 1 }
+     inside { print } inside && /^}$/ { complete = 1; exit } END { if (!complete) exit 1 }' \
+    "$source_dir/Theme/AxoType.swift" > "$target_dir/AxoType.swift"
+mkdir -p "$target_dir/Fonts"
+cp "$source_dir"/Resources/Fonts/Inter-*.ttf "$source_dir/Resources/Fonts/SignalSymbolsVariable.ttf" "$target_dir/Fonts/"
 cat > "$target/Package.swift" <<'SWIFT'
 // swift-tools-version: 6.2
 import PackageDescription
@@ -23,6 +31,6 @@ packages.append(.package(name: "QtSwiftUI", path: "/src"))
 dependencies.append(.product(name: "SwiftUI", package: "QtSwiftUI"))
 #endif
 let package = Package(name: "CallDiagnostics", platforms: [.macOS("27.0")], dependencies: packages,
-                      targets: [.executableTarget(name: "CallDiagnostics", dependencies: dependencies),
+                      targets: [.executableTarget(name: "CallDiagnostics", dependencies: dependencies, resources: [.copy("Fonts")]),
                                 .testTarget(name: "ScreenTests", dependencies: ["CallDiagnostics"] + dependencies)])
 SWIFT

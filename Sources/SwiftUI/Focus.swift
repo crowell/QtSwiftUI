@@ -1,3 +1,12 @@
+import QtBridge
+
+public struct FocusInteractions: OptionSet, Sendable {
+    public var rawValue: Int
+    public init(rawValue: Int) { self.rawValue = rawValue }
+    public static let activate = Self(rawValue: 1), edit = Self(rawValue: 2)
+    public static var automatic: Self { [.activate, .edit] }
+}
+
 struct FocusLink {
     var active: () -> Bool
     var change: (Bool) -> Void
@@ -27,6 +36,21 @@ public struct SubmitTriggers: OptionSet, Sendable {
     public static let text = Self(rawValue: 1), search = Self(rawValue: 2)
 }
 extension View {
+    public func focusable(_ isFocusable: Bool = true) -> some View { focusable(isFocusable, interactions: .automatic) }
+    public func focusable(_ isFocusable: Bool = true, interactions: FocusInteractions) -> some View {
+        Transform(content: self) { view, ctx in
+            let group = ctx.widget(QSGroup)
+            let elements = ctx.children(of: view, inside: group)
+            qs_group_focus(group, isFocusable ? 1 : 0, Int32(truncatingIfNeeded: interactions.rawValue))
+            if let focus = ctx.environment.focus { qs_focus(group, focus.active() ? 1 : 0) }
+            return elements
+        }
+    }
+    public func focusEffectDisabled(_ disabled: Bool = true) -> some View {
+        Transform(content: self) { view, ctx in
+            view.resolve(ctx.with(\.isFocusEffectEnabled, ctx.environment.isFocusEffectEnabled && !disabled))
+        }
+    }
     public func focused(_ condition: FocusState<Bool>.Binding) -> some View {
         environment(\.focus, FocusLink(active: { condition.wrappedValue }, change: {
             if condition.wrappedValue != $0 { condition.wrappedValue = $0 }

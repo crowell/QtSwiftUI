@@ -9,6 +9,7 @@
 #include <QUrl>
 #include <QLabel>
 #include <QFontInfo>
+#include <QFontDatabase>
 #include <QGraphicsOpacityEffect>
 #include <QEnterEvent>
 #include <QLineEdit>
@@ -17,6 +18,8 @@
 #include <QPainter>
 #include <QPainterPath>
 #include <QProgressBar>
+#include <QProxyStyle>
+#include <QStyleOptionFocusRect>
 #include <QPushButton>
 #include <QResizeEvent>
 #include <QScrollArea>
@@ -32,13 +35,24 @@ struct QSPath : QPainterPath {};
 
 namespace {
 QTransform transform(QSAffine t) { return QTransform(t.a, t.b, t.c, t.d, t.tx, t.ty); }
+class SwiftWidgetStyle final : public QProxyStyle {
+public:
+    void drawPrimitive(PrimitiveElement element, const QStyleOption *option, QPainter *painter,
+                       const QWidget *widget = nullptr) const override {
+        if (element == PE_FrameFocusRect && widget && widget->property("qsNoFocusEffect").toBool()) return;
+        QProxyStyle::drawPrimitive(element, option, painter, widget);
+    }
+};
 QApplication *ownedApplication = nullptr;
 int liveWindows = 0;
 QApplication &application() {
     static int argc = 1;
     static char name[] = "QtSwiftUI";
     static char *argv[] = {name, nullptr};
-    if (!qApp) ownedApplication = new QApplication(argc, argv);
+    if (!qApp) {
+        ownedApplication = new QApplication(argc, argv);
+        ownedApplication->setStyle(new SwiftWidgetStyle());
+    }
     return *qApp;
 }
 class GroupWidget final : public QWidget {
@@ -48,7 +62,38 @@ public:
     bool isImage = false;
     bool updatesFrequently = false;
     QString accessibleValue;
+    std::optional<QPainterPath> contentShape;
     bool accessibilityHidden = false;
+    void paintEvent(QPaintEvent *event) override {
+        QWidget::paintEvent(event);
+        if (!hasFocus() || focusProxy() || !property("qsFocusable").toBool()) return;
+        QStyleOptionFocusRect focus;
+        focus.initFrom(this);
+        QPainter painter(this);
+        style()->drawPrimitive(QStyle::PE_FrameFocusRect, &focus, &painter, this);
+    }
+};
+class SwiftButton final : public QPushButton {
+public:
+    using QPushButton::QPushButton;
+protected:
+    bool hitButton(const QPoint &point) const override {
+        if (!QPushButton::hitButton(point)) return false;
+        for (auto *parent = parentWidget(); parent; parent = parent->parentWidget()) {
+            auto *group = dynamic_cast<GroupWidget *>(parent);
+            if (group && group->contentShape && !group->contentShape->contains(mapTo(group, point))) return false;
+        }
+        // A custom ButtonStyle may place contentShape on the label inside the
+        // native button. Evaluate those shapes in their own coordinate spaces.
+        bool restricted = false;
+        for (auto *child : findChildren<QWidget *>()) {
+            auto *group = dynamic_cast<GroupWidget *>(child);
+            if (!group || !group->contentShape) continue;
+            restricted = true;
+            if (group->contentShape->contains(group->mapFrom(this, point))) return true;
+        }
+        return !restricted;
+    }
 };
 class AccessibleGroup final : public QAccessibleWidget {
 public:
@@ -323,7 +368,7 @@ QSWidget qs_create(QSWindow *window, QSWidget parent, QSKind kind, int id) {
         return label;
     }
     case QSLink: case QSButton: {
-        auto *button = new QPushButton(container);
+        auto *button = new SwiftButton(container);
         if (kind == QSLink) {
             button->setCursor(Qt::PointingHandCursor);
             QAccessible::registerAccessibleInterface(new AccessibleLink(button));
@@ -422,6 +467,16 @@ void qs_selectable(QSWidget w, int enabled) {
     auto *label = static_cast<QLabel *>(w);
     Qt::TextInteractionFlags flags = enabled ? Qt::TextSelectableByMouse | Qt::TextSelectableByKeyboard : Qt::NoTextInteraction;
     if (label->textInteractionFlags() != flags) label->setTextInteractionFlags(flags);
+}
+int qs_register_font(const char *path) {
+    auto &app = application();
+    const QString font = QString::fromUtf8(path);
+    auto loaded = app.property("qsFonts").toStringList();
+    if (loaded.contains(font)) return 1;
+    if (QFontDatabase::addApplicationFont(font) < 0) return 0;
+    loaded.append(font);
+    app.setProperty("qsFonts", loaded);
+    return 1;
 }
 void qs_style(QSWidget w, const char *family, double points, int weight, int italic, double tracking,
               const char *color, int alignment, int wrap) {
@@ -559,6 +614,29 @@ void qs_group(QSWidget w, int exposeChildren, int isImage, int updatesFrequently
     group->accessibleValue = QString::fromUtf8(value);
 }
 void qs_group_hidden(QSWidget w, int hidden) { static_cast<GroupWidget *>(w)->accessibilityHidden = hidden; }
+void qs_group_shape(QSWidget w, const QSPath *path, int evenOdd) {
+    auto *group = static_cast<GroupWidget *>(w);
+    group->contentShape = *path;
+    group->contentShape->setFillRule(evenOdd ? Qt::OddEvenFill : Qt::WindingFill);
+}
+void qs_focus_effect(QSWidget w, int enabled) { widget(w)->setProperty("qsNoFocusEffect", !enabled); }
+void qs_group_focus(QSWidget w, int enabled, int interactions) {
+    auto *group = widget(w);
+    QWidget *proxy = group->focusProxy();
+    if (!proxy || !group->isAncestorOf(proxy)) {
+        proxy = nullptr;
+        for (auto *child : group->findChildren<QWidget *>()) {
+            if (child->focusPolicy() == Qt::NoFocus) continue;
+            proxy = child;
+            break;
+        }
+        group->setFocusProxy(proxy);
+    }
+    group->setProperty("qsFocusable", bool(enabled && interactions));
+    const auto policy = !enabled || !interactions ? Qt::NoFocus : Qt::StrongFocus;
+    if (group->focusPolicy() != policy) group->setFocusPolicy(policy);
+    if (proxy && proxy->focusPolicy() != policy) proxy->setFocusPolicy(policy);
+}
 void qs_group_hover(QSWidget w, int enabled) { widget(w)->setProperty("qsHover", bool(enabled)); }
 void qs_help(QSWidget w, const char *text) { widget(w)->setToolTip(QString::fromUtf8(text)); }
 void qs_group_rotation(QSWidget w, double degrees, double anchorX, double anchorY) {
@@ -674,6 +752,13 @@ int qs_select_text(QSWindow *window, const char *id, int start, int length, cons
     label->setSelection(start, length);
     return label->selectedText() == QString::fromUtf8(expected);
 }
+int qs_uses_family(QSWindow *window, const char *text, const char *family) {
+    for (auto *label : window->findChildren<QLabel *>()) {
+        if (label->text() == QString::fromUtf8(text))
+            return QFontInfo(label->font()).family() == QString::fromUtf8(family);
+    }
+    return 0;
+}
 int qs_fixed_font(QSWindow *window, const char *id) {
     auto *label = window->findChild<QLabel *>(QString::fromUtf8(id));
     return label && QFontInfo(label->font()).fixedPitch();
@@ -687,6 +772,32 @@ int qs_key_return(QSWindow *window, const char *id) {
     QApplication::sendEvent(edit, &release);
     qs_flush();
     return 1;
+}
+int qs_tab(QSWindow *window) {
+    QKeyEvent tab(QEvent::KeyPress, Qt::Key_Tab, Qt::NoModifier);
+    QApplication::sendEvent(window->focusWidget() ? window->focusWidget() : window, &tab);
+    qs_flush();
+    return tab.isAccepted();
+}
+int qs_click_point(QSWindow *window, int x, int y) {
+    const QPoint point(x, y);
+    QWidget *target = window->childAt(point);
+    if (!target) return 0;
+    const auto local = target->mapFrom(window, point), global = window->mapToGlobal(point);
+    QMouseEvent press(QEvent::MouseButtonPress, local, global, Qt::LeftButton, Qt::LeftButton, Qt::NoModifier);
+    QApplication::sendEvent(target, &press);
+    QMouseEvent release(QEvent::MouseButtonRelease, local, global, Qt::LeftButton, Qt::NoButton, Qt::NoModifier);
+    QApplication::sendEvent(target, &release);
+    qs_flush();
+    return 1;
+}
+int qs_click_named_button(QSWindow *window, const char *name) {
+    for (auto *button : window->findChildren<QAbstractButton *>()) {
+        if (button->accessibleName() != QString::fromUtf8(name)) continue;
+        const auto center = button->mapTo(window, button->rect().center());
+        return qs_click_point(window, center.x(), center.y());
+    }
+    return 0;
 }
 int qs_has_focus(QSWindow *window, const char *id) {
     auto *item = window->findChild<QWidget *>(QString::fromUtf8(id));
