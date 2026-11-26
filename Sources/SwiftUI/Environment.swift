@@ -18,11 +18,14 @@ public struct EnvironmentValues {
     public var font: Font?
     public var multilineTextAlignment: TextAlignment = .leading
     public var lineLimit: Int?
+    var selectableText = false
+    var tracking: CGFloat = 0
     var foreground = Color.primary
 
     var buttonStyle: ((ButtonStyleConfiguration) -> AnyView)?
     var focus: FocusLink?
     var submit: (() -> Void)?
+    var closePresentation: @MainActor () -> Void = {}
     var accessibilityTraits: AccessibilityTraits = []
     var stackAxis = Axis.vertical
     var label = "", identifier = ""
@@ -60,8 +63,48 @@ public struct Font: Hashable, Sendable {
         public static let regular = Self(value: 400), medium = Self(value: 500), semibold = Self(value: 600)
         public static let bold = Self(value: 700), heavy = Self(value: 800), black = Self(value: 900)
     }
+    public enum Design: Hashable, Sendable { case `default`, serif, rounded, monospaced }
+    public enum TextStyle: Hashable, CaseIterable, Sendable {
+        case largeTitle, title, title2, title3, headline, subheadline, body, callout, footnote, caption, caption2
+        var font: Font {
+            switch self {
+            case .largeTitle: .largeTitle
+            case .title: .title
+            case .title2: .title2
+            case .title3: .title3
+            case .headline: .headline
+            case .subheadline: .subheadline
+            case .body: .body
+            case .callout: .callout
+            case .footnote: .footnote
+            case .caption: .caption
+            case .caption2: .caption2
+            }
+        }
+    }
     var size: CGFloat, weight: Weight, slanted = false
-    public static func system(size: CGFloat, weight: Weight = .regular) -> Self { Self(size: size, weight: weight) }
+    var design: Design = .default
+    var family: String?
+    var qtFamily: String {
+        if let family { return family }
+        switch design {
+        case .default: return ""
+        case .serif: return "serif"
+        case .rounded: return "sans-serif"
+        case .monospaced: return "monospace"
+        }
+    }
+    public static func system(size: CGFloat, weight: Weight = .regular, design: Design = .default) -> Self {
+        Self(size: size, weight: weight, design: design)
+    }
+    public static func system(_ style: TextStyle, design: Design = .default, weight: Weight? = nil) -> Self {
+        var font = style.font
+        font.design = design
+        if let weight { font.weight = weight }
+        return font
+    }
+    public static func custom(_ name: String, size: CGFloat) -> Self { Self(size: size, weight: .regular, family: name) }
+    public func monospaced() -> Self { var copy = self; copy.design = .monospaced; copy.family = nil; return copy }
     public static let largeTitle = system(size: 34), title = system(size: 28), title2 = system(size: 22)
     public static let title3 = system(size: 20), headline = system(size: 17, weight: .semibold), body = system(size: 17)
     public static let callout = system(size: 16), subheadline = system(size: 15), footnote = system(size: 13)

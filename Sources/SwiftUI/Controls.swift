@@ -4,7 +4,7 @@ extension Context {
     func style(_ widget: UnsafeMutableRawPointer) {
         let font = environment.font ?? .body
         let alignment = environment.multilineTextAlignment
-        qs_style(widget, font.size, font.weight.value, font.slanted ? 1 : 0, environment.foreground.hex(environment.colorScheme),
+        qs_style(widget, font.qtFamily, font.size, font.weight.value, font.slanted ? 1 : 0, environment.tracking, environment.foreground.hex(environment.colorScheme),
                  alignment == .leading ? -1 : alignment == .center ? 0 : 1, environment.lineLimit == 1 ? 0 : 1)
     }
     func control(_ widget: UnsafeMutableRawPointer, expands: Bool = false) -> Element {
@@ -36,6 +36,7 @@ public struct Text: Primitive {
     func elements(in context: Context) -> [Element] {
         let ctx = styled(context)
         let widget = ctx.widget(QSLabel)
+        qs_selectable(widget, ctx.environment.selectableText ? 1 : 0)
         qs_text(widget, string)
         ctx.style(widget)
         return [Element { p in

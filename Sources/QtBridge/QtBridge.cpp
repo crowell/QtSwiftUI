@@ -4,6 +4,7 @@
 #include <QCheckBox>
 #include <QDir>
 #include <QLabel>
+#include <QFontInfo>
 #include <QLineEdit>
 #include <QKeyEvent>
 #include <QMouseEvent>
@@ -127,6 +128,27 @@ struct QSWindow final : QWidget {
         item->setProperty("swiftId", id);
         item->installEventFilter(this);
     }
+    void keyPressEvent(QKeyEvent *key) override {
+        if (key->key() == Qt::Key_Escape && key->modifiers() == Qt::NoModifier) {
+            QWidget *scope = focusWidget();
+            while (scope && !scope->property("qsExit").toBool()) scope = scope->parentWidget();
+            if (!scope && !focusWidget()) {
+                // A window with no first responder can still provide a scene-wide command.
+                for (auto *item : findChildren<QWidget *>()) {
+                    if (item->isVisible() && item->isEnabled() && item->property("qsExit").toBool()) {
+                        if (scope) { scope = nullptr; break; }
+                        scope = item;
+                    }
+                }
+            }
+            if (scope) {
+                key->accept();
+                event(context, scope->property("swiftId").toInt(), QSExitCommand, "");
+                return;
+            }
+        }
+        QWidget::keyPressEvent(key);
+    }
     void resizeEvent(QResizeEvent *) override { schedule(); }
 };
 
@@ -145,6 +167,7 @@ void qs_open(QSWindow *window, int width, int height) {
     window->show();
     qs_flush();
 }
+void qs_request_close(QSWindow *window) { window->close(); }
 void qs_update(QSWindow *window) { window->schedule(); }
 void qs_flush() { application().processEvents(); }
 int qs_run(QSWindow *window, const char *screenshot, QSPump pump) {
@@ -207,6 +230,7 @@ QSWidget qs_create(QSWindow *window, QSWidget parent, QSKind kind, int id) {
     }
     case QSGroup: {
         auto *group = new GroupWidget(container);
+        group->setProperty("swiftId", id);
         QAccessible::registerAccessibleInterface(new AccessibleGroup(group));
         return group;
     }
@@ -249,7 +273,9 @@ void qs_scroll_axes(QSWidget w, int h, int v) {
 void qs_destroy(QSWidget w) { delete widget(w); }
 void qs_text(QSWidget w, const char *s) {
     auto text = QString::fromUtf8(s);
-    if (auto *label = qobject_cast<QLabel *>(widget(w))) label->setText(text);
+    if (auto *label = qobject_cast<QLabel *>(widget(w))) {
+        if (label->text() != text) label->setText(text);
+    }
     else if (auto *button = qobject_cast<QAbstractButton *>(widget(w))) button->setText(QString(text).replace('&', "&&"));
     else if (auto *edit = qobject_cast<QLineEdit *>(widget(w)); edit && edit->text() != text) edit->setText(text);
 }
@@ -266,9 +292,18 @@ void qs_value(QSWidget w, double fraction) {
         if (fraction >= 0) bar->setValue(qRound(fraction * 10000));
     }
 }
-void qs_style(QSWidget w, double points, int weight, int italic, const char *color, int alignment, int wrap) {
+void qs_exit_scope(QSWidget w, int enabled) { widget(w)->setProperty("qsExit", bool(enabled)); }
+void qs_selectable(QSWidget w, int enabled) {
+    auto *label = static_cast<QLabel *>(w);
+    Qt::TextInteractionFlags flags = enabled ? Qt::TextSelectableByMouse | Qt::TextSelectableByKeyboard : Qt::NoTextInteraction;
+    if (label->textInteractionFlags() != flags) label->setTextInteractionFlags(flags);
+}
+void qs_style(QSWidget w, const char *family, double points, int weight, int italic, double tracking,
+              const char *color, int alignment, int wrap) {
     auto *item = widget(w);
     QFont font = application().font();
+    if (*family) font.setFamily(QString::fromUtf8(family));
+    font.setLetterSpacing(QFont::AbsoluteSpacing, tracking);
     font.setPixelSize(qMax(1, qRound(points)));
     font.setWeight(static_cast<QFont::Weight>(weight));
     font.setItalic(italic);
@@ -415,6 +450,22 @@ int qs_enter(QSWindow *window, const char *id, const char *value) {
     edit->insert(QString::fromUtf8(value));
     qs_flush();
     return 1;
+}
+int qs_key_escape(QSWindow *window) {
+    QKeyEvent key(QEvent::KeyPress, Qt::Key_Escape, Qt::NoModifier);
+    QApplication::sendEvent(window->focusWidget() ? window->focusWidget() : window, &key);
+    qs_flush();
+    return key.isAccepted();
+}
+int qs_select_text(QSWindow *window, const char *id, int start, int length, const char *expected) {
+    auto *label = window->findChild<QLabel *>(QString::fromUtf8(id));
+    if (!label || !(label->textInteractionFlags() & Qt::TextSelectableByMouse)) return 0;
+    label->setSelection(start, length);
+    return label->selectedText() == QString::fromUtf8(expected);
+}
+int qs_fixed_font(QSWindow *window, const char *id) {
+    auto *label = window->findChild<QLabel *>(QString::fromUtf8(id));
+    return label && QFontInfo(label->font()).fixedPitch();
 }
 int qs_key_return(QSWindow *window, const char *id) {
     auto *edit = window->findChild<QLineEdit *>(QString::fromUtf8(id));

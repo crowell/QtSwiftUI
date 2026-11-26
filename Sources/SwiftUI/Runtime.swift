@@ -28,7 +28,7 @@ enum Part: Hashable {
             }
         }
     }
-    func widget(_ kind: QSKind, pressed: ((Bool) -> Void)? = nil, action: ((String) -> Void)? = nil) -> UnsafeMutableRawPointer {
+    func widget(_ kind: QSKind, pressed: ((Bool) -> Void)? = nil, exitCommand: (() -> Void)? = nil, action: ((String) -> Void)? = nil) -> UnsafeMutableRawPointer {
         let entry = host.mount(path: path + [.widget(kind.rawValue)], kind: kind, parent: parent)
         let focus = environment.focus
         let submit = environment.submit
@@ -37,6 +37,7 @@ enum Part: Hashable {
             case QSActivate: action?(value)
             case QSFocusChanged: focus?.change(value == "1")
             case QSSubmit: submit?()
+            case QSExitCommand: exitCommand?()
             case QSPressedChanged: pressed?(value == "1")
             default: break
             }
@@ -127,7 +128,11 @@ enum Part: Hashable {
         for action in pending { action() }
     }
     private func layout(width: Int, height: Int) {
-        let roots = content(Context(host: self))
+        var context = Context(host: self)
+        context.environment.closePresentation = { [weak self] in
+            if let window = self?.window { qs_request_close(window) }
+        }
+        let roots = content(context)
         let root = stacked(roots, axis: .vertical, alignment: .center, spacing: 8)
         let proposal = ProposedViewSize(width: CGFloat(width), height: CGFloat(height))
         let size = root.measure(proposal)
