@@ -8,6 +8,7 @@ import QtBridge
     struct Entry {
         var title = ""
         var enabled = true
+        var shortcut: KeyboardShortcut?
         var checked: Bool?
         var separator = false
         var children: MenuEntries?
@@ -36,6 +37,8 @@ import QtBridge
             let submenu = qs_menu_item(menu, Int32(index), row.title, row.enabled ? 1 : 0,
                                        row.checked.map { $0 ? 1 : 0 } ?? -1, row.separator ? 1 : 0,
                                        row.children == nil ? 0 : 1, Int32(id))
+            qs_menu_shortcut(menu, Int32(index), row.shortcut.map { String($0.key.character) } ?? "",
+                             Int32(row.shortcut?.modifiers.rawValue ?? 0), row.shortcut?.localization.value == 0 ? 1 : 0)
             if let submenu, let children = row.children { children.install(on: submenu, actions: &actions) }
         }
         qs_menu_finish(menu, Int32(rows.count))
@@ -49,6 +52,11 @@ import QtBridge
         if let index = Int(value), callbacks.indices.contains(index) { callbacks[index]() }
     }
 
+    func install(_ entries: MenuEntries, on menu: UnsafeMutableRawPointer) {
+        callbacks.removeAll(keepingCapacity: true)
+        entries.install(on: menu, actions: &callbacks)
+    }
+
     func configure<Items: View>(_ content: Items?, in context: Context, on popup: UnsafeMutableRawPointer) {
         var items = context.descending(.property("menu content"))
         // Resolve composite labels offscreen so their widgets do not participate in layout or hit testing.
@@ -58,20 +66,19 @@ import QtBridge
         items.environment.label = ""
         items.environment.focus = nil
         let entries = content.map { MenuEntries.read($0, in: items) } ?? MenuEntries()
-        callbacks.removeAll(keepingCapacity: true)
-        entries.install(on: popup, actions: &callbacks)
+        install(entries, on: popup)
     }
 }
 
 extension Button: MenuEntrySource {
     func collect(in context: Context, into entries: MenuEntries) {
-        entries.rows.append(.init(title: MenuEntries.title(label, in: context), enabled: context.environment.isEnabled, action: action))
+        entries.rows.append(.init(title: MenuEntries.title(label, in: context), enabled: context.environment.isEnabled, shortcut: context.environment.keyboardShortcut, action: action))
     }
 }
 extension Toggle: MenuEntrySource {
     func collect(in context: Context, into entries: MenuEntries) {
         entries.rows.append(.init(title: MenuEntries.title(label, in: context), enabled: context.environment.isEnabled,
-                                  checked: isOn.wrappedValue, action: { isOn.wrappedValue.toggle() }))
+                                  shortcut: context.environment.keyboardShortcut, checked: isOn.wrappedValue, action: { isOn.wrappedValue.toggle() }))
     }
 }
 extension Text: MenuEntrySource {

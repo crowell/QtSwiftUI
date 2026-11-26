@@ -28,7 +28,7 @@ public struct KeyEquivalent: Hashable, Sendable, ExpressibleByExtendedGraphemeCl
 
 public struct KeyboardShortcut: Hashable, Sendable {
     public struct Localization: Sendable {
-        fileprivate let value: Int
+        let value: Int
         public static let automatic = Self(value: 0)
         public static let withoutMirroring = Self(value: 1)
         public static let custom = Self(value: 2)

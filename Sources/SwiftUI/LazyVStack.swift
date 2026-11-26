@@ -41,7 +41,7 @@ extension EmptyView: LazyRowSource {
 extension Optional: LazyRowSource where Wrapped: View {
     fileprivate func rows(at path: [Part]) -> [LazyRow] { map { SwiftUI.rows($0, at: path) } ?? [] }
 }
-extension _ConditionalContent: LazyRowSource {
+extension _ConditionalContent: LazyRowSource where TrueContent: View, FalseContent: View {
     fileprivate func rows(at path: [Part]) -> [LazyRow] {
         switch storage {
         case .first(let view): SwiftUI.rows(view, at: path + [.position(0)])

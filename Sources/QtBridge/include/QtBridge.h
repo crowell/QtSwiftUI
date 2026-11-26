@@ -14,7 +14,7 @@ typedef struct QSPath QSPath;
 typedef void (*QSRender)(void *context, int width, int height);
 enum QSEventKind { QSActivate, QSFocusChanged, QSSubmit, QSPressedChanged, QSExitCommand, QSHoverChanged, QSContinuousHover, QSIncrement, QSDecrement, QSGestureCancelled, QSMagnified, QSAccessibilityAction };
 typedef void (*QSEvent)(void *context, int id, enum QSEventKind kind, const char *value);
-enum QSKind { QSLabel, QSButton, QSToggle, QSEdit, QSSecureEdit, QSSurface, QSScroll, QSSlider, QSProgress, QSGroup, QSCanvas, QSLink, QSRaster, QSTextEditor, QSAttributedLabel, QSBusyIndicator, QSMultilineField, QSMenuButton, QSPopover };
+enum QSKind { QSLabel, QSButton, QSToggle, QSEdit, QSSecureEdit, QSSurface, QSScroll, QSSlider, QSProgress, QSGroup, QSCanvas, QSLink, QSRaster, QSTextEditor, QSAttributedLabel, QSBusyIndicator, QSMultilineField, QSMenuButton, QSPopover, QSMenuBar };
 
 QSWindow *qs_window(const char *title, void *context, QSRender render, QSEvent event);
 void qs_open(QSWindow *, int width, int height);
@@ -164,6 +164,7 @@ int qs_open_context_menu(QSWindow *, int x, int y, int keyboard);
 int qs_menu_indicator_width(QSWidget button);
 QSWidget qs_menu_item(QSWidget menu, int index, const char *title, int enabled, int checked, int separator, int submenu, int action);
 void qs_menu_finish(QSWidget menu, int count);
+void qs_menu_shortcut(QSWidget menu, int index, const char *key, int modifiers, int mirror);
 int qs_popup_item_state(QSWindow *, const char *title);
 int qs_click_popup_item(QSWindow *, const char *title);
 int qs_button_down(QSWidget);

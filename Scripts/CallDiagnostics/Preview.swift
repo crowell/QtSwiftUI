@@ -3,13 +3,15 @@ import SignalI18n
 
 @main
 struct DiagnosticPreview: App {
+    @State private var showingShortcuts = CommandLine.arguments.contains("--shortcut-guide")
     var body: some Scene {
         let linkError = CommandLine.arguments.contains("--link-error")
         let linking = linkError || CommandLine.arguments.contains("--link-device")
         let leaveCall = CommandLine.arguments.contains("--leave-call")
         let clearing = CommandLine.arguments.contains("--clearing-data")
         let callsTab = CommandLine.arguments.contains("--calls-tab")
-        let inbox = CommandLine.arguments.contains("--inbox")
+        let desktopMenus = CommandLine.arguments.contains("--shortcut-guide") || CommandLine.arguments.contains("--desktop-menus")
+        let inbox = desktopMenus || CommandLine.arguments.contains("--inbox")
         let request = CommandLine.arguments.contains("--join-request")
         let appAbout = CommandLine.arguments.contains("--about")
         let about = CommandLine.arguments.contains("--about-contact")
@@ -52,6 +54,12 @@ struct DiagnosticPreview: App {
             else if timer { DisappearingTimerPreview() }
             else if photoViewer { PhotoPreview() }
             else if callsTab { CallsTabPreview() }
+            else if desktopMenus {
+                ZStack {
+                    InboxPreview()
+                    if showingShortcuts { ShortcutGuideModal(platform: "linux") { showingShortcuts = false } }
+                }
+            }
             else if inbox { InboxPreview() }
             else if request || about || note { ContactFlowPreview(model: .init(start: request ? .request : about ? .about : .note)) }
             else if appAbout { AppAboutPreview() }
@@ -75,8 +83,16 @@ struct DiagnosticPreview: App {
             else if leaveCall { LeaveCallPreview() }
             else { DiagnosticContent() }
         }
+        .commands {
+            if desktopMenus {
+                CommandMenu(MainMenu.displayLabel(DefaultLocalizer.english("icu:mainMenuHelp"))) {
+                    Button(MainMenu.displayLabel(DefaultLocalizer.english("icu:helpMenuShowKeyboardShortcuts"))) { showingShortcuts = true }
+                        .keyboardShortcut("/", modifiers: .control)
+                }
+            }
+        }
         .defaultSize(width: conversation || timeline ? 560 : muteUntil ? 640 : usernameCard ? 424 : screenShare ? 840 : stickers ? 600 : photoViewer ? 760 : callsTab ? 760 : inbox ? 840 : linkDetails ? 620 : nickname ? 520 : history ? 360 : settings ? 640 : colorPicker ? 780 : recording || draft ? 640 : linking || clearing ? 680 : 520,
-                     height: conversation ? 502 : timeline ? 450 : muteUntil ? 600 : usernameEditor ? 540 : usernameCard ? 576 : screenShare ? 620 : stickers ? 460 : photoViewer ? 560 : callsTab || inbox ? 520 : about ? 620 : note ? 380 : request ? 510 : linkDetails ? 620 : nickname ? 560 : history ? 418 : settings ? 567 : survey ? 600 : colorPicker ? 720 : colorEditor ? 620 : recording || draft ? 84 : discard ? 280 : linking || clearing ? 420 : 440)
+                     height: desktopMenus ? 660 : conversation ? 502 : timeline ? 450 : muteUntil ? 600 : usernameEditor ? 540 : usernameCard ? 576 : screenShare ? 620 : stickers ? 460 : photoViewer ? 560 : callsTab || inbox ? 520 : about ? 620 : note ? 380 : request ? 510 : linkDetails ? 620 : nickname ? 560 : history ? 418 : settings ? 567 : survey ? 600 : colorPicker ? 720 : colorEditor ? 620 : recording || draft ? 84 : discard ? 280 : linking || clearing ? 420 : 440)
     }
 }
 

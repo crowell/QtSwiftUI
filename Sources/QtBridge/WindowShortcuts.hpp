@@ -45,20 +45,23 @@ public:
     void begin() {
         for (auto &binding : bindings) binding.target.clear();
     }
-    void add(QWidget *window, QAbstractButton *button, const QString &character, int flags, bool automatic) {
+    static QKeySequence sequenceFor(const QString &character, int flags, bool mirror) {
         const auto scalars = character.normalized(QString::NormalizationForm_C).toUcs4();
-        if (auto *push = qobject_cast<QPushButton *>(button))
-            push->setDefault(character == QStringLiteral("\r") && flags == 0);
         // Qt's key events expose Shift, Control, Alt, Meta and the keypad flag.
-        if (!button->isEnabled() || scalars.size() != 1 || (flags & ~62) != 0) return;
+        if (scalars.size() != 1 || (flags & ~62) != 0) return {};
         Qt::KeyboardModifiers modifiers;
         if (flags & 2) modifiers |= Qt::ShiftModifier;
         if (flags & 4) modifiers |= Qt::ControlModifier;
         if (flags & 8) modifiers |= Qt::AltModifier;
         if (flags & 16) modifiers |= Qt::MetaModifier;
         if (flags & 32) modifiers |= Qt::KeypadModifier;
-        auto key = specialKey(scalars.first(), automatic && button->isRightToLeft());
-        const QKeySequence sequence(QKeyCombination(modifiers, key));
+        return QKeySequence(QKeyCombination(modifiers, specialKey(scalars.first(), mirror)));
+    }
+    void add(QWidget *window, QAbstractButton *button, const QString &character, int flags, bool automatic) {
+        if (auto *push = qobject_cast<QPushButton *>(button))
+            push->setDefault(character == QStringLiteral("\r") && flags == 0);
+        const auto sequence = sequenceFor(character, flags, automatic && button->isRightToLeft());
+        if (!button->isEnabled() || sequence.isEmpty()) return;
         auto it = bindings.find(sequence);
         if (it == bindings.end()) {
             auto *shortcut = new QShortcut(sequence, window);

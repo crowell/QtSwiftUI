@@ -1,4 +1,5 @@
 #include "QtBridge.h"
+#include <QMenuBar>
 #include "AlphaMask.hpp"
 #include "BusyIndicator.hpp"
 #include "ViewBlur.hpp"
@@ -1039,6 +1040,15 @@ QSWidget qs_create(QSWindow *window, QSWidget parent, QSKind kind, int id) {
         auto *canvas = new CanvasWidget(container);
         canvas->setAttribute(Qt::WA_TransparentForMouseEvents);
         return canvas;
+    }
+    case QSMenuBar: {
+        auto *bar = new QMenuBar(container);
+        bar->setNativeMenuBar(false);
+        QObject::connect(bar, &QMenuBar::triggered, window, [window, id](QAction *item) {
+            const int index = item->data().toInt();
+            if (index >= 0) window->event(window->context, id, QSActivate, QByteArray::number(index).constData());
+        });
+        return bar;
     }
     case QSGroup: {
         auto *group = new GroupWidget(container);

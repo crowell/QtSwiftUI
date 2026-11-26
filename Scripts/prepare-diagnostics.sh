@@ -243,6 +243,19 @@ awk 'BEGIN { print "import SwiftUI\nstruct LobbyKeyboardControls: View {"
      emit { print }
      emit && /\.accessibilityHidden\(true\)/ { done=1; exit }
      END { print "    }\n}"; if (!done) exit 1 }' "$source_dir/Calling/CallingLobby.swift" > "$target_dir/LobbyKeyboardControls.swift"
+cp "$source_dir/Components/ShortcutGuide.swift" "$target_dir/"
+# Serein's menu labels use Electron-style mnemonic escapes.
+{
+    echo 'enum MainMenu {'
+    awk '/^    public static func displayLabel\(/ {emit=1; count++}
+         emit {print} emit && /^    }$/ {emit=0}
+         END {if (count != 1 || emit) exit 1}' "$source_dir/App/MainMenu.swift"
+    echo '}'
+} > "$target_dir/MainMenu.swift"
+{
+    echo 'import SwiftUI'
+    declarations '^struct ChromiumFocusOutline<' 1 "$source_dir/Components/Modal.swift"
+} > "$target_dir/ChromiumFocusOutline.swift"
 # CallingAudioIndicator shares this color initializer with the call controls.
 awk '/^extension Color \{/ { print "import SwiftUI"; inside = 1 }
      inside { print } inside && /^}$/ { complete = 1; exit } END { if (!complete) exit 1 }' \

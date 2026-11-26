@@ -58,17 +58,19 @@ public struct TupleView<T>: Primitive {
         }
     }
 }
-public struct _ConditionalContent<TrueContent: View, FalseContent: View>: Primitive, SubviewSource {
+public struct _ConditionalContent<TrueContent, FalseContent> {
+    enum Storage { case first(TrueContent), second(FalseContent) }
+    let storage: Storage
+    init(first: TrueContent) { storage = .first(first) }
+    init(second: FalseContent) { storage = .second(second) }
+}
+extension _ConditionalContent: View, Primitive, SubviewSource where TrueContent: View, FalseContent: View {
     func subviews(in context: Context) -> [Subview] {
         switch storage {
         case .first(let view): view.collectSubviews(in: context.descending(.position(0)))
         case .second(let view): view.collectSubviews(in: context.descending(.position(1)))
         }
     }
-    enum Storage { case first(TrueContent), second(FalseContent) }
-    let storage: Storage
-    init(first: TrueContent) { storage = .first(first) }
-    init(second: FalseContent) { storage = .second(second) }
     func elements(in context: Context) -> [Element] {
         switch storage {
         case .first(let view): view.resolve(context.descending(.position(0)))

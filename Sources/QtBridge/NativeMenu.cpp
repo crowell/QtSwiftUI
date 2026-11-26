@@ -1,5 +1,6 @@
 #include "QtBridge.h"
 #include "NativeMenu.hpp"
+#include "WindowShortcuts.hpp"
 #include <QKeyEvent>
 #include <QVariant>
 
@@ -31,7 +32,7 @@ bool NativeMenu::eventFilter(QObject *source, QEvent *event) {
 }
 
 namespace {
-void removeItem(QMenu *menu, QAction *item) {
+void removeItem(QWidget *menu, QAction *item) {
     auto *submenu = item->menu();
     menu->removeAction(item);
     if (submenu) delete submenu;
@@ -41,7 +42,7 @@ void removeItem(QMenu *menu, QAction *item) {
 
 // Update actions in place so focus and an open submenu survive unrelated view updates.
 QSWidget qs_menu_item(QSWidget handle, int index, const char *title, int enabled, int checked, int separator, int submenu, int action) {
-    auto *menu = static_cast<QMenu *>(handle);
+    auto *menu = static_cast<QWidget *>(handle);
     auto *item = menu->actions().value(index);
     if (!item || bool(item->menu()) != bool(submenu)) {
         auto *replacement = submenu ? (new QMenu(menu))->menuAction() : new QAction(menu);
@@ -59,9 +60,15 @@ QSWidget qs_menu_item(QSWidget handle, int index, const char *title, int enabled
     return item->menu();
 }
 
+void qs_menu_shortcut(QSWidget handle, int index, const char *key, int modifiers, int mirror) {
+    auto *menu = static_cast<QWidget *>(handle);
+    if (auto *item = menu->actions().value(index))
+        item->setShortcut(WindowShortcuts::sequenceFor(QString::fromUtf8(key), modifiers, mirror && menu->isRightToLeft()));
+}
+
 void qs_menu_finish(QSWidget handle, int count) {
-    auto *menu = static_cast<QMenu *>(handle);
+    auto *menu = static_cast<QWidget *>(handle);
     auto items = menu->actions();
     while (items.size() > count) removeItem(menu, items.takeLast());
-    if (!count && menu->isVisible()) menu->hide();
+    if (!count && qobject_cast<QMenu *>(menu) && menu->isVisible()) menu->hide();
 }
