@@ -27,6 +27,7 @@
 #include <QFontDatabase>
 #include <QGraphicsOpacityEffect>
 #include <QEnterEvent>
+#include <QHoverEvent>
 #include <QElapsedTimer>
 #include <QLineEdit>
 #include <QInputMethodEvent>
@@ -112,6 +113,7 @@ public:
     int tapCount = 0, consecutiveTaps = 0;
     bool trackingTap = false;
     QPointF pressPosition, tapLocation;
+    std::optional<QPointF> hoverPosition;
     QElapsedTimer lastTap;
     bool accessibilityHidden = false;
     QStringList accessibilityActions;
@@ -490,6 +492,18 @@ struct QSWindow final : QWidget {
             event(context, source->property("swiftId").toInt(), QSHoverChanged, input->type() == QEvent::Enter ? "1" : "0");
         }
         auto *group = dynamic_cast<GroupWidget *>(source);
+        if (group && group->testAttribute(Qt::WA_Hover) &&
+            (input->type() == QEvent::HoverEnter || input->type() == QEvent::HoverMove || input->type() == QEvent::HoverLeave)) {
+            std::optional<QPointF> point;
+            if (input->type() != QEvent::HoverLeave) {
+                const auto position = static_cast<QHoverEvent *>(input)->scenePosition();
+                if (QRectF(group->hitBounds()).contains(group->mapFrom(this, position))) point = position;
+            }
+            if (point != group->hoverPosition) {
+                group->hoverPosition = point;
+                event(context, group->property("swiftId").toInt(), QSContinuousHover, point ? "1" : "0");
+            }
+        }
         if (input->type() == QEvent::UngrabMouse || input->type() == QEvent::Hide ||
             (input->type() == QEvent::EnabledChange && group && !group->isEnabled())) {
             for (auto *parent = qobject_cast<QWidget *>(source); parent && parent != this; parent = parent->parentWidget()) {
@@ -1266,6 +1280,11 @@ void qs_group_focus(QSWidget w, int enabled, int interactions) {
     }
     if (group->focusPolicy() != Qt::StrongFocus) group->setFocusPolicy(Qt::StrongFocus);
 }
+void qs_continuous_hover(QSWidget w) { widget(w)->setAttribute(Qt::WA_Hover); }
+QSSize qs_hover_location(QSWidget w) {
+    const auto point = static_cast<GroupWidget *>(w)->hoverPosition.value_or(QPointF());
+    return {point.x(), point.y()};
+}
 void qs_group_hover(QSWidget w, int enabled) { widget(w)->setProperty("qsHover", bool(enabled)); }
 void qs_help(QSWidget w, const char *text) { widget(w)->setToolTip(QString::fromUtf8(text)); }
 void qs_group_rotation(QSWidget w, double degrees, double anchorX, double anchorY) {
@@ -1490,7 +1509,7 @@ void qs_group_finish_layout(QSWidget w, int sizeToPositionedContent) {
     // A frame around paint-only descendants must leave the controls underneath reachable.
     const auto children = group->findChildren<QWidget *>(QString(), Qt::FindDirectChildrenOnly);
     if (!group->tapCount && !group->windowDrag && group->pointerDrag.threshold < 0 && !group->property("qsHover").toBool() &&
-        !group->testAttribute(Qt::WA_SetCursor) &&
+        !group->testAttribute(Qt::WA_SetCursor) && !group->testAttribute(Qt::WA_Hover) &&
         std::all_of(children.begin(), children.end(), [](QWidget *child) {
             return child->isHidden() || child->testAttribute(Qt::WA_TransparentForMouseEvents);
         })) group->setAttribute(Qt::WA_TransparentForMouseEvents);
@@ -1702,6 +1721,12 @@ int qs_mouse_button(QSWindow *window, const char *id, int down) {
 }
 int qs_mouse_click(QSWindow *window, const char *id) {
     return qs_mouse_button(window, id, 1) && qs_mouse_button(window, id, 0);
+}
+void qs_move_pointer(QSWindow *window, double x, double y) {
+    const QPointF local(x, y);
+    QMouseEvent move(QEvent::MouseMove, local, local, window->mapToGlobal(local), Qt::NoButton, Qt::NoButton, Qt::NoModifier);
+    QApplication::sendEvent(window->windowHandle(), &move);
+    qs_flush();
 }
 int qs_hover(QSWindow *window, const char *id, int inside) {
     for (auto *item : window->findChildren<QWidget *>(QString::fromUtf8(id))) {

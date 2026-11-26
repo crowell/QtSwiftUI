@@ -11,7 +11,7 @@ typedef struct { double x, y, width, height; } QSRect;
 typedef struct { double a, b, c, d, tx, ty; } QSAffine;
 typedef struct QSPath QSPath;
 typedef void (*QSRender)(void *context, int width, int height);
-enum QSEventKind { QSActivate, QSFocusChanged, QSSubmit, QSPressedChanged, QSExitCommand, QSHoverChanged, QSIncrement, QSDecrement, QSGestureCancelled, QSAccessibilityAction };
+enum QSEventKind { QSActivate, QSFocusChanged, QSSubmit, QSPressedChanged, QSExitCommand, QSHoverChanged, QSContinuousHover, QSIncrement, QSDecrement, QSGestureCancelled, QSAccessibilityAction };
 typedef void (*QSEvent)(void *context, int id, enum QSEventKind kind, const char *value);
 enum QSKind { QSLabel, QSButton, QSToggle, QSEdit, QSSecureEdit, QSSurface, QSScroll, QSSlider, QSProgress, QSGroup, QSCanvas, QSLink, QSRaster, QSTextEditor, QSAttributedLabel, QSBusyIndicator, QSMultilineField };
 
@@ -99,6 +99,8 @@ void qs_group(QSWidget, int behavior, int isImage, int updatesFrequently, const 
 void qs_adjustable(QSWidget, int adjustable);
 void qs_group_hidden(QSWidget, int hidden);
 void qs_group_hover(QSWidget, int enabled);
+void qs_continuous_hover(QSWidget);
+QSSize qs_hover_location(QSWidget);
 typedef struct { double time, startX, startY, x, y, velocityX, velocityY; int ended; } QSDragSample;
 typedef void (*QSDragHandler)(void *context, int id, QSDragSample sample);
 void qs_set_drag_handler(QSWindow *, QSDragHandler);
@@ -156,6 +158,7 @@ int qs_scroll_to_start(QSWindow *);
 int qs_scroll_wheel(QSWindow *, int x, int y, int steps);
 int qs_can_overshoot(QSWindow *, int horizontal);
 int qs_hover(QSWindow *, const char *identifier, int inside);
+void qs_move_pointer(QSWindow *, double x, double y);
 int qs_has_help(QSWindow *, const char *identifier, const char *expected);
 int qs_is_named_link(QSWindow *, const char *identifier, const char *name);
 int qs_select_text(QSWindow *, const char *identifier, int start, int length, const char *expected);
