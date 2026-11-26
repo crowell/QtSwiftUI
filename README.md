@@ -6,6 +6,10 @@ Serein’s production `SignalSafe` executable builds on Ubuntu ARM64 and opens i
 
 ![Serein’s production device-link window on Ubuntu ARM64](Screenshots/serein-linux.png)
 
+In a separate Docker run, Serein provisioned a disposable device with Signal's local test server and opened its Chats screen. The server and the release executable shared an isolated loopback network. The screenshot shows the newly linked inbox before any messages arrived.
+
+![Newly linked Serein inbox in the release executable on Ubuntu ARM64](Screenshots/serein-linux-inbox.png)
+
 The entry point and all eight worker executables in this Docker package were built in release configuration. Choosing Help → About in the desktop app opens Serein’s own About view in a second Qt window. Escape closes About and leaves the installer running. `WindowGroup` also accepts typed presentation values. Opening an existing value activates its window, and changing the binding updates which value will find that window. `Settings`, `SettingsLink`, and the application menu’s Ctrl+, shortcut share a single settings window. Scenes can request or suppress presentation at launch.
 
 ![Serein’s About window opened from the Linux desktop menu](Screenshots/serein-linux-about.png)
