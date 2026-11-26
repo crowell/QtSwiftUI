@@ -163,7 +163,7 @@ public struct GraphicsContext {
                                   lineWidth: lineWidth, environment: environment, clip: region, filters: filters))
     }
 
-    @MainActor fileprivate func replay(on widget: UnsafeMutableRawPointer) {
+    @MainActor fileprivate func replay(on widget: UnsafeMutableRawPointer, host: Host) {
         qs_canvas_clear(widget)
         for drawing in list.drawings {
             drawing.path.withNativePath {
@@ -187,6 +187,9 @@ public struct GraphicsContext {
             switch shading.paint {
             case .style(let style):
                 switch style.paint(in: environment) {
+                case .material(let material):
+                    host.hasMaterial = true
+                    qs_canvas_material(widget, material.radius, material.tint.argb(environment.colorScheme))
                 case .color(let color): qs_canvas_color(widget, color.hex(environment.colorScheme))
                 case .linear(let gradient): gradient.shade(widget, bounds: drawing.path.boundingRect, environment: environment)
                 }
@@ -207,7 +210,7 @@ public struct Canvas<Symbols: View>: Primitive {
         return [Element { $0.replacingUnspecifiedDimensions() } place: { bounds, _ in
             var graphics = GraphicsContext(list: .init(), region: .init(bounds: CGRect(origin: .zero, size: bounds.size)), environment: context.environment)
             renderer(&graphics, bounds.size)
-            graphics.replay(on: widget)
+            graphics.replay(on: widget, host: context.host)
             qs_place(widget, bounds.minX, bounds.minY, bounds.width, bounds.height)
         }]
     }

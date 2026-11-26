@@ -1,25 +1,33 @@
 import QtBridge
 
 public protocol ShapeStyle: Sendable {
-    associatedtype Resolved: ShapeStyle
+    associatedtype Resolved: ShapeStyle = Never
     func resolve(in environment: EnvironmentValues) -> Resolved
 }
+extension Never: ShapeStyle {}
+
+extension ShapeStyle where Resolved == Never {
+    public func resolve(in environment: EnvironmentValues) -> Never { fatalError("Primitive shape styles are rendered directly") }
+}
+
 extension ShapeStyle {
     func paint(in environment: EnvironmentValues) -> ResolvedPaint {
         if let color = self as? Color { return .color(color) }
         if let components = self as? Color.Resolved { return .color(components.color) }
         if let gradient = self as? LinearGradient { return .linear(gradient) }
+        if let material = self as? Material { return .material(material) }
         if let erased = self as? AnyShapeStyle { return erased.resolvedPaint(in: environment) }
         return resolve(in: environment).paint(in: environment)
     }
 }
 
 enum ResolvedPaint: Sendable {
-    case color(Color), linear(LinearGradient)
+    case color(Color), linear(LinearGradient), material(Material)
 
     var representativeColor: Color {
         switch self {
         case .color(let color): color
+        case .material(let material): material.tint
         case .linear(let style): style.gradient.gradient.stops.first?.color ?? .clear
         }
     }
@@ -29,7 +37,7 @@ public struct Color: ShapeStyle, Primitive, Hashable, Sendable {
     private nonisolated init(rgb: UInt32, dark: UInt32? = nil) {
         self.light = 0xff000000 | rgb; self.dark = 0xff000000 | (dark ?? rgb)
     }
-    private nonisolated init(light: UInt32, dark: UInt32) { self.light = light; self.dark = dark }
+    nonisolated init(light: UInt32, dark: UInt32) { self.light = light; self.dark = dark }
     public enum RGBColorSpace: Sendable { case sRGB, sRGBLinear, displayP3 }
     public nonisolated init(_ colorSpace: RGBColorSpace = .sRGB, red: Double, green: Double, blue: Double, opacity: Double = 1) {
         func linear(_ c: Double) -> Double { c <= 0.04045 ? c / 12.92 : pow((c + 0.055) / 1.055, 2.4) }
@@ -240,6 +248,10 @@ struct FilledShape<S: Shape, Style: ShapeStyle>: Primitive {
         case .color(let color):
             widget = context.widget(QSSurface)
             qs_surface(widget, color.hex(context.environment.colorScheme), 0)
+        case .material(let material):
+            widget = context.widget(QSSurface)
+            context.host.hasMaterial = true
+            qs_surface_material(widget, material.radius, material.tint.argb(context.environment.colorScheme))
         case .linear:
             widget = context.widget(QSCanvas)
         }
@@ -251,7 +263,7 @@ struct FilledShape<S: Shape, Style: ShapeStyle>: Primitive {
             let bounds = CGRect(origin: .zero, size: rect.size)
             shape.displayPath(in: bounds, context: context).withNativePath { path in
                 switch paint {
-                case .color:
+                case .color, .material:
                     qs_surface_path(widget, path, fill.isEOFilled ? 1 : 0, fill.isAntialiased ? 1 : 0)
                 case .linear(let gradient):
                     qs_canvas_clear(widget)

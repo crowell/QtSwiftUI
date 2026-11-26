@@ -114,9 +114,13 @@ void qs_path_clip(QSPath *target, const QSPath *source, int evenOdd, int inverse
 void qs_path_trim(QSPath *target, const QSPath *source, double from, double to);
 void qs_canvas_clip(QSWidget, const QSPath *);
 void qs_canvas_blur(QSWidget, double radius, unsigned blurOptions, unsigned filterOptions);
+void qs_surface_material(QSWidget, double radius, unsigned tint);
+void qs_window_materials(QSWindow *);
+void qs_compositing_group(QSWidget);
 void qs_surface_path(QSWidget, const QSPath *, int evenOdd, int antialias);
 void qs_canvas_clear(QSWidget);
 void qs_canvas_path(QSWidget, const QSPath *, QSAffine, double opacity, double lineWidth, int evenOdd, int antialias);
+void qs_canvas_material(QSWidget, double radius, unsigned tint);
 void qs_canvas_color(QSWidget, const char *color);
 typedef struct { double location; unsigned int argb; } QSGradientStop;
 void qs_canvas_gradient(QSWidget, double x1, double y1, double x2, double y2, unsigned options,

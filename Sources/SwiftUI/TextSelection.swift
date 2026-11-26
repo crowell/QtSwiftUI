@@ -10,6 +10,6 @@ extension View {
     public func tracking(_ tracking: CGFloat) -> some View { environment(\.tracking, tracking) }
     @_disfavoredOverload
     public func background<S: ShapeStyle>(_ style: S, ignoresSafeAreaEdges edges: Edge.Set = .all) -> some View {
-        background(Rectangle().fill(style))
+        background(style, in: Rectangle())
     }
 }

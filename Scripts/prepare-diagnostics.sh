@@ -256,10 +256,8 @@ cp "$source_dir/Components/ShortcutGuide.swift" "$target_dir/"
     echo 'import SwiftUI'
     declarations '^struct ChromiumFocusOutline<' 1 "$source_dir/Components/Modal.swift"
 } > "$target_dir/ChromiumFocusOutline.swift"
-# CallingAudioIndicator shares this color initializer with the call controls.
-awk '/^extension Color \{/ { print "import SwiftUI"; inside = 1 }
-     inside { print } inside && /^}$/ { complete = 1; exit } END { if (!complete) exit 1 }' \
-    "$source_dir/Calling/CallingButton.swift" > "$target_dir/CallingColor.swift"
+cp "$source_dir/Calling/CallingButton.swift" "$source_dir/Calling/CallControls.swift" "$source_dir/Calling/CallingHeader.swift" \
+   "$source_dir/Calling/CallingLobby.swift" "$source_dir/Calling/CallingPreCallInfo.swift" "$source_dir/Components/Tooltip.swift" "$target_dir/"
 # The panel's optional live NSVisualEffectView is specific to AppKit.
 awk '/^import AppKit/ || /\.background \{ if backdropBlur/ { print "#if canImport(AppKit)"; print; print "#endif"; next }
      /^struct WithinWindowBlur:/ { print "#if canImport(AppKit)"; blur = 1 }
@@ -284,7 +282,6 @@ awk '/^    @MainActor func width\(i18n:/ { skip=1; count++ }
     echo 'import SignalI18n'
     declarations '^extension RGBA ' 1 "$source_dir/Components/Conversation/Quote.swift"
     declarations '^public enum BubbleColor:|^struct BubbleFill:' 2 "$source_dir/Components/Conversation/Message/Message.swift"
-    declarations '^struct UndimmedButtonStyle:' 1 "$source_dir/Calling/CallingButton.swift"
     awk 'BEGIN { print "extension EnvironmentValues {" } /@Entry public var messageContainerMaxWidth:/ { print; count++ }
          END { print "}"; if (count!=1) exit 1 }' "$source_dir/Components/Conversation/Message/Message.swift"
     declarations '^public enum FormatTimestamp ' 1 "$source_dir/Components/LeftPaneDialogs.swift"

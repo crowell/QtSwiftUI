@@ -139,6 +139,7 @@ enum Part: Hashable {
     let matches = GeometryMatches()
     let transitions = ViewTransitions()
     private var pendingTransaction: Transaction?
+    var hasMaterial = false
     private var afterRender: [() -> Void] = []
     // Fitting a candidate may need Qt font and control metrics. Only the chosen
     // branch keeps its widgets and receives focus, lifecycle and layout callbacks.
@@ -264,6 +265,7 @@ enum Part: Hashable {
         context.environment.closePresentation = { [weak self] in
             if let window = self?.window { qs_request_close(window) }
         }
+        hasMaterial = false
         qs_shortcut_begin(window)
         let roots = content(context)
         let root = stacked(roots, axis: .vertical, alignment: .center, spacing: 8)
@@ -285,6 +287,7 @@ enum Part: Hashable {
                 qs_destroy(mount.widget)
             }
         }
+        if hasMaterial && drawable { qs_window_materials(window) }
         qs_shortcut_finish(window)
         storage = storage.filter { liveStorage.contains($0.key) }
         return drawable ? size : .zero

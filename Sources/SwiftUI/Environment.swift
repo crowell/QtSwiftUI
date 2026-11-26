@@ -28,6 +28,7 @@ public struct EnvironmentValues {
         get { custom[ObjectIdentifier(key)] as? K.Value ?? K.defaultValue }
         set { custom[ObjectIdentifier(key)] = newValue }
     }
+    public var backgroundMaterial: Material?
     public var scenePhase: ScenePhase = .background
     public var colorScheme: ColorScheme = .light
     public var layoutDirection: LayoutDirection = Locale.current.language.characterDirection == .rightToLeft ? .rightToLeft : .leftToRight

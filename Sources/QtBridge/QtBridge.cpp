@@ -8,6 +8,7 @@
 #include "AttributedLabel.hpp"
 #include "PlainLabel.hpp"
 #include "CanvasBlur.hpp"
+#include "MaterialBackdrop.hpp"
 #include "PointerDrag.hpp"
 #include "Magnification.hpp"
 #include "NativeMenu.hpp"
@@ -465,6 +466,8 @@ class Surface final : public QWidget {
 public:
     using QWidget::QWidget;
     QColor fill;
+    double materialRadius = 0;
+    MaterialBackdrop backdrop;
     QPainterPath path;
     bool customPath = false, antialias = true;
     double radius = 0;
@@ -476,7 +479,11 @@ public:
         painter.setBrush(fill);
         const auto logical = property("qsSize").toSizeF();
         const double r = std::min(radius, std::min(logical.width(), logical.height()) / 2.0);
-        if (customPath) painter.drawPath(path);
+        if (materialRadius > 0 && !backdrop.pixels.isNull()) {
+            painter.setClipPath(path);
+            painter.setRenderHint(QPainter::SmoothPixmapTransform);
+            painter.drawImage(backdrop.region, backdrop.pixels);
+        } else if (customPath) painter.drawPath(path);
         else painter.drawRoundedRect(QRectF(QPointF(), logical), r, r);
     }
 };
@@ -492,6 +499,8 @@ struct Drawing {
     std::vector<CanvasBlur> filters;
     std::optional<RasterContent> image;
     bool shadeImage = false;
+    double materialRadius = 0;
+    MaterialBackdrop backdrop;
 };
 class CanvasWidget final : public QWidget {
 public:
@@ -500,7 +509,22 @@ public:
     void paintEvent(QPaintEvent *) override {
         QPainter painter(this);
         painter.translate(property("qsFraction").toPointF());
-        for (const auto &drawing : drawings) {
+        paintUntil(painter, drawings.size());
+    }
+    void refreshMaterials() {
+        for (size_t i = 0; i < drawings.size(); ++i) {
+            auto &drawing = drawings[i];
+            if (drawing.materialRadius <= 0) continue;
+            drawing.backdrop = MaterialBackdrop::read(this, drawing.materialRadius, drawing.color, [this, i](QPainter &painter) {
+                paintUntil(painter, i);
+            });
+            update();
+        }
+    }
+private:
+    void paintUntil(QPainter &painter, size_t end) {
+        for (size_t i = 0; i < end; ++i) {
+            const auto &drawing = drawings[i];
             painter.save();
             if (drawing.clip) painter.setClipPath(*drawing.clip);
             painter.setOpacity(drawing.opacity);
@@ -513,7 +537,16 @@ private:
     static void paintSource(QPainter &painter, const Drawing &drawing) {
         painter.setRenderHint(QPainter::Antialiasing, drawing.antialias);
         painter.setTransform(drawing.matrix, true);
-        const QBrush brush = drawing.gradient ? QBrush(*drawing.gradient) : QBrush(drawing.color);
+        QBrush brush = drawing.gradient ? QBrush(*drawing.gradient) : QBrush(drawing.color);
+        const auto &backdrop = drawing.backdrop;
+        if (!backdrop.pixels.isNull()) {
+            brush.setTextureImage(backdrop.pixels);
+            QTransform mapping;
+            mapping.translate(backdrop.region.x(), backdrop.region.y());
+            mapping.scale(double(backdrop.region.width()) / backdrop.pixels.width(), double(backdrop.region.height()) / backdrop.pixels.height());
+            brush.setTransform(mapping * drawing.matrix.inverted());
+            painter.setRenderHint(QPainter::SmoothPixmapTransform);
+        }
         if (drawing.image) {
             const auto rect = drawing.path.boundingRect();
             painter.save();
@@ -1363,6 +1396,8 @@ void qs_style(QSWidget w, const char *family, double points, int weight, int ita
 }
 void qs_surface(QSWidget w, const char *color, double radius) {
     auto *surface = static_cast<Surface *>(w);
+    surface->materialRadius = 0;
+    surface->backdrop = {};
     surface->fill = QColor(QString::fromUtf8(color));
     surface->radius = radius;
     surface->update();
@@ -1438,6 +1473,22 @@ void qs_group_semantics(QSWidget w, int heading, int modal) {
     group->modal = modal;
     group->exposeChildren = !heading || modal;
 }
+void qs_surface_material(QSWidget w, double radius, unsigned tint) {
+    auto *surface = static_cast<Surface *>(w);
+    surface->materialRadius = radius;
+    surface->fill = QColor::fromRgba(tint);
+}
+void qs_window_materials(QSWindow *window) {
+    // Read back after native widgets have their final geometry and stacking order.
+    for (auto *child : window->findChildren<QWidget *>()) {
+        if (auto *canvas = dynamic_cast<CanvasWidget *>(child); canvas && canvas->isVisibleTo(window)) canvas->refreshMaterials();
+        auto *surface = dynamic_cast<Surface *>(child);
+        if (surface && surface->materialRadius > 0 && surface->isVisibleTo(window)) {
+            surface->backdrop = MaterialBackdrop::read(surface, surface->materialRadius, surface->fill);
+            surface->update();
+        }
+    }
+}
 void qs_surface_path(QSWidget w, const QSPath *path, int evenOdd, int antialias) {
     auto *surface = static_cast<Surface *>(w);
     surface->customPath = true;
@@ -1464,6 +1515,11 @@ void qs_canvas_image(QSWidget w, QSRasterImage source, int shaded) {
 void qs_canvas_blur(QSWidget w, double radius, unsigned blurOptions, unsigned filterOptions) {
     if (std::isfinite(radius) && radius > 0)
         static_cast<CanvasWidget *>(w)->drawings.back().filters.push_back({radius, blurOptions, filterOptions});
+}
+void qs_canvas_material(QSWidget w, double radius, unsigned tint) {
+    auto &drawing = static_cast<CanvasWidget *>(w)->drawings.back();
+    drawing.materialRadius = radius;
+    drawing.color = QColor::fromRgba(tint);
 }
 void qs_canvas_color(QSWidget w, const char *color) {
     static_cast<CanvasWidget *>(w)->drawings.back().color = QColor(QString::fromUtf8(color));
@@ -1712,6 +1768,18 @@ QSWidget qs_transition_snapshot(QSWindow *window, QSWidget w) {
     return layer;
 }
 
+// Give ancestor effects one premultiplied source image for the entire subtree.
+class CompositingGroup final : public QGraphicsEffect {
+    void draw(QPainter *painter) override {
+        QPoint offset;
+        const auto source = sourcePixmap(Qt::LogicalCoordinates, &offset, NoPad);
+        painter->drawPixmap(offset, source);
+    }
+};
+void qs_compositing_group(QSWidget w) {
+    auto *group = widget(w);
+    if (!group->graphicsEffect()) group->setGraphicsEffect(new CompositingGroup());
+}
 void qs_group_opacity(QSWidget w, double value) {
     auto *item = widget(w);
     value = qBound(0.0, value, 1.0);

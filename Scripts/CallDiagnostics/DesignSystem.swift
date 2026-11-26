@@ -145,7 +145,7 @@ private struct BalancedTextLayout: Layout {
     }
 }
 
-struct CSSText: View {
+public struct CSSText: View {
     let value: String
     let type: AxoType
     let wrap: CSSTextWrap
@@ -240,7 +240,7 @@ struct CSSText: View {
                 .frame(maxWidth: wrapWidth, minHeight: type.lineHeight, alignment: .leading)
         }
     }
-    var body: some View {
+    public var body: some View {
         Group {
             if let color { label.foregroundStyle(color) } else { label }
         }.multilineTextAlignment(alignment)
