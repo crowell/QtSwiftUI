@@ -12,7 +12,7 @@ From a checkout with Docker running, this command builds the Ubuntu 24.04 image,
 ./Scripts/verify-linux.sh
 ```
 
-Pass a Serein checkout to render its call history, call-link details, participant approval, contact details and note, About window, nickname editor, call settings, data usage settings, call-quality survey, chat-color picker and custom editor, media gallery, voice-note controls, data-clearing and device-link screens, leave-call dialog, call diagnostics window, device card and artwork.
+Pass a Serein checkout to render its inbox, call history, call-link details, participant approval, contact details and note, About window, nickname editor, call settings, data usage settings, call-quality survey, chat-color picker and custom editor, media gallery, voice-note controls, data-clearing and device-link screens, leave-call dialog, call diagnostics window, device card and artwork.
 
 ```sh
 ./Scripts/verify-linux.sh ../serein
@@ -77,6 +77,10 @@ Serein’s voice-note recorder runs with sample peaks and a fixed 1:23 timer. Th
 The call-history preview compiles Serein’s `CallsList`, search field, avatars, call buttons, missed filter and localized timestamps. It uses eight sample records and a fixed clock. The preview filters those records in memory. The tests select calls, search by name, receive Join and Create a Call Link callbacks, and select the last call after scrolling. The standalone pane has no calling service or persistent history.
 
 ![Serein call history on Ubuntu](Screenshots/call-history.png)
+
+The `--inbox` example runs Serein’s `Inbox` and `NavTabs` with the call history, empty chat list and call settings panels. Its unread badge uses Serein’s own horizontal and vertical alignment guides. Shared tests switch tabs, collapse and restore the rail, and open the call-link manager. Layout tests check explicit guide propagation, custom alignment IDs, and badge placement in both writing directions. At 560 × 520 the mean absolute RGB difference from Apple was 1.52/255. Set `QTSWIFTUI_INBOX_REFERENCE` to an existing directory to capture the Apple rendering.
+
+![Serein inbox and navigation rail on Ubuntu](Screenshots/inbox.png)
 
 [Missed calls on Ubuntu](Screenshots/call-history-missed.png). Set `QTSWIFTUI_HISTORY_REFERENCE` to an existing directory when running the Apple checks to capture both reference states.
 
@@ -150,7 +154,7 @@ The target is source compatibility with Apple's public SwiftUI APIs. The impleme
 
 `./Scripts/check-apple.sh ../serein` type-checks the example source with Apple's SwiftUI module on a Mac with Xcode. `./Scripts/check-api.sh` extracts public symbol graphs from Xcode and the Linux image. Pass `--missing` to list missing declaration paths. The inventory groups declarations by symbol kind and path, counts overload spellings separately, and excludes underscored and synthesized members. A shared name alone cannot establish matching signatures, constraints, availability or behavior.
 
-The inventory against the macOS 27.2 SDK found 1,190 shared declaration paths out of 7,627 and 750 identical declaration spellings out of 8,735. The examples exercise a smaller set at runtime. Navigation, multiwindow scenes, broader animation support, text shaping parity, gestures and platform integration remain substantial gaps. Font metrics, control appearance and several layout behaviors differ from Apple's implementation.
+The inventory against the macOS 27.2 SDK found 1,197 shared declaration paths out of 7,627 and 756 identical declaration spellings out of 8,735. The examples exercise a smaller set at runtime. Navigation, multiwindow scenes, broader animation support, text shaping parity, gestures and platform integration remain substantial gaps. Font metrics, control appearance and several layout behaviors differ from Apple's implementation.
 
 After capturing the Linux examples, run `./Scripts/compare-artwork.sh ../serein` on macOS to render both illustrations with Apple's `ImageRenderer`. At a threshold of 8/255 in any RGB channel, 101 of 119,680 account artwork pixels (0.084%) and 91 of 49,928 key transparency pixels (0.182%) differed. The mean absolute channel differences were 0.104/255 and 0.095/255 respectively. Both reference images are saved in `.build/artwork/`.
 

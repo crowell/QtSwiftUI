@@ -227,6 +227,19 @@ cp "$source_dir/Components/Conversation/AboutContactModal.swift" "$source_dir/Co
 awk '!/^import AppKit$/ {printLine=$0; gsub(/NSWorkspace.shared.open/, "openURL", printLine); print printLine
      if (/^public struct (About|NotePreviewModal):/) {print "    @Environment(\\.openURL) private var openURL"; count++}}
      END {if (count!=2) exit 1}' "$target/ContactDialogs.swift" > "$target_dir/ContactDialogs.swift"
+cp "$source_dir/Components/Inbox.swift" "$source_dir/Components/NavTabs.swift" "$target_dir/"
+{
+    echo 'import SwiftUI'
+    declarations '^struct LeftPaneEmptyView<' 1 "$source_dir/Components/LeftPane/LeftPane.swift"
+    echo 'struct EmptyChatsPreview: View {'
+    echo '    @Environment(\.i18n) var i18n'
+    echo '    var body: some View {'
+    awk '/^        return AnyView\(LeftPaneEmptyView \{/ {inside=1; count++}
+         inside {print} /^        \}\)/ {inside=0}
+         END {if (count!=1 || inside) exit 1}' "$source_dir/Components/LeftPane/LeftPaneInboxHelper.swift"
+    echo '    }'
+    echo '}'
+} > "$target_dir/EmptyChats.swift"
 # Keep all original item slots and use portable font metrics for the icon baseline.
 awk '!/^import CoreText$/ {
          if (/let font = CSSTextStyle.*\.ctFont/) { print "            let font = AxoFonts.interMetrics(size: size)"; metrics++; next }

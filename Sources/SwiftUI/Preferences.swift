@@ -125,7 +125,7 @@ extension View {
                 let offer = ProposedViewSize(bounds.size)
                 let value = values.producer()?() ?? K.defaultValue
                 for child in transform(value).resolve(target) {
-                    child.place(alignment.rect(child.measure(offer), in: area, direction: target.environment.layoutDirection), offer)
+                    child.place(alignment.rect(for: child, size: child.measure(offer), proposal: offer, in: area, parent: base, parentProposal: proposal, direction: target.environment.layoutDirection), offer)
                 }
             }
             return [result]

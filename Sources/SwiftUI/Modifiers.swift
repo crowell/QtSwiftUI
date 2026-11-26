@@ -125,7 +125,7 @@ extension View {
                 .init(width: p.width.map { max(0, $0 - w) }, height: p.height.map { max(0, $0 - h) })
             }
             return view.resolve(ctx).map { child in
-                child.wrapping { p in
+                let padded = child.wrapping { p in
                     let size = child.measure(inner(p))
                     return CGSize(width: size.width + w, height: size.height + h)
                 } baselines: { p, _ in
@@ -134,6 +134,10 @@ extension View {
                     child.place(CGRect(origin: CGPoint(x: rect.minX + left, y: rect.minY + insets.top),
                                        size: child.measure(inner(p))), inner(p))
                 }
+                padded.translateGuides(from: child) { p, _ in
+                    (CGRect(origin: CGPoint(x: insets.leading, y: insets.top), size: child.measure(inner(p))), inner(p))
+                }
+                return padded
             }
         }
     }
@@ -168,25 +172,34 @@ extension View {
                     }
                     return (offer, child.measure(offer))
                 }
-                return child.wrapping { p in
+                let framed = child.wrapping { p in
                     let (offer, size) = measured(p)
                     return CGSize(width: dimension(size.width, offer.width, minWidth, maxWidth),
                                   height: dimension(size.height, offer.height, minHeight, maxHeight))
                 } baselines: { p, outer in
                     let (offer, size) = measured(p)
-                    let y = alignment.rect(size, in: CGRect(origin: .zero, size: outer)).minY
+                    let y = alignment.rect(for: child, size: size, proposal: offer, in: CGRect(origin: .zero, size: outer)).minY
                     return child.baselines?(offer, size)?.offset(by: y)
                 } place: { bounds, p in
                     let (offer, size) = measured(p)
-                    child.place(alignment.rect(size, in: bounds, direction: ctx.environment.layoutDirection), offer)
+                    child.place(alignment.rect(for: child, size: size, proposal: offer, in: bounds, direction: ctx.environment.layoutDirection), offer)
                 }
+                framed.translateGuides(from: child) { p, outer in
+                    let (offer, size) = measured(p)
+                    return (alignment.rect(for: child, size: size, proposal: offer, in: CGRect(origin: .zero, size: outer)), offer)
+                }
+                return framed
             }
         }
     }
     public func fixedSize(horizontal: Bool, vertical: Bool) -> some View {
         Transform(content: self) { view, ctx in
             func offer(_ p: ProposedViewSize) -> ProposedViewSize { .init(width: horizontal ? nil : p.width, height: vertical ? nil : p.height) }
-            return view.resolve(ctx).map { child in child.wrapping { child.measure(offer($0)) } baselines: { p, size in child.baselines?(offer(p), size) } place: { child.place($0, offer($1)) } }
+            return view.resolve(ctx).map { child in
+                let fixed = child.wrapping { child.measure(offer($0)) } baselines: { p, size in child.baselines?(offer(p), size) } place: { child.place($0, offer($1)) }
+                fixed.translateGuides(from: child) { p, size in (CGRect(origin: .zero, size: size), offer(p)) }
+                return fixed
+            }
         }
     }
     public func fixedSize() -> some View { fixedSize(horizontal: true, vertical: true) }
@@ -222,11 +235,8 @@ private nonisolated struct DecoratedView<Content: View, Decoration: View>: View 
                     if above { child.place(bounds, p) }
                     for decoration in decorations {
                         let size = decoration.measure(proposal)
-                        var rect = alignment.rect(size, in: bounds, direction: ctx.environment.layoutDirection)
-                        if alignment.vertical.isBaseline {
-                            rect.origin.y = bounds.minY + child.baseline(alignment.vertical, proposal: p, size: bounds.size)
-                                - decoration.baseline(alignment.vertical, proposal: proposal, size: size)
-                        }
+                        let rect = alignment.rect(for: decoration, size: size, proposal: proposal, in: bounds, parent: child,
+                                                  parentProposal: p, direction: ctx.environment.layoutDirection)
                         decoration.place(rect, proposal)
                     }
                     if !above { child.place(bounds, p) }

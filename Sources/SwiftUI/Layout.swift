@@ -18,17 +18,6 @@ public struct UnitPoint: Hashable, Sendable {
     public static let topLeading = zero, topTrailing = Self(x: 1, y: 0)
     public static let bottomLeading = Self(x: 0, y: 1), bottomTrailing = Self(x: 1, y: 1)
 }
-public struct HorizontalAlignment: Hashable, Sendable {
-    let factor: CGFloat
-    public static let leading = Self(factor: 0), center = Self(factor: 0.5), trailing = Self(factor: 1)
-}
-public struct VerticalAlignment: Hashable, Sendable {
-    let factor: CGFloat
-    public static let top = Self(factor: 0), center = Self(factor: 0.5), bottom = Self(factor: 1)
-    private(set) var isBaseline = false
-    public static let firstTextBaseline = Self(factor: 0, isBaseline: true)
-    public static let lastTextBaseline = Self(factor: 1, isBaseline: true)
-}
 public struct Alignment: Hashable, Sendable {
     public var horizontal: HorizontalAlignment
     public var vertical: VerticalAlignment
@@ -46,8 +35,11 @@ public struct Alignment: Hashable, Sendable {
     public static var trailingLastTextBaseline: Self { .init(horizontal: .trailing, vertical: .lastTextBaseline) }
 
     func rect(_ size: CGSize, in bounds: CGRect, direction: LayoutDirection = .leftToRight) -> CGRect {
-        let rect = CGRect(x: bounds.minX + (bounds.width - size.width) * horizontal.factor,
-                          y: bounds.minY + (bounds.height - size.height) * vertical.factor, width: size.width, height: size.height)
+        rect(ViewDimensions(size: size), in: bounds, alignedTo: ViewDimensions(size: bounds.size), direction: direction)
+    }
+    func rect(_ child: ViewDimensions, in bounds: CGRect, alignedTo parent: ViewDimensions, direction: LayoutDirection) -> CGRect {
+        let rect = CGRect(x: bounds.minX + parent[horizontal] - child[horizontal],
+                          y: bounds.minY + parent[vertical] - child[vertical], width: child.width, height: child.height)
         return direction.position(rect, in: bounds)
     }
 }
@@ -66,6 +58,7 @@ public enum Axis: Int8, CaseIterable, Sendable {
 @MainActor final class Element {
     let sizing: (ProposedViewSize) -> CGSize
     let place: (CGRect, ProposedViewSize) -> Void
+    var guides: [AlignmentKey: (ProposedViewSize, CGSize) -> CGFloat?] = [:]
     var baselines: ((ProposedViewSize, CGSize) -> TextBaselines?)?
     var values: [ObjectIdentifier: Any] = [:]
     var sizesGroupToPositionedContent = false
@@ -79,14 +72,11 @@ public enum Axis: Int8, CaseIterable, Sendable {
                   baselines: ((ProposedViewSize, CGSize) -> TextBaselines?)? = nil, place: @escaping (CGRect, ProposedViewSize) -> Void) -> Element {
         let wrapper = Element(size: size, place: place)
         wrapper.baselines = baselines ?? self.baselines
+        wrapper.guides = guides
         wrapper.values = values
         wrapper.isSpacer = isSpacer
         wrapper.priority = priority
         return wrapper
-    }
-    func baseline(_ guide: VerticalAlignment, proposal: ProposedViewSize, size: CGSize) -> CGFloat {
-        guard let values = baselines?(proposal, size) else { return size.height }
-        return guide == .firstTextBaseline ? values.first : values.last
     }
     func measure(_ proposal: ProposedViewSize) -> CGSize {
         if let known = measured[proposal] { return known }
@@ -111,6 +101,23 @@ extension View {
     static func draw(_ placements: [Self]) {
         let ordered = placements.contains { $0.depth != 0 } ? placements.sorted { $0.depth < $1.depth } : placements
         for item in ordered { item.child.place(item.rect, item.proposal) }
+    }
+}
+
+private extension Element {
+    func combineGuides(from children: [Element], direction: LayoutDirection,
+                       placements: @escaping (ProposedViewSize, CGSize) -> [Placement]) {
+        for key in Set(children.flatMap { $0.guides.keys }) {
+            guard key.custom != nil || key == VerticalAlignment.firstTextBaseline.key || key == VerticalAlignment.lastTextBaseline.key else { continue }
+            guides[key] = { p, size in
+                let values = placements(p, size).map { item -> CGFloat? in
+                    let x = direction == .leftToRight ? item.rect.minX : size.width - item.rect.maxX
+                    let offset = key.vertical ? item.rect.minY : x
+                    return item.child.explicitValue(key, item.proposal, item.rect.size).map { $0 + offset }
+                }
+                return key.combine(values)
+            }
+        }
     }
 }
 
@@ -155,23 +162,28 @@ extension View {
         return result
     }
     typealias Item = (CGSize, ProposedViewSize)
-    let alignsBaselines = axis == .horizontal && alignment.vertical.isBaseline
+    let crossGuide = axis == .horizontal ? alignment.vertical.key : alignment.horizontal.key
+    let alignsGuides = crossGuide.custom != nil || (axis == .horizontal && alignment.vertical.isBaseline)
+        || children.contains { $0.guides[crossGuide] != nil }
     func offsets(_ items: [Item]) -> [CGFloat] {
         zip(children, items).map { child, item in
-            child.baseline(alignment.vertical, proposal: item.1, size: item.0)
+            child.coordinate(crossGuide, item.1, item.0)
         }
     }
     func placements(in bounds: CGRect, items: [Item]) -> [Placement] {
         var cursor = axis == .horizontal ? bounds.minX : bounds.minY
-        let guides = alignsBaselines ? offsets(items) : []
+        let guides = alignsGuides ? offsets(items) : []
         let shared = guides.max() ?? 0
         return children.indices.map { i in
             let (size, offer) = items[i]
             var rect = alignment.rect(size, in: bounds)
             if axis == .horizontal {
                 rect.origin.x = cursor
-                if alignsBaselines { rect.origin.y = bounds.minY + shared - guides[i] }
-            } else { rect.origin.y = cursor }
+                if alignsGuides { rect.origin.y = bounds.minY + shared - guides[i] }
+            } else {
+                rect.origin.y = cursor
+                if alignsGuides { rect.origin.x = bounds.minX + shared - guides[i] }
+            }
             cursor += size[keyPath: axis.main] + spacing
             return Placement(child: children[i], rect: direction.position(rect, in: bounds), proposal: offer)
         }
@@ -181,16 +193,19 @@ extension View {
         var size = CGSize.zero
         size[keyPath: axis.main] = gap + items.reduce(0) { $0 + $1.0[keyPath: axis.main] }
         size[keyPath: axis.cross] = items.map { $0.0[keyPath: axis.cross] }.max() ?? 0
-        if alignsBaselines {
+        if alignsGuides {
             let guides = offsets(items)
-            let below = zip(items, guides).map { $0.0.0.height - $0.1 }.max() ?? 0
-            size.height = (guides.max() ?? 0) + below
+            let after = zip(items, guides).map { $0.0.0[keyPath: axis.cross] - $0.1 }.max() ?? 0
+            size[keyPath: axis.cross] = (guides.max() ?? 0) + after
         }
         return size
     } place: { bounds, p in Placement.draw(placements(in: bounds, items: arrange(p))) }
     stack.baselines = { proposal, size in
         TextBaselines.combining(placements(in: CGRect(origin: .zero, size: size), items: arrange(proposal))
             .compactMap { $0.child.baselines?($0.proposal, $0.rect.size)?.offset(by: $0.rect.minY) })
+    }
+    stack.combineGuides(from: children, direction: direction) { p, size in
+        placements(in: .init(origin: .zero, size: size), items: arrange(p))
     }
     return stack
 }
@@ -214,7 +229,7 @@ public struct LayoutSubview: Equatable {
     }
     @MainActor public func dimensions(in proposal: ProposedViewSize) -> ViewDimensions {
         let size = entry.element.measure(proposal)
-        return ViewDimensions(size: size, baselines: entry.element.baselines?(proposal, size))
+        return entry.element.dimensions(proposal, size)
     }
     @MainActor public func sizeThatFits(_ proposal: ProposedViewSize) -> CGSize { entry.element.measure(proposal) }
     @MainActor public subscript<K: LayoutValueKey>(_ key: K.Type) -> K.Value {
@@ -331,29 +346,29 @@ public struct ZStack<Content: View>: Primitive {
     public init(alignment: Alignment = .center, @ViewBuilder content: () -> Content) { self.alignment = alignment; self.content = content() }
     func elements(in context: Context) -> [Element] {
         let children = content.resolve(context)
-        func extents(_ p: ProposedViewSize) -> (size: CGSize, guide: CGFloat) {
-            var width: CGFloat = 0, above: CGFloat = 0, below: CGFloat = 0
-            for child in children {
+        if children.count == 1 { return children }
+        func extents(_ p: ProposedViewSize) -> CGRect {
+            children.reduce(CGRect.null) { extent, child in
                 let size = child.measure(p)
-                let y = alignment.vertical.isBaseline ? child.baseline(alignment.vertical, proposal: p, size: size) : 0
-                width = max(width, size.width)
-                above = max(above, y)
-                below = max(below, size.height - y)
+                let origin = CGPoint(x: -child.coordinate(alignment.horizontal.key, p, size),
+                                     y: -child.coordinate(alignment.vertical.key, p, size))
+                return extent.union(CGRect(origin: origin, size: size))
             }
-            return (.init(width: width, height: above + below), above)
         }
         func placements(_ bounds: CGRect, _ p: ProposedViewSize) -> [Placement] {
-            let anchor = alignment.vertical.isBaseline ? extents(p).guide : 0
+            let extent = extents(p)
             return children.map { child in
                 let size = child.measure(p)
-                var rect = alignment.rect(size, in: bounds, direction: context.environment.layoutDirection)
-                if alignment.vertical.isBaseline {
-                    rect.origin.y = bounds.minY + anchor - child.baseline(alignment.vertical, proposal: p, size: size)
-                }
-                return Placement(child: child, rect: rect, proposal: p)
+                let rect = CGRect(x: bounds.minX - extent.minX - child.coordinate(alignment.horizontal.key, p, size),
+                                  y: bounds.minY - extent.minY - child.coordinate(alignment.vertical.key, p, size),
+                                  width: size.width, height: size.height)
+                return Placement(child: child, rect: context.environment.layoutDirection.position(rect, in: bounds), proposal: p)
             }
         }
         let stack = Element { extents($0).size } place: { Placement.draw(placements($0, $1)) }
+        stack.combineGuides(from: children, direction: context.environment.layoutDirection) { p, size in
+            placements(.init(origin: .zero, size: size), p)
+        }
         stack.baselines = { p, size in
             TextBaselines.combining(placements(.init(origin: .zero, size: size), p)
                 .compactMap { $0.child.baselines?(p, $0.rect.size)?.offset(by: $0.rect.minY) })

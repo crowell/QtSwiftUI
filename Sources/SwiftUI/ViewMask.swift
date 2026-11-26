@@ -42,7 +42,7 @@ extension View {
                 let local = CGRect(origin: .zero, size: bounds.size)
                 let maskProposal = ProposedViewSize(bounds.size)
                 qs_place(stencil, bounds.minX, bounds.minY, bounds.width, bounds.height)
-                drawing.place(alignment.rect(drawing.measure(maskProposal), in: local, direction: ctx.environment.layoutDirection), maskProposal)
+                drawing.place(alignment.rect(for: drawing, size: drawing.measure(maskProposal), proposal: maskProposal, in: local, parent: content, parentProposal: proposal, direction: ctx.environment.layoutDirection), maskProposal)
                 qs_place(group, bounds.minX, bounds.minY, bounds.width, bounds.height)
                 content.place(local, proposal)
                 qs_alpha_mask(group, stencil)
