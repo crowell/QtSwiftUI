@@ -10,6 +10,10 @@ In a separate Docker run, Serein provisioned a disposable device with Signal's l
 
 ![Newly linked Serein inbox in the release executable on Ubuntu ARM64](Screenshots/serein-linux-inbox.png)
 
+The test phone sent “Hello from the test phone” and verified the reply typed into Serein’s Qt composer. Ctrl+Shift+E opened the [reaction picker](Screenshots/serein-linux-reactions.png) on the sent message. Escape dismissed it, and Ctrl+, opened [General settings](Screenshots/serein-linux-settings.png) in the same process.
+
+![Conversation with the test phone in the Serein Linux release](Screenshots/serein-linux-conversation.png)
+
 The entry point and all eight worker executables in this Docker package were built in release configuration. Choosing Help → About in the desktop app opens Serein’s own About view in a second Qt window. Escape closes About and leaves the installer running. `WindowGroup` also accepts typed presentation values. Opening an existing value activates its window, and changing the binding updates which value will find that window. `Settings`, `SettingsLink`, and the application menu’s Ctrl+, shortcut share a single settings window. Scenes can request or suppress presentation at launch. `@AppStorage` keeps controls in sync across windows and saves changes between launches. A view or scene can select its preferences suite with `defaultAppStorage(_:)`.
 
 ![Serein’s About window opened from the Linux desktop menu](Screenshots/serein-linux-about.png)
