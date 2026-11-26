@@ -46,8 +46,13 @@ extension View {
         }
     }
 
-    public func help<S: StringProtocol>(_ text: S) -> some View { environment(\.helpText, String(text)) }
-    public func help(_ text: Text) -> some View { help(text.string) }
+    @_disfavoredOverload public func help<S: StringProtocol>(_ text: S) -> some View { environment(\.helpText, String(text)) }
+    public func help(_ key: LocalizedStringKey) -> some View { help(Text(key)) }
+    public func help(_ text: Text) -> some View {
+        Transform(content: self) { view, context in
+            view.resolve(context.with(\.helpText, text.resolvedString(context.environment.locale)))
+        }
+    }
 
     public func opacity(_ opacity: Double) -> some View {
         Transform(content: self) { view, ctx in

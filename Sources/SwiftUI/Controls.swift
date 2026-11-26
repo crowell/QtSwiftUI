@@ -50,6 +50,11 @@ public nonisolated struct Text: Primitive {
     @_disfavoredOverload public nonisolated init<S: StringProtocol>(_ content: S) { literal = String(content) }
     public nonisolated init(verbatim content: String) { literal = content }
     public func font(_ font: Font?) -> Text { modified { $0.font = font } }
+    public func accessibilityLabel(_ label: Text) -> Text {
+        modified { environment in environment.label = label.resolvedString(environment.locale) }
+    }
+    public func accessibilityLabel(_ labelKey: LocalizedStringKey) -> Text { accessibilityLabel(Text(labelKey)) }
+    @_disfavoredOverload public func accessibilityLabel<S: StringProtocol>(_ label: S) -> Text { accessibilityLabel(Text(label)) }
     public func tracking(_ tracking: CGFloat) -> Text { modified { $0.tracking = tracking } }
     public func fontWeight(_ weight: Font.Weight?) -> Text { modified { $0.font = ($0.font ?? .body).weight(weight ?? .regular) } }
     public func bold(_ active: Bool = true) -> Text { modified { if active { $0.font = ($0.font ?? .body).bold() } } }

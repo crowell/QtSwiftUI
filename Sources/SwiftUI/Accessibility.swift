@@ -19,8 +19,6 @@ public struct AccessibilityChildBehavior: Equatable, Sendable {
     public static let combine = Self(behavior: 2)
 }
 extension View {
-    public func accessibilityValue(_ value: Text) -> some View { environment(\.accessibleValue, value.string) }
-    public func accessibilityValue<S: StringProtocol>(_ value: S) -> some View { environment(\.accessibleValue, String(value)) }
     public func accessibilityHidden(_ hidden: Bool) -> some View {
         Transform(content: self) { view, ctx in
             let widget = ctx.widget(QSGroup)

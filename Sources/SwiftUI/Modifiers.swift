@@ -121,7 +121,6 @@ extension View {
     public func disabled(_ disabled: Bool) -> some View {
         Transform(content: self) { view, ctx in view.resolve(ctx.with(\.isEnabled, ctx.environment.isEnabled && !disabled)) }
     }
-    public func accessibilityLabel(_ label: String) -> some View { environment(\.label, label) }
     public func accessibilityIdentifier(_ identifier: String) -> some View { environment(\.identifier, identifier) }
     public func layoutValue<K: LayoutValueKey>(key: K.Type, value: K.Value) -> some View {
         Transform(content: self) { view, ctx in

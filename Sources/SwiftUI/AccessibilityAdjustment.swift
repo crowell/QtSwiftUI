@@ -25,8 +25,11 @@ nonisolated public struct AccessibilityAttachmentModifier: PrimitiveModifier {
     public typealias Body = Never
     fileprivate var adjustment: ((AccessibilityAdjustmentDirection) -> Void)?
     fileprivate var actions: [String: () -> Void] = [:]
+    fileprivate var namedActions: [(Text, () -> Void)] = []
     fileprivate var actionContent: (@MainActor (Context) -> MenuEntries)?
-    fileprivate var hint: String?
+    fileprivate var label: Text?
+    fileprivate var value: Text?
+    fileprivate var hint: Text?
     fileprivate var addedTraits: AccessibilityTraits = []
     fileprivate var removedTraits: AccessibilityTraits = []
     public func body(content: Content) -> Never { fatalError("Accessibility attachments are rendered directly") }
@@ -34,7 +37,10 @@ nonisolated public struct AccessibilityAttachmentModifier: PrimitiveModifier {
     @MainActor func applying(to content: AnyView) -> any View {
         Transform(content: content) { view, context in
             var context = context
-            if let hint { context.environment.accessibleHint = hint }
+            let locale = context.environment.locale
+            if let label { context.environment.label = label.resolvedString(locale) }
+            if let value { context.environment.accessibleValue = value.resolvedString(locale) }
+            if let hint { context.environment.accessibleHint = hint.resolvedString(locale) }
             // The outermost attachment is the last modifier the caller applied.
             let decided = context.environment.accessibilityTraits.union(context.environment.removedAccessibilityTraits)
             let added = addedTraits.subtracting(decided)
@@ -42,6 +48,11 @@ nonisolated public struct AccessibilityAttachmentModifier: PrimitiveModifier {
             context.environment.removedAccessibilityTraits.formUnion(removedTraits.subtracting(decided))
             var callbacks = actions
             var names = Array(actions.keys)
+            for (title, handler) in namedActions {
+                let name = title.resolvedString(locale)
+                if callbacks[name] == nil { names.append(name) }
+                callbacks[name] = handler
+            }
             if let entries = actionContent?(context) {
                 for row in entries.rows where row.enabled && !row.title.isEmpty {
                     if let action = row.action, callbacks[row.title] == nil {
@@ -87,14 +98,67 @@ extension View {
         .init(content: self, modifier: .init(actions: [actionKind.name: handler]))
     }
     nonisolated public func accessibilityAction(named name: Text, _ handler: @escaping () -> Void) -> ModifiedContent<Self, AccessibilityAttachmentModifier> {
-        accessibilityAction(.init(named: name), handler)
+        .init(content: self, modifier: .init(namedActions: [(name, handler)]))
     }
-    nonisolated public func accessibilityHint(_ hint: Text) -> ModifiedContent<Self, AccessibilityAttachmentModifier> { accessibilityHint(hint, isEnabled: true) }
+    nonisolated public func accessibilityAction(named key: LocalizedStringKey, _ handler: @escaping () -> Void)
+        -> ModifiedContent<Self, AccessibilityAttachmentModifier> { accessibilityAction(named: Text(key), handler) }
+    @_disfavoredOverload nonisolated public func accessibilityAction<S: StringProtocol>(named name: S, _ handler: @escaping () -> Void)
+        -> ModifiedContent<Self, AccessibilityAttachmentModifier> { accessibilityAction(named: Text(name), handler) }
+
+    nonisolated public func accessibilityLabel(_ label: Text) -> ModifiedContent<Self, AccessibilityAttachmentModifier> {
+        accessibilityLabel(label, isEnabled: true)
+    }
+    nonisolated public func accessibilityLabel(_ label: Text, isEnabled: Bool) -> ModifiedContent<Self, AccessibilityAttachmentModifier> {
+        .init(content: self, modifier: .init(label: isEnabled ? label : nil))
+    }
+    nonisolated public func accessibilityLabel(_ key: LocalizedStringKey) -> ModifiedContent<Self, AccessibilityAttachmentModifier> {
+        accessibilityLabel(Text(key))
+    }
+    nonisolated public func accessibilityLabel(_ key: LocalizedStringKey, isEnabled: Bool) -> ModifiedContent<Self, AccessibilityAttachmentModifier> {
+        accessibilityLabel(Text(key), isEnabled: isEnabled)
+    }
+    @_disfavoredOverload nonisolated public func accessibilityLabel<S: StringProtocol>(_ label: S) -> ModifiedContent<Self, AccessibilityAttachmentModifier> {
+        accessibilityLabel(Text(label))
+    }
+    @_disfavoredOverload nonisolated public func accessibilityLabel<S: StringProtocol>(_ label: S, isEnabled: Bool) -> ModifiedContent<Self, AccessibilityAttachmentModifier> {
+        accessibilityLabel(Text(label), isEnabled: isEnabled)
+    }
+    nonisolated public func accessibilityValue(_ value: Text) -> ModifiedContent<Self, AccessibilityAttachmentModifier> {
+        accessibilityValue(value, isEnabled: true)
+    }
+    nonisolated public func accessibilityValue(_ value: Text, isEnabled: Bool) -> ModifiedContent<Self, AccessibilityAttachmentModifier> {
+        .init(content: self, modifier: .init(value: isEnabled ? value : nil))
+    }
+    nonisolated public func accessibilityValue(_ key: LocalizedStringKey) -> ModifiedContent<Self, AccessibilityAttachmentModifier> {
+        accessibilityValue(Text(key))
+    }
+    nonisolated public func accessibilityValue(_ key: LocalizedStringKey, isEnabled: Bool) -> ModifiedContent<Self, AccessibilityAttachmentModifier> {
+        accessibilityValue(Text(key), isEnabled: isEnabled)
+    }
+    @_disfavoredOverload nonisolated public func accessibilityValue<S: StringProtocol>(_ value: S) -> ModifiedContent<Self, AccessibilityAttachmentModifier> {
+        accessibilityValue(Text(value))
+    }
+    @_disfavoredOverload nonisolated public func accessibilityValue<S: StringProtocol>(_ value: S, isEnabled: Bool) -> ModifiedContent<Self, AccessibilityAttachmentModifier> {
+        accessibilityValue(Text(value), isEnabled: isEnabled)
+    }
+    nonisolated public func accessibilityHint(_ hint: Text) -> ModifiedContent<Self, AccessibilityAttachmentModifier> {
+        accessibilityHint(hint, isEnabled: true)
+    }
     nonisolated public func accessibilityHint(_ hint: Text, isEnabled: Bool) -> ModifiedContent<Self, AccessibilityAttachmentModifier> {
-        .init(content: self, modifier: .init(hint: isEnabled ? hint.string : nil))
+        .init(content: self, modifier: .init(hint: isEnabled ? hint : nil))
     }
-    nonisolated public func accessibilityHint<S: StringProtocol>(_ hint: S) -> ModifiedContent<Self, AccessibilityAttachmentModifier> { accessibilityHint(Text(hint)) }
-    nonisolated public func accessibilityHint<S: StringProtocol>(_ hint: S, isEnabled: Bool) -> ModifiedContent<Self, AccessibilityAttachmentModifier> { accessibilityHint(Text(hint), isEnabled: isEnabled) }
+    nonisolated public func accessibilityHint(_ key: LocalizedStringKey) -> ModifiedContent<Self, AccessibilityAttachmentModifier> {
+        accessibilityHint(Text(key))
+    }
+    nonisolated public func accessibilityHint(_ key: LocalizedStringKey, isEnabled: Bool) -> ModifiedContent<Self, AccessibilityAttachmentModifier> {
+        accessibilityHint(Text(key), isEnabled: isEnabled)
+    }
+    @_disfavoredOverload nonisolated public func accessibilityHint<S: StringProtocol>(_ hint: S) -> ModifiedContent<Self, AccessibilityAttachmentModifier> {
+        accessibilityHint(Text(hint))
+    }
+    @_disfavoredOverload nonisolated public func accessibilityHint<S: StringProtocol>(_ hint: S, isEnabled: Bool) -> ModifiedContent<Self, AccessibilityAttachmentModifier> {
+        accessibilityHint(Text(hint), isEnabled: isEnabled)
+    }
     nonisolated public func accessibilityAdjustableAction(_ handler: @escaping (AccessibilityAdjustmentDirection) -> Void)
         -> ModifiedContent<Self, AccessibilityAttachmentModifier> {
         .init(content: self, modifier: .init(adjustment: handler))
@@ -119,16 +183,75 @@ extension ModifiedContent where Modifier == AccessibilityAttachmentModifier {
         return .init(content: content, modifier: attachment)
     }
     nonisolated public func accessibilityAction(named name: Text, _ handler: @escaping () -> Void) -> ModifiedContent<Content, Modifier> {
-        accessibilityAction(.init(named: name), handler)
-    }
-    nonisolated public func accessibilityHint(_ hint: Text) -> ModifiedContent<Content, Modifier> { accessibilityHint(hint, isEnabled: true) }
-    nonisolated public func accessibilityHint(_ hint: Text, isEnabled: Bool) -> ModifiedContent<Content, Modifier> {
         var attachment = modifier
-        if isEnabled { attachment.hint = hint.string }
+        attachment.namedActions.append((name, handler))
         return .init(content: content, modifier: attachment)
     }
-    nonisolated public func accessibilityHint<S: StringProtocol>(_ hint: S) -> ModifiedContent<Content, Modifier> { accessibilityHint(Text(hint)) }
-    nonisolated public func accessibilityHint<S: StringProtocol>(_ hint: S, isEnabled: Bool) -> ModifiedContent<Content, Modifier> { accessibilityHint(Text(hint), isEnabled: isEnabled) }
+    nonisolated public func accessibilityAction(named key: LocalizedStringKey, _ handler: @escaping () -> Void)
+        -> ModifiedContent<Content, Modifier> { accessibilityAction(named: Text(key), handler) }
+    @_disfavoredOverload nonisolated public func accessibilityAction<S: StringProtocol>(named name: S, _ handler: @escaping () -> Void)
+        -> ModifiedContent<Content, Modifier> { accessibilityAction(named: Text(name), handler) }
+
+    nonisolated public func accessibilityLabel(_ label: Text) -> ModifiedContent<Content, Modifier> {
+        accessibilityLabel(label, isEnabled: true)
+    }
+    nonisolated public func accessibilityLabel(_ label: Text, isEnabled: Bool) -> ModifiedContent<Content, Modifier> {
+        var attachment = modifier
+        if isEnabled { attachment.label = label }
+        return .init(content: content, modifier: attachment)
+    }
+    nonisolated public func accessibilityLabel(_ key: LocalizedStringKey) -> ModifiedContent<Content, Modifier> {
+        accessibilityLabel(Text(key))
+    }
+    nonisolated public func accessibilityLabel(_ key: LocalizedStringKey, isEnabled: Bool) -> ModifiedContent<Content, Modifier> {
+        accessibilityLabel(Text(key), isEnabled: isEnabled)
+    }
+    @_disfavoredOverload nonisolated public func accessibilityLabel<S: StringProtocol>(_ label: S) -> ModifiedContent<Content, Modifier> {
+        accessibilityLabel(Text(label))
+    }
+    @_disfavoredOverload nonisolated public func accessibilityLabel<S: StringProtocol>(_ label: S, isEnabled: Bool) -> ModifiedContent<Content, Modifier> {
+        accessibilityLabel(Text(label), isEnabled: isEnabled)
+    }
+    nonisolated public func accessibilityValue(_ value: Text) -> ModifiedContent<Content, Modifier> {
+        accessibilityValue(value, isEnabled: true)
+    }
+    nonisolated public func accessibilityValue(_ value: Text, isEnabled: Bool) -> ModifiedContent<Content, Modifier> {
+        var attachment = modifier
+        if isEnabled { attachment.value = value }
+        return .init(content: content, modifier: attachment)
+    }
+    nonisolated public func accessibilityValue(_ key: LocalizedStringKey) -> ModifiedContent<Content, Modifier> {
+        accessibilityValue(Text(key))
+    }
+    nonisolated public func accessibilityValue(_ key: LocalizedStringKey, isEnabled: Bool) -> ModifiedContent<Content, Modifier> {
+        accessibilityValue(Text(key), isEnabled: isEnabled)
+    }
+    @_disfavoredOverload nonisolated public func accessibilityValue<S: StringProtocol>(_ value: S) -> ModifiedContent<Content, Modifier> {
+        accessibilityValue(Text(value))
+    }
+    @_disfavoredOverload nonisolated public func accessibilityValue<S: StringProtocol>(_ value: S, isEnabled: Bool) -> ModifiedContent<Content, Modifier> {
+        accessibilityValue(Text(value), isEnabled: isEnabled)
+    }
+    nonisolated public func accessibilityHint(_ hint: Text) -> ModifiedContent<Content, Modifier> {
+        accessibilityHint(hint, isEnabled: true)
+    }
+    nonisolated public func accessibilityHint(_ hint: Text, isEnabled: Bool) -> ModifiedContent<Content, Modifier> {
+        var attachment = modifier
+        if isEnabled { attachment.hint = hint }
+        return .init(content: content, modifier: attachment)
+    }
+    nonisolated public func accessibilityHint(_ key: LocalizedStringKey) -> ModifiedContent<Content, Modifier> {
+        accessibilityHint(Text(key))
+    }
+    nonisolated public func accessibilityHint(_ key: LocalizedStringKey, isEnabled: Bool) -> ModifiedContent<Content, Modifier> {
+        accessibilityHint(Text(key), isEnabled: isEnabled)
+    }
+    @_disfavoredOverload nonisolated public func accessibilityHint<S: StringProtocol>(_ hint: S) -> ModifiedContent<Content, Modifier> {
+        accessibilityHint(Text(hint))
+    }
+    @_disfavoredOverload nonisolated public func accessibilityHint<S: StringProtocol>(_ hint: S, isEnabled: Bool) -> ModifiedContent<Content, Modifier> {
+        accessibilityHint(Text(hint), isEnabled: isEnabled)
+    }
     nonisolated public func accessibilityAdjustableAction(_ handler: @escaping (AccessibilityAdjustmentDirection) -> Void)
         -> ModifiedContent<Content, Modifier> {
         var attachment = modifier
