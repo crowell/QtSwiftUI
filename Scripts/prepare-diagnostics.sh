@@ -145,13 +145,31 @@ awk '/^    @MainActor func width\(i18n:/ { skip=1; count++ }
 {
     echo 'import SwiftUI'
     echo 'import SignalI18n'
-    declarations '^public struct CustomChatColor:|^struct SampleMessage:|^public struct SampleMessageBubbles:' 3 "$source_dir/Components/ChatColorPicker.swift"
+    declarations '^extension RGBA ' 1 "$source_dir/Components/Conversation/Quote.swift"
     declarations '^public enum BubbleColor:|^struct BubbleFill:' 2 "$source_dir/Components/Conversation/Message/Message.swift"
     declarations '^public enum FormatTimestamp ' 1 "$source_dir/Components/LeftPaneDialogs.swift"
     awk '/^public enum MessageDirection:/ { print; count++ } END { if (count!=1) exit 1 }' "$source_dir/Components/Conversation/MessageTextRenderer.swift"
     awk 'BEGIN { print "extension EnvironmentValues {" } /@Entry public var chatColorViewport:/ { print; count++ }
          END { print "}"; if (count!=1) exit 1 }' "$source_dir/Components/Conversation/Message/Message.swift"
 } > "$target_dir/EditorSupport.swift"
+cp "$source_dir/Components/ChatColorPicker.swift" "$source_dir/Axo/AxoContainer.swift" \
+   "$source_dir/Axo/Items/AxoClickableItem.swift" "$target_dir/"
+# Only the avatar, checkbox and mixed-inline section title are outside this fixture.
+# Keep both original item layouts, trigger registration, and hit targets.
+awk '/^    public struct (IconAvatar|Checkbox):/ { skip=1; omitted++ }
+     !skip && !/^import CoreText$/ {
+         if (/let font = CSSTextStyle.*\.ctFont/) { print "            let font = AxoFonts.interMetrics(size: size)"; metrics++; next }
+         gsub(/CTFontGetAscent\(font\)/, "font.ascent"); gsub(/CTFontGetDescent\(font\)/, "font.descent")
+         gsub(/CTFontGetXHeight\(font\)/, "font.xHeight"); print }
+     /^    }$/ { skip=0 } END { if (omitted!=2 || metrics!=1) exit 1 }' \
+    "$source_dir/Axo/Items/AxoBaseItem.swift" > "$target_dir/AxoBaseItem.swift"
+sed '/public typealias IconAvatar =/d' "$source_dir/Axo/Items/AxoItem.swift" > "$target_dir/AxoItem.swift"
+awk '/^    public struct Label:/ { skip=1; count++ }
+     !skip { print } /^    }$/ { skip=0 } END { if (count!=1) exit 1 }' \
+    "$source_dir/Axo/Items/AxoList.swift" > "$target_dir/AxoList.swift"
+awk 'BEGIN { print "extension ChatColorPickerPreview {" } /^    static let customColors:/ { inside=1; count++ }
+     inside { print } /^    ]$/ { inside=0 } END { print "}"; if (count!=1 || inside) exit 1 }' \
+    "$checkout/Packages/SignalUI/Tests/SignalUITests/Components/ChatColorPickerTests.swift" > "$target_dir/PickerColors.swift"
 # AxoButton uses the type scale. The rest of AxoType.swift defines a CoreText modifier.
 awk '/^public struct AxoType: / { print "import SwiftUI"; inside = 1 }
      inside { print } inside && /^}$/ { complete = 1; exit } END { if (!complete) exit 1 }' \

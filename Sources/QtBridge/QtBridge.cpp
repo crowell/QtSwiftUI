@@ -15,6 +15,7 @@
 #include <algorithm>
 #include <QLabel>
 #include <QFontInfo>
+#include <QRawFont>
 #include <QFontDatabase>
 #include <QGraphicsOpacityEffect>
 #include <QEnterEvent>
@@ -825,6 +826,13 @@ int qs_register_font(const char *path) {
     loaded.append(font);
     app.setProperty("qsFonts", loaded);
     return 1;
+}
+QSFontMetrics qs_font_metrics(const char *family, double size) {
+    auto font = application().font();
+    font.setFamily(QString::fromUtf8(family));
+    auto raw = QRawFont::fromFont(font);
+    raw.setPixelSize(size);
+    return {raw.ascent(), raw.descent(), raw.xHeight()};
 }
 void qs_style(QSWidget w, const char *family, double points, int weight, int italic, double tracking,
               const char *color, int alignment, int wrap) {

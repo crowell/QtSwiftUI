@@ -28,6 +28,16 @@ enum AxoFonts {
     }()
     static func register() { _ = registered }
     #endif
+    static func interMetrics(size: CGFloat) -> (ascent: CGFloat, descent: CGFloat, xHeight: CGFloat) {
+        register()
+        #if os(Linux)
+        let font = qs_font_metrics("Inter", size)
+        return (font.ascent, font.descent, font.xHeight)
+        #else
+        let font = CTFontCreateWithName("Inter-Regular" as CFString, size, nil)
+        return (CTFontGetAscent(font), CTFontGetDescent(font), CTFontGetXHeight(font))
+        #endif
+    }
     static func interName(weight: Int) -> String {
         weight >= 600 ? "Inter-SemiBold" : weight >= 500 ? "Inter-Medium" : "Inter-Regular"
     }
@@ -70,9 +80,8 @@ extension EnvironmentValues {
     @Entry var titleBarDragAreaHeight: CGFloat = 0
     @Entry var cssTextColor: AxoColor = .labelPrimary
     @Entry var cssTextWrapWidth: CGFloat? = nil
-    @Entry var axoInheritedTextSize: (size: CGFloat, lineHeight: CGFloat) = (14, 20)
 }
-enum PreviewWrap { case wrap, truncate, nowrap }
+public enum CSSTextWrap { case wrap, truncate, nowrap }
 extension TextAlignment {
     static var end: Self { .trailing }
 }
@@ -80,22 +89,22 @@ extension TextAlignment {
 struct CSSText: View {
     let value: String
     let type: AxoType
-    let wrap: PreviewWrap
+    let wrap: CSSTextWrap
     let alignment: TextAlignment
     let color: AxoColor?
     @Environment(\.cssTextWrapWidth) private var wrapWidth
 
-    init(_ value: String, type: AxoType, wrap: PreviewWrap = .wrap, alignment: TextAlignment = .leading, color: AxoColor? = nil) {
+    init(_ value: String, type: AxoType, wrap: CSSTextWrap = .wrap, alignment: TextAlignment = .leading, color: AxoColor? = nil) {
         self.value = value
         self.type = type
         self.wrap = wrap
         self.alignment = alignment
         self.color = color
     }
-    init(_ value: String, style: CSSTextStyle, wrap: PreviewWrap = .wrap, alignment: TextAlignment = .leading, color: AxoColor? = nil) {
+    init(_ value: String, style: CSSTextStyle, wrap: CSSTextWrap = .wrap, alignment: TextAlignment = .leading, color: AxoColor? = nil) {
         self.init(value, type: style.type, wrap: wrap, alignment: alignment, color: color)
     }
-    init(runs: [CSSTextRun], style: CSSTextStyle, wrap: PreviewWrap, color: AxoColor? = nil) {
+    init(runs: [CSSTextRun], style: CSSTextStyle, wrap: CSSTextWrap, color: AxoColor? = nil) {
         self.init(runs.map(\.text).joined(), type: style.type, wrap: wrap, color: color)
     }
     init(runs: [CSSTextRun], style: CSSTextStyle, onTap: ((String) -> Void)?) {

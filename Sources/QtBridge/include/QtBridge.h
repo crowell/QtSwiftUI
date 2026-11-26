@@ -37,6 +37,8 @@ void qs_hint(QSWidget, const char *);
 void qs_checked(QSWidget, int);
 void qs_value(QSWidget, double);
 int qs_register_font(const char *path);
+typedef struct { double ascent, descent, xHeight; } QSFontMetrics;
+QSFontMetrics qs_font_metrics(const char *family, double size);
 void qs_style(QSWidget, const char *family, double points, int weight, int italic, double tracking, const char *color, int alignment, int wrap);
 void qs_selectable(QSWidget, int enabled);
 void qs_exit_scope(QSWidget, int enabled);
