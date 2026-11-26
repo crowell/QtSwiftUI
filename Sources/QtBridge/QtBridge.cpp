@@ -564,7 +564,7 @@ struct QSWindow final : QWidget {
     QSEvent event;
     QSDragHandler dragHandler = nullptr;
     QSKeyHandler keyHandler = nullptr;
-    bool pending = false, framePending = false;
+    bool pending = false, framePending = false, snapshot = false;
     WindowShortcuts shortcuts;
 
     void connectMenu(QMenu *menu, int id) {
@@ -575,7 +575,7 @@ struct QSWindow final : QWidget {
     }
 
     void schedule() {
-        if (pending) return;
+        if (pending || snapshot) return;
         pending = true;
         QTimer::singleShot(0, this, [this] {
             pending = false;
@@ -844,6 +844,30 @@ void qs_open(QSWindow *window, int width, int height) {
     window->resize(width, height);
     window->show();
     qs_flush();
+}
+void qs_snapshot_window(QSWindow *window) {
+    window->snapshot = true;
+    window->setAttribute(Qt::WA_DontShowOnScreen);
+    window->setAttribute(Qt::WA_NoSystemBackground);
+}
+int qs_snapshot_size(QSWindow *window, double width, double height) {
+    if (!std::isfinite(width) || !std::isfinite(height) || width <= 0 || height <= 0 ||
+        width > QWIDGETSIZE_MAX || height > QWIDGETSIZE_MAX) return 0;
+    window->resize(qCeil(width), qCeil(height));
+    window->ensurePolished();
+    return 1;
+}
+int qs_snapshot_pixels(QSWindow *window, int width, int height, double scale, int opaque, void *context, QSImageBytes receive) {
+    if (width <= 0 || height <= 0 || scale <= 0 || !std::isfinite(scale)) return 0;
+    QImage image(width, height, opaque ? QImage::Format_RGBX8888 : QImage::Format_RGBA8888_Premultiplied);
+    if (image.isNull()) return 0;
+    image.setDevicePixelRatio(scale);
+    image.fill(opaque ? Qt::black : Qt::transparent);
+    QPainter painter(&image);
+    window->QWidget::render(&painter, QPoint(), QRegion(), QWidget::DrawChildren);
+    painter.end();
+    receive(context, image.constBits(), size_t(image.sizeInBytes()), image.bytesPerLine());
+    return 1;
 }
 void qs_shortcut_begin(QSWindow *window) { window->shortcuts.begin(); }
 void qs_shortcut_finish(QSWindow *window) { window->shortcuts.finish(); }
@@ -1245,6 +1269,12 @@ int qs_register_font(const char *path) {
     loaded.append(font);
     app.setProperty("qsFonts", loaded);
     return 1;
+}
+double qs_text_width(const char *text, const char *family, double size, double spacing) {
+    auto font = resolveFont(application().font(), QString::fromUtf8(family), -1, false);
+    font.setPixelSize(qMax(1, qRound(size)));
+    font.setLetterSpacing(QFont::AbsoluteSpacing, spacing);
+    return QFontMetricsF(font).horizontalAdvance(QString::fromUtf8(text));
 }
 QSFontMetrics qs_font_metrics(const char *family, double size) {
     const auto font = resolveFont(application().font(), QString::fromUtf8(family), -1, false);

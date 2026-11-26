@@ -28,6 +28,19 @@ enum AxoFonts {
     }()
     static func register() { _ = registered }
     #endif
+    static func width(_ text: String, style: CSSTextStyle) -> CGFloat {
+        register()
+        #if os(Linux)
+        return qs_text_width(text, style.fontName, style.size, style.letterSpacing)
+        #else
+        let font = CTFontCreateWithName(style.fontName as CFString, style.size, nil)
+        let string = NSAttributedString(string: text, attributes: [
+            NSAttributedString.Key(kCTFontAttributeName as String): font,
+            NSAttributedString.Key(kCTKernAttributeName as String): style.letterSpacing,
+        ])
+        return CGFloat(CTLineGetTypographicBounds(CTLineCreateWithAttributedString(string), nil, nil, nil))
+        #endif
+    }
     static func interMetrics(size: CGFloat) -> (ascent: CGFloat, descent: CGFloat, xHeight: CGFloat) {
         metrics(family: "Inter", size: size)
     }

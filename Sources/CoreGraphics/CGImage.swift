@@ -34,6 +34,13 @@ public struct CGBitmapInfo: OptionSet, Sendable {
     public static let byteOrder16Big = Self(rawValue: 0x3000)
     public static let byteOrder32Big = Self(rawValue: 0x4000)
 }
+public enum CGImageByteOrderInfo: UInt32, Sendable {
+    case orderDefault = 0
+    case order16Little = 0x1000, order32Little = 0x2000
+    case order16Big = 0x3000, order32Big = 0x4000
+    case orderMask = 0x7000
+}
+
 public enum CGColorRenderingIntent: Int32, Sendable {
     case defaultIntent, absoluteColorimetric, relativeColorimetric, perceptual, saturation
 }
@@ -42,6 +49,9 @@ public final class CGImage: Sendable {
     public let width, height, bitsPerComponent, bitsPerPixel, bytesPerRow: Int
     public let colorSpace: CGColorSpace?
     public let bitmapInfo: CGBitmapInfo
+    public var byteOrderInfo: CGImageByteOrderInfo {
+        CGImageByteOrderInfo(rawValue: bitmapInfo.intersection(.byteOrderMask).rawValue) ?? .orderDefault
+    }
     public let alphaInfo: CGImageAlphaInfo
     public let dataProvider: CGDataProvider?
     public let shouldInterpolate: Bool

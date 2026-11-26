@@ -15,5 +15,6 @@ if [ "$#" -gt 0 ]; then
         "$d/Theme/CSSShapes.swift" "$d/Components/QRCode/QRCodeGenerator.swift" "$d/Components/QRCode/QrCode.swift" \
         "$d/Axo/SVGPathData.swift" "$d/Components/Preferences/SignalLoginIllustration.swift"
     sh Scripts/prepare-diagnostics.sh "$(cd "$1" && pwd)" "$preview/diagnostics"
+    if [ -f "$PWD/Screenshots/username-card.png" ]; then export QTSWIFTUI_UBUNTU_USERNAME_CARD="$PWD/Screenshots/username-card.png"; fi
     swift test --package-path "$preview/diagnostics"
 fi

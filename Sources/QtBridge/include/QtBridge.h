@@ -17,6 +17,10 @@ enum QSKind { QSLabel, QSButton, QSToggle, QSEdit, QSSecureEdit, QSSurface, QSSc
 
 QSWindow *qs_window(const char *title, void *context, QSRender render, QSEvent event);
 void qs_open(QSWindow *, int width, int height);
+void qs_snapshot_window(QSWindow *);
+int qs_snapshot_size(QSWindow *, double width, double height);
+typedef void (*QSImageBytes)(void *context, const unsigned char *bytes, size_t length, int bytesPerRow);
+int qs_snapshot_pixels(QSWindow *, int width, int height, double scale, int opaque, void *context, QSImageBytes receive);
 void qs_update(QSWindow *);
 double qs_window_scale(QSWindow *);
 int qs_reduce_motion(QSWindow *);
@@ -65,6 +69,7 @@ void qs_checked(QSWidget, int);
 void qs_value(QSWidget, double);
 int qs_register_font(const char *path);
 typedef struct { double ascent, descent, xHeight; } QSFontMetrics;
+double qs_text_width(const char *text, const char *family, double size, double spacing);
 QSFontMetrics qs_font_metrics(const char *family, double size);
 void qs_style(QSWidget, const char *family, double points, int weight, int italic, double tracking, const char *color, int alignment, int wrap);
 void qs_selectable(QSWidget, int enabled);

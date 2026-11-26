@@ -12,7 +12,7 @@ From a checkout with Docker running, this command builds the Ubuntu 24.04 image,
 ./Scripts/verify-linux.sh
 ```
 
-Pass a Serein checkout to render its inbox, Calls tab, New Call picker, call history, call-link details, participant approval, contact details and note, About window, nickname editor, call settings, data usage settings, call-quality survey, screen-sharing picker, chat-color picker and custom editor, media gallery, photo lightbox, sticker manager and pack preview, disappearing-message timer, voice-note controls, data-clearing and device-link screens, leave-call dialog, call diagnostics window, device card and artwork.
+Pass a Serein checkout to render its inbox, Calls tab, New Call picker, call history, call-link details, participant approval, contact details and note, About window, nickname editor, call settings, data usage settings, call-quality survey, screen-sharing picker, chat-color picker and custom editor, media gallery, photo lightbox, sticker manager and pack preview, username QR card, disappearing-message timer, voice-note controls, data-clearing and device-link screens, leave-call dialog, call diagnostics window, device card and artwork.
 
 ```sh
 ./Scripts/verify-linux.sh ../serein
@@ -63,6 +63,14 @@ The `--lightbox` example runs the photo mode of Serein’s `Lightbox` and its or
 ![Serein’s photo lightbox on Ubuntu](Screenshots/lightbox.png)
 
 [View the full-resolution zoom on Ubuntu](Screenshots/lightbox-zoomed.png). Tests send pinch events through Qt and AppKit, compare scale, recognition threshold, initial velocity and gesture coordinates, then exercise click-to-zoom, thumbnail selection, Save and Close. Qt tests also move the pointer across the enlarged image and check both zoom cursors. Set `QTSWIFTUI_LIGHTBOX_REFERENCE` to an existing directory when running `Scripts/check-apple.sh` to save the macOS captures.
+
+The `--username-card` example displays Serein’s branded username QR card for its `alice.42` fixture. The production exporter uses `ImageRenderer.cgImage`, Serein’s pixel conversion, and its PNG encoder to save a 1272 × 1728 card at 300 dpi. The example shares the card’s layout, font settings and QR generator with the exporter. Word and grapheme widths come from Qt on Linux and CoreText on macOS. Both exports decoded to the fixture link with Apple Vision. The Ubuntu export differed from Apple’s by a mean of 0.57/255 per RGB channel.
+
+![Serein username QR card running on Ubuntu](Screenshots/username-card-preview.png)
+
+[Full-resolution Ubuntu PNG](Screenshots/username-card.png)
+
+The integration tests write the production PNG when `QTSWIFTUI_USERNAME_REFERENCE` names an existing directory. The Apple check also scans the Ubuntu export in `Screenshots/` when present.
 
 The `--share-picker` example runs Serein’s `CallingSelectPresentingSourcesModal` with the screen and four windows from its snapshot test. Its two grids use `LazyVGrid` and four flexible `GridItem` columns. The fixture reads the original PNG thumbnails when present. A missing thumbnail displays Serein’s warning icon. Selecting a source enables Start sharing and passes its ID to the local callback. Desktop capture is outside this example.
 
@@ -175,6 +183,7 @@ The target is source compatibility with Apple's public SwiftUI APIs. The impleme
 | Layout | Stacks, frames, padding, scrolling, geometry, size proposals, placement and custom layout values used by Serein. Preferences reduce in view-tree order after layout. Anchors position Serein’s floating content in a geometry reader. |
 | Controls and rendering | Buttons and custom pressed-state styles, check boxes, text fields, sliders, text, colored surfaces and paths painted by Qt |
 | Text truncation | `Text.TruncationMode`, `View.truncationMode(_:)` and the environment setting control head, middle and tail truncation with an explicit line limit. Tests cover hard paragraph breaks, formatting on the final visible line and links in one-line labels. An AppKit test click on the second line of head- or middle-truncated attributed text reached the original prefix link. Qt follows the link attached to the displayed letters. Height-only truncation is unverified. |
+| Image export | `ImageRenderer` renders content to an offscreen sRGB `CGImage` with natural or proposed sizing, fractional output scales and transparent or opaque backgrounds. Shared tests examine RGBA pixels and render again after a model update. Extended color modes, the Core Graphics drawing callback and Combine observation remain open. |
 | Bitmap images | CGImage-backed SwiftUI images with scale, eight orientations, padded RGB/RGBA rows, cap insets, tiling, aspect fit and aspect fill. Shared SDK tests exercise nearest-neighbor sampling. Qt uses bilinear filtering for the other interpolation levels. |
 | Graphics | Linear gradients as views, shape fills and Canvas shading. Canvas fills and strokes, even-odd paths, gradient stops, affine transforms and path hit testing. Canvas draws bitmap images into rectangles or at anchors and supports solid and gradient shading through a resolved image’s alpha. The Linux CoreGraphics module supplies geometry for these APIs. |
 | Animation | Cubic timing curves interpolate opacity, offsets, rotation angles and trimmed shapes. A shared fixture exercises Serein’s original Axo progress ring. Rotation currently affects painting, while native mouse hit regions retain the unrotated geometry. |
@@ -188,7 +197,7 @@ The target is source compatibility with Apple's public SwiftUI APIs. The impleme
 
 `./Scripts/check-apple.sh ../serein` type-checks the example source with Apple's SwiftUI module on a Mac with Xcode. `./Scripts/check-api.sh` extracts public symbol graphs from Xcode and the Linux image. Pass `--missing` to list missing declaration paths. The inventory groups declarations by symbol kind and path, counts overload spellings separately, and excludes underscored and synthesized members. A shared name alone cannot establish matching signatures, constraints, availability or behavior.
 
-The inventory against the macOS 27.2 SDK found 1,303 shared declaration paths out of 7,627 and 826 identical declaration spellings out of 8,735. The examples exercise a smaller set at runtime. Navigation, multiwindow scenes, broader animation support, text shaping parity, gestures and platform integration remain substantial gaps. Font metrics, control appearance and several layout behaviors differ from Apple's implementation.
+The inventory against the macOS 27.2 SDK found 1,310 shared declaration paths out of 7,627 and 829 identical declaration spellings out of 8,735. The examples exercise a smaller set at runtime. Navigation, multiwindow scenes, broader animation support, text shaping parity, gestures and platform integration remain substantial gaps. Font metrics, control appearance and several layout behaviors differ from Apple's implementation.
 
 After capturing the Linux examples, run `./Scripts/compare-artwork.sh ../serein` on macOS to render both illustrations with Apple's `ImageRenderer`. At a threshold of 8/255 in any RGB channel, 101 of 119,680 account artwork pixels (0.084%) and 91 of 49,928 key transparency pixels (0.182%) differed. The mean absolute channel differences were 0.104/255 and 0.095/255 respectively. Both reference images are saved in `.build/artwork/`.
 

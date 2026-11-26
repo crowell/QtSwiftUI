@@ -97,6 +97,31 @@ if [ ! -f "$photo" ]; then photo="$checkout/Packages/SignalUI/Tests/SignalUITest
 cp "$photo" "$target_dir/Media/cat-screenshot-3x4.png"
 lighthouse="$checkout/Signal-Desktop/fixtures/tina-rolf-269345-unsplash.jpg"
 if [ -f "$lighthouse" ]; then cp "$lighthouse" "$target_dir/Media/"; fi
+# The QR card's production PNG exporter uses its own encoder and MediaEditorExport's
+# pixel reader. Substitute the portable font shaper for CoreText and bridge CFData on Linux.
+qr="$source_dir/Components/QRCode"
+cp "$qr/QrCode.swift" "$qr/QRCodeGenerator.swift" "$qr/BrandedQRCode.swift" "$target_dir/"
+awk '/CSSTextLayout.make\(runs:/ {print "        AxoFonts.width(text, style: style)"; count++; next}
+     {print} END {if (count != 1) exit 1}' "$qr/UsernameLinkCard.swift" > "$target_dir/UsernameLinkCard.swift"
+{
+    echo 'import SwiftUI'
+    declarations '^public enum UsernameLinkColor:' 1 "$source_dir/Components/UsernameLinkEditor.swift"
+    echo 'import CodecCore'
+    echo 'import CoreFoundation'
+    echo 'enum MediaEditorExport {'
+    awk '/^    static func pixels\(_ image: CGImage\)/ {inside=1; count++}
+         inside && /let data = image.dataProvider/ {
+            print "#if os(Linux)\n        guard image.bitsPerComponent == 8, image.bitsPerPixel == 32, let data = image.dataProvider?.data else { return nil }\n#else"
+            print; print "#endif"; next }
+         inside && /let bytes = \[UInt8\]\(data\)/ {
+            print "#if os(Linux)\n        let bytes = UnsafeBufferPointer(start: CFDataGetBytePtr(data), count: CFDataGetLength(data))\n#else"
+            print; print "#endif"; bytes++; next }
+         inside {print} /^    }$/ {inside=0} END {if (count != 1 || bytes != 1 || inside) exit 1}' \
+        "$source_dir/Components/MediaEditor/MediaEditorExport.swift"
+    echo '}'
+} > "$target_dir/UsernameCardExport.swift"
+sed 's/@testable import SignalUI/@testable import CallDiagnostics/' \
+    "$checkout/Packages/SignalUI/Tests/SignalUITests/Components/UsernameLinkCardTests.swift" > "$target/Tests/ScreenTests/UsernameLinkCardTests.swift"
 # Assemble Serein's source selector and its static snapshot inputs. Only the optional
 # bundle-icon lookup needs AppKit. The picker receives thumbnails from its caller.
 {
@@ -338,7 +363,7 @@ import PackageDescription
 var packages: [Package.Dependency] = [.package(path: "SignalI18n"), .package(path: "SignalText"), .package(path: "SignalCodecs")]
 var dependencies: [Target.Dependency] = [.product(name: "SignalI18n", package: "SignalI18n"),
     .product(name: "SignalText", package: "SignalText"), .product(name: "CodecCore", package: "SignalCodecs"), .product(name: "ImagePNG", package: "SignalCodecs"),
-    .product(name: "ImageBMP", package: "SignalCodecs"), .product(name: "ImageJPEG", package: "SignalCodecs")]
+    .product(name: "ImageBMP", package: "SignalCodecs"), .product(name: "ImageJPEG", package: "SignalCodecs"), .product(name: "EncodePNG", package: "SignalCodecs")]
 #if os(Linux)
 packages.append(.package(name: "QtSwiftUI", path: "/src"))
 dependencies.append(.product(name: "SwiftUI", package: "QtSwiftUI"))

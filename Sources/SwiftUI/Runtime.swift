@@ -199,6 +199,11 @@ enum Part: Hashable {
         return entry
     }
     private func render(width: Int, height: Int) {
+        let viewport = CGSize(width: width, height: height)
+        _ = render(proposal: ProposedViewSize(viewport), viewport: viewport, scale: qs_window_scale(window))
+    }
+
+    func render(proposal: ProposedViewSize, viewport: CGSize?, scale: CGFloat) -> CGSize {
         frameTime = animationClock()
         liveMounts.removeAll(keepingCapacity: true)
         liveStorage.removeAll(keepingCapacity: true)
@@ -206,9 +211,10 @@ enum Part: Hashable {
         // Changing this tracked value releases the previous pass’s one-shot observation.
         observationPass.revision += 1
         let revision = observationPass.revision
+        var size = CGSize.zero
         withObservationTracking {
             _ = observationPass.revision
-            layout(width: width, height: height)
+            size = layout(proposal: proposal, viewport: viewport, scale: scale)
         } onChange: { [weak self] in
             let transaction = Transaction.current
             Task { @MainActor in
@@ -222,8 +228,10 @@ enum Part: Hashable {
         let pending = afterRender
         afterRender.removeAll(keepingCapacity: true)
         for action in pending { action() }
+        return size
     }
-    private func layout(width: Int, height: Int) {
+
+    private func layout(proposal: ProposedViewSize, viewport: CGSize?, scale: CGFloat) -> CGSize {
         var context = Context(host: self)
         context.transaction = pendingTransaction ?? Transaction()
         pendingTransaction = nil
@@ -232,7 +240,7 @@ enum Part: Hashable {
         case 1: context.environment.scenePhase = .inactive
         default: context.environment.scenePhase = .background
         }
-        context.environment.displayScale = qs_window_scale(window)
+        context.environment.displayScale = scale
         context.environment.accessibilityReduceMotion = qs_reduce_motion(window) != 0
         context.environment.closePresentation = { [weak self] in
             if let window = self?.window { qs_request_close(window) }
@@ -240,11 +248,14 @@ enum Part: Hashable {
         qs_shortcut_begin(window)
         let roots = content(context)
         let root = stacked(roots, axis: .vertical, alignment: .center, spacing: 8)
-        let proposal = ProposedViewSize(width: CGFloat(width), height: CGFloat(height))
         let size = root.measure(proposal)
-        root.place(CGRect(x: (CGFloat(width) - size.width) / 2, y: (CGFloat(height) - size.height) / 2,
-                          width: size.width, height: size.height), proposal)
-        matches.place(at: frameTime, window: window)
+        let extent = viewport ?? size
+        let drawable = viewport != nil || qs_snapshot_size(window, size.width, size.height) != 0
+        if drawable {
+            root.place(CGRect(x: (extent.width - size.width) / 2, y: (extent.height - size.height) / 2,
+                              width: size.width, height: size.height), proposal)
+            matches.place(at: frameTime, window: window)
+        }
         // Qt owns descendant widgets. Release stale descendants before their scroll area.
         for path in mounts.keys.filter({ !liveMounts.contains($0) }).sorted(by: { $0.count > $1.count }) {
             if let mount = mounts.removeValue(forKey: path) {
@@ -256,6 +267,7 @@ enum Part: Hashable {
         }
         qs_shortcut_finish(window)
         storage = storage.filter { liveStorage.contains($0.key) }
+        return drawable ? size : .zero
     }
 }
 
