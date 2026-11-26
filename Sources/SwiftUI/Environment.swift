@@ -111,6 +111,27 @@ public struct EnvironmentValues {
     var stackAxis = Axis.vertical
     var label = "", identifier = "", helpText = ""
 }
+// A view tree passes its environment through every modifier and property
+// wrapper. Share the inherited values until a descendant changes its copy.
+@propertyWrapper struct EnvironmentSnapshot {
+    private final class Storage {
+        var values: EnvironmentValues
+        init(_ values: EnvironmentValues) { self.values = values }
+    }
+
+    private var storage: Storage
+    init(wrappedValue: EnvironmentValues) { storage = Storage(wrappedValue) }
+
+    var wrappedValue: EnvironmentValues {
+        _read { yield storage.values }
+        _modify {
+            if !isKnownUniquelyReferenced(&storage) { storage = Storage(storage.values) }
+            yield &storage.values
+        }
+    }
+    var projectedValue: Self { self }
+}
+
 extension Context {
     func with<T>(_ key: WritableKeyPath<EnvironmentValues, T>, _ value: T) -> Self {
         var copy = self
@@ -119,7 +140,7 @@ extension Context {
     }
 }
 @propertyWrapper @MainActor public struct Environment<Value>: MountedProperty {
-    private var values = EnvironmentValues()
+    private var snapshot: EnvironmentSnapshot?
     private let read: (EnvironmentValues) -> Value
     public init(_ keyPath: KeyPath<EnvironmentValues, Value>) { read = { $0[keyPath: keyPath] } }
     public init(_ objectType: Value.Type) where Value: AnyObject, Value: Observable {
@@ -133,8 +154,11 @@ extension Context {
     public init<T>(_ objectType: T.Type) where T: AnyObject, T: Observable, Value == T? {
         read = { $0.objects[ObjectIdentifier(objectType)] as? T }
     }
-    public var wrappedValue: Value { read(values) }
-    mutating func install(in context: Context) { values = context.environment }
+    public var wrappedValue: Value {
+        if let snapshot { return read(snapshot.wrappedValue) }
+        return read(EnvironmentValues())
+    }
+    mutating func install(in context: Context) { snapshot = context.$environment }
 }
 public struct Font: Hashable, Sendable {
     public struct Weight: Hashable, Sendable {

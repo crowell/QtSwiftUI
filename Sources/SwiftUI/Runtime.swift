@@ -20,7 +20,7 @@ enum Part: Hashable {
     var defaultFocusRegions: [DefaultFocusRegion] = []
     var menuEntries: MenuEntries?
     var windowValue: Binding<AnyHashable?>?
-    var environment = EnvironmentValues()
+    @EnvironmentSnapshot var environment = EnvironmentValues()
     var preferences: [ObjectIdentifier: any PreferenceScope] = [:]
     var transaction = Transaction()
     var animation: Animation? {

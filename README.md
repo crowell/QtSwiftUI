@@ -14,6 +14,10 @@ The test phone sent “Hello from the test phone” and verified the reply typed
 
 ![Conversation with the test phone in the Serein Linux release](Screenshots/serein-linux-conversation.png)
 
+Reopening the picker and pressing Space sends a heart. The test phone verified the emoji, author and timestamp of the message it belongs to. Clicking the badge under the message opens Serein’s reaction viewer.
+
+![Serein’s reaction viewer after the test phone received the heart](Screenshots/serein-linux-reaction-viewer.png)
+
 The entry point and all eight worker executables in this Docker package were built in release configuration. Choosing Help → About in the desktop app opens Serein’s own About view in a second Qt window. Escape closes About and leaves the installer running. `WindowGroup` also accepts typed presentation values. Opening an existing value activates its window, and changing the binding updates which value will find that window. `Settings`, `SettingsLink`, and the application menu’s Ctrl+, shortcut share a single settings window. Scenes can request or suppress presentation at launch. `@AppStorage` keeps controls in sync across windows and saves changes between launches. A view or scene can select its preferences suite with `defaultAppStorage(_:)`.
 
 ![Serein’s About window opened from the Linux desktop menu](Screenshots/serein-linux-about.png)
