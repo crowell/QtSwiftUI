@@ -5,6 +5,8 @@
 #include <QDir>
 #include <QLabel>
 #include <QLineEdit>
+#include <QKeyEvent>
+#include <QMouseEvent>
 #include <QPainter>
 #include <QPainterPath>
 #include <QProgressBar>
@@ -75,6 +77,17 @@ struct QSWindow final : QWidget {
             render(context, width(), height());
         });
     }
+    bool eventFilter(QObject *source, QEvent *input) override {
+        if (input->type() == QEvent::FocusIn || input->type() == QEvent::FocusOut) {
+            event(context, source->property("swiftId").toInt(), QSFocusChanged,
+                  input->type() == QEvent::FocusIn ? "1" : "0");
+        }
+        return false;
+    }
+    void observeFocus(QWidget *item, int id) {
+        item->setProperty("swiftId", id);
+        item->installEventFilter(this);
+    }
     void resizeEvent(QResizeEvent *) override { schedule(); }
 };
 
@@ -128,18 +141,24 @@ QSWidget qs_create(QSWindow *window, QSWidget parent, QSKind kind, int id) {
     }
     case QSButton: {
         auto *button = new QPushButton(container);
-        QObject::connect(button, &QPushButton::clicked, window, [=] { window->event(window->context, id, ""); });
+        window->observeFocus(button, id);
+        QObject::connect(button, &QPushButton::clicked, window, [=] { window->event(window->context, id, QSActivate, ""); });
+        QObject::connect(button, &QPushButton::pressed, window, [=] { window->event(window->context, id, QSPressedChanged, "1"); });
+        QObject::connect(button, &QPushButton::released, window, [=] { window->event(window->context, id, QSPressedChanged, "0"); });
         return button;
     }
     case QSToggle: {
         auto *toggle = new QCheckBox(container);
-        QObject::connect(toggle, &QCheckBox::toggled, window, [=](bool on) { window->event(window->context, id, on ? "1" : "0"); });
+        window->observeFocus(toggle, id);
+        QObject::connect(toggle, &QCheckBox::toggled, window, [=](bool on) { window->event(window->context, id, QSActivate, on ? "1" : "0"); });
         return toggle;
     }
     case QSEdit: case QSSecureEdit: {
         auto *edit = new QLineEdit(container);
         if (kind == QSSecureEdit) edit->setEchoMode(QLineEdit::Password);
-        QObject::connect(edit, &QLineEdit::textEdited, window, [=](const QString &s) { window->event(window->context, id, s.toUtf8().constData()); });
+        window->observeFocus(edit, id);
+        QObject::connect(edit, &QLineEdit::textEdited, window, [=](const QString &s) { window->event(window->context, id, QSActivate, s.toUtf8().constData()); });
+        QObject::connect(edit, &QLineEdit::returnPressed, window, [=] { window->event(window->context, id, QSSubmit, ""); });
         return edit;
     }
     case QSGroup: {
@@ -164,7 +183,8 @@ QSWidget qs_create(QSWindow *window, QSWidget parent, QSKind kind, int id) {
     case QSSlider: {
         auto *slider = new QSlider(Qt::Horizontal, container);
         slider->setRange(0, 10000);
-        QObject::connect(slider, &QSlider::valueChanged, window, [=](int n) { window->event(window->context, id, QByteArray::number(n / 10000.0).constData()); });
+        window->observeFocus(slider, id);
+        QObject::connect(slider, &QSlider::valueChanged, window, [=](int n) { window->event(window->context, id, QSActivate, QByteArray::number(n / 10000.0).constData()); });
         return slider;
     }
     case QSProgress: {
@@ -257,6 +277,13 @@ void qs_plain_button(QSWidget w, int plain) {
     auto *button = static_cast<QPushButton *>(w);
     button->setFlat(plain);
 }
+int qs_button_down(QSWidget w) { return static_cast<QPushButton *>(w)->isDown(); }
+void qs_focus(QSWidget w, int active) {
+    auto *item = widget(w);
+    if (!item->isEnabled() || item->focusPolicy() == Qt::NoFocus) return;
+    if (active && !item->hasFocus()) item->setFocus(Qt::OtherFocusReason);
+    else if (!active && item->hasFocus()) item->clearFocus();
+}
 void qs_enabled(QSWidget w, int enabled) { widget(w)->setEnabled(enabled); }
 void qs_accessibility(QSWidget w, const char *label, const char *identifier) {
     widget(w)->setAccessibleName(QString::fromUtf8(label));
@@ -302,6 +329,37 @@ int qs_enter(QSWindow *window, const char *id, const char *value) {
     edit->insert(QString::fromUtf8(value));
     qs_flush();
     return 1;
+}
+int qs_key_return(QSWindow *window, const char *id) {
+    auto *edit = window->findChild<QLineEdit *>(QString::fromUtf8(id));
+    if (!edit || !edit->isEnabled()) return 0;
+    QKeyEvent press(QEvent::KeyPress, Qt::Key_Return, Qt::NoModifier);
+    QApplication::sendEvent(edit, &press);
+    QKeyEvent release(QEvent::KeyRelease, Qt::Key_Return, Qt::NoModifier);
+    QApplication::sendEvent(edit, &release);
+    qs_flush();
+    return 1;
+}
+int qs_has_focus(QSWindow *window, const char *id) {
+    auto *item = window->findChild<QWidget *>(QString::fromUtf8(id));
+    return item && item->hasFocus();
+}
+int qs_mouse_button(QSWindow *window, const char *id, int down) {
+    auto *button = window->findChild<QAbstractButton *>(QString::fromUtf8(id));
+    if (!button || !button->isEnabled()) return 0;
+    const auto location = button->mapTo(window, button->rect().center());
+    QWidget *target = window->childAt(location);
+    if (!target) return 0;
+    const auto local = target->mapFrom(window, location);
+    const auto global = window->mapToGlobal(location);
+    QMouseEvent input(down ? QEvent::MouseButtonPress : QEvent::MouseButtonRelease, local, global,
+                      Qt::LeftButton, down ? Qt::LeftButton : Qt::NoButton, Qt::NoModifier);
+    QApplication::sendEvent(target, &input);
+    qs_flush();
+    return 1;
+}
+int qs_mouse_click(QSWindow *window, const char *id) {
+    return qs_mouse_button(window, id, 1) && qs_mouse_button(window, id, 0);
 }
 int qs_read_text(QSWindow *window, const char *id, const char *expected) {
     auto *label = window->findChild<QLabel *>(QString::fromUtf8(id));

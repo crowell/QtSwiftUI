@@ -41,11 +41,12 @@ The target is source compatibility with Apple's public SwiftUI APIs. The impleme
 | App and views | A single window, view builders, custom views, conditional content and keyed collections |
 | Model data | State survives row reordering, bindings edit text, observable models invalidate the view, typed environment injection |
 | Layout | Stacks, frames, padding, scrolling, geometry, size proposals, placement and custom layout values used by Serein |
-| Controls and rendering | Buttons, check boxes, text fields, sliders, text, colored surfaces and paths painted by Qt |
+| Controls and rendering | Buttons and custom pressed-state styles, check boxes, text fields, sliders, text, colored surfaces and paths painted by Qt |
+| Keyboard input | Programmatic composer focus, native focus changes and sending with Return. Tests also switch rooms and save a name in the preferences window. |
 | Lifecycle | An async view task updates an observable model while the Qt event loop runs. An on-change handler observes the result. |
 
 `./Scripts/check-apple.sh ../serein` type-checks the example source with Apple's SwiftUI module on a Mac with Xcode. `./Scripts/check-api.sh` extracts public symbol graphs from Xcode and the Linux image. Pass `--missing` to list missing declaration paths. The inventory groups declarations by symbol kind and path, counts overload spellings separately, and excludes underscored and synthesized members. A shared name alone cannot establish matching signatures, constraints, availability or behavior.
 
-The initial inventory against the macOS 27.2 SDK found 386 shared declaration paths out of 7,627 and 154 identical declaration spellings out of 8,735. The examples exercise a smaller set at runtime. Navigation, multiwindow scenes, animation, text shaping parity, gestures and platform integration remain substantial gaps. Font metrics, control appearance and several layout behaviors differ from Apple's implementation.
+The inventory against the macOS 27.2 SDK found 410 shared declaration paths out of 7,627 and 162 identical declaration spellings out of 8,735. The examples exercise a smaller set at runtime. Navigation, multiwindow scenes, animation, text shaping parity, gestures and platform integration remain substantial gaps. Font metrics, control appearance and several layout behaviors differ from Apple's implementation.
 
 The framework reference is [Apple's SwiftUI documentation](https://developer.apple.com/documentation/swiftui).

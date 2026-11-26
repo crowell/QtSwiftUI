@@ -14,7 +14,7 @@ let package = Package(
         .target(name: "SwiftUI", dependencies: ["QtBridge"]),
         .executableTarget(name: "Conversation", dependencies: ["SwiftUI"], path: "Examples/Conversation"),
         .executableTarget(name: "Controls", dependencies: ["SwiftUI"], path: "Examples/Controls"),
-        .testTarget(name: "SwiftUITests", dependencies: ["SwiftUI", "QtBridge"])
+        .testTarget(name: "SwiftUITests", dependencies: ["SwiftUI", "QtBridge", "Controls", "Conversation"])
     ],
     cxxLanguageStandard: .cxx17
 )

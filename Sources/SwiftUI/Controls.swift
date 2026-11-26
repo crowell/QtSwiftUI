@@ -53,24 +53,31 @@ public struct Button<Label: View>: Primitive {
         self.init(action: action) { Text(title) }
     }
     func elements(in context: Context) -> [Element] {
-        let widget = context.widget(QSButton) { _ in action() }
-        qs_plain_button(widget, context.environment.buttonPlain ? 1 : 0)
-        if let text = label as? Text {
+        let style = context.environment.buttonStyle
+        let widget = context.widget(QSButton, pressed: { [weak host = context.host] _ in
+            if style != nil { host?.update() }
+        }, action: { _ in action() })
+        qs_plain_button(widget, style != nil ? 1 : 0)
+        if style == nil, let text = label as? Text {
             qs_text(widget, text.string)
             return [text.styled(context).control(widget)]
         }
         var ctx = context
         ctx.parent = widget
-        let child = stacked(label.resolve(ctx.descending(.position(0))), axis: .horizontal, alignment: .center, spacing: 4)
+        ctx.environment.identifier = ""
+        ctx.environment.focus = nil
+        let configured = style?(.init(label: .init(content: AnyView(label)), isPressed: qs_button_down(widget) != 0))
+        let child = stacked((configured ?? AnyView(label)).resolve(ctx.descending(.position(0))), axis: .horizontal, alignment: .center, spacing: 4)
+        let dx: CGFloat = style == nil ? 8 : 0, dy: CGFloat = style == nil ? 5 : 0
         func inner(_ p: ProposedViewSize) -> ProposedViewSize {
-            .init(width: p.width.map { max(0, $0 - 16) }, height: p.height.map { max(0, $0 - 10) })
+            .init(width: p.width.map { max(0, $0 - 2 * dx) }, height: p.height.map { max(0, $0 - 2 * dy) })
         }
         return [Element { p in
             let size = child.measure(inner(p))
-            return CGSize(width: size.width + 16, height: size.height + 10)
+            return CGSize(width: size.width + 2 * dx, height: size.height + 2 * dy)
         } place: { rect, p in
             qs_place(widget, rect.minX, rect.minY, rect.width, rect.height)
-            child.place(.init(origin: CGPoint(x: 8, y: 5), size: child.measure(inner(p))), inner(p))
+            child.place(.init(origin: CGPoint(x: dx, y: dy), size: child.measure(inner(p))), inner(p))
         }]
     }
 }
@@ -81,7 +88,7 @@ public struct Toggle<Label: View>: Primitive {
         self.init(isOn: isOn) { Text(title) }
     }
     func elements(in context: Context) -> [Element] {
-        let widget = context.widget(QSToggle) { isOn.wrappedValue = $0 == "1" }
+        let widget = context.widget(QSToggle, action: { isOn.wrappedValue = $0 == "1" })
         qs_checked(widget, isOn.wrappedValue ? 1 : 0)
         if let text = label as? Text {
             qs_text(widget, text.string)
@@ -91,7 +98,7 @@ public struct Toggle<Label: View>: Primitive {
     }
 }
 @MainActor private func field(_ title: String, text: Binding<String>, secure: Bool, in context: Context) -> Element {
-    let widget = context.widget(secure ? QSSecureEdit : QSEdit) { text.wrappedValue = $0 }
+    let widget = context.widget(secure ? QSSecureEdit : QSEdit, action: { text.wrappedValue = $0 })
     qs_text(widget, text.wrappedValue)
     qs_hint(widget, title)
     return context.control(widget, expands: true)
@@ -120,7 +127,7 @@ public struct Slider<Label: View, ValueLabel: View>: Primitive {
         }
     }
     func elements(in context: Context) -> [Element] {
-        let widget = context.widget(QSSlider) { if let n = Double($0) { move(n) } }
+        let widget = context.widget(QSSlider, action: { if let n = Double($0) { move(n) } })
         qs_value(widget, fraction())
         return [context.control(widget, expands: true)]
     }

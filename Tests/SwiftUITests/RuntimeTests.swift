@@ -28,7 +28,29 @@ private struct Fixture: View {
         }
     }
 }
+private struct PressStyle: ButtonStyle {
+    func makeBody(configuration: Configuration) -> some View {
+        VStack {
+            configuration.label
+            Text(configuration.isPressed ? "Down" : "Up").accessibilityIdentifier("phase")
+        }
+    }
+}
 final class RuntimeTests: XCTestCase {
+    func testButtonStyleTracksNativePressAndRelease() async {
+        await MainActor.run {
+            let host = Host(title: "Button") { ctx in
+                Button("Push") {}.buttonStyle(PressStyle()).accessibilityIdentifier("button").resolve(ctx)
+            }
+            defer { host.close() }
+            host.open(width: 180, height: 100)
+            XCTAssertEqual(qs_read_text(host.window, "phase", "Up"), 1)
+            XCTAssertEqual(qs_mouse_button(host.window, "button", 1), 1)
+            XCTAssertEqual(qs_read_text(host.window, "phase", "Down"), 1)
+            XCTAssertEqual(qs_mouse_button(host.window, "button", 0), 1)
+            XCTAssertEqual(qs_read_text(host.window, "phase", "Up"), 1)
+        }
+    }
     func testQtEventsBindingsAndKeyedState() async {
         await MainActor.run {
             let host = Host(title: "Test") { Fixture().resolve($0) }

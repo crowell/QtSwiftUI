@@ -1,6 +1,6 @@
 import SwiftUI
 
-private struct Settings: View {
+struct Settings: View {
     @State private var displayName = "Alex"
     @State private var notifications = true
     @State private var volume = 0.65
@@ -11,21 +11,21 @@ private struct Settings: View {
             Text("Preferences").font(.largeTitle.bold())
             Divider()
             Text("Display name").font(.headline)
-            TextField("Display name", text: $displayName)
-            Toggle("Message notifications", isOn: $notifications)
+            TextField("Display name", text: $displayName).accessibilityIdentifier("display-name")
+            Toggle("Message notifications", isOn: $notifications).accessibilityIdentifier("notifications")
             if notifications {
                 HStack {
                     Text("Alert volume")
                     Spacer()
-                    Text("\(Int((volume * 100).rounded()))%").foregroundStyle(.secondary)
+                    Text("\(Int((volume * 100).rounded()))%").foregroundStyle(.secondary).accessibilityIdentifier("volume-label")
                 }
                 Slider(value: $volume, in: 0...1, step: 0.05)
             }
             Divider()
             HStack {
-                Text(saved).font(.footnote).foregroundStyle(.secondary)
+                Text(saved).font(.footnote).foregroundStyle(.secondary).accessibilityIdentifier("saved")
                 Spacer()
-                Button("Save") { saved = "Saved for \(displayName)" }.disabled(displayName.isEmpty)
+                Button("Save") { saved = "Saved for \(displayName)" }.disabled(displayName.isEmpty).accessibilityIdentifier("save")
             }
         }
         .padding(28)

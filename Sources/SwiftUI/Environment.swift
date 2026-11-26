@@ -18,7 +18,10 @@ public struct EnvironmentValues {
     public var multilineTextAlignment: TextAlignment = .leading
     public var lineLimit: Int?
     var foreground = Color.primary
-    var buttonPlain = false
+
+    var buttonStyle: ((ButtonStyleConfiguration) -> AnyView)?
+    var focus: FocusLink?
+    var submit: (() -> Void)?
     var accessibilityTraits: AccessibilityTraits = []
     var stackAxis = Axis.vertical
     var label = "", identifier = ""

@@ -17,9 +17,10 @@ private struct Conversation: Identifiable {
     let color: Color
     var messages: [Message]
 }
-private struct Inbox: View {
+struct Inbox: View {
     @State private var selected = "Design group"
     @State private var draft = ""
+    @FocusState private var composing: Bool
     @State private var rooms = [
         Conversation(id: "Design group", initials: "DG", color: accent, messages: [
             Message(author: "Mira", text: "The first Linux window is up. Can you see the conversation?", outgoing: false),
@@ -33,6 +34,17 @@ private struct Inbox: View {
     ]
     private var index: Int { rooms.firstIndex { $0.id == selected }! }
 
+    private var messageCount: String {
+        let count = rooms[index].messages.count
+        return count == 1 ? "1 message" : "\(count) messages"
+    }
+    private func send() {
+        guard !draft.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty else { return }
+        rooms[index].messages.append(Message(author: "You", text: draft, outgoing: true))
+        draft = ""
+        composing = true
+    }
+
     var body: some View {
         HStack(spacing: 0) {
             VStack(alignment: .leading, spacing: 12) {
@@ -42,6 +54,7 @@ private struct Inbox: View {
                     Button {
                         selected = room.id
                         draft = ""
+                        composing = true
                     } label: {
                         HStack(spacing: 10) {
                             Avatar(initials: room.initials, color: room.color)
@@ -53,6 +66,8 @@ private struct Inbox: View {
                         .background(RoundedRectangle(cornerRadius: 8).fill(room.id == selected ? accent.opacity(0.12) : Color.clear))
                     }
                     .buttonStyle(.plain)
+                    .accessibilityLabel(room.id)
+                    .accessibilityIdentifier("room-" + room.id)
                 }
                 Spacer()
             }
@@ -67,7 +82,8 @@ private struct Inbox: View {
                     Avatar(initials: rooms[index].initials, color: rooms[index].color)
                     VStack(alignment: .leading, spacing: 3) {
                         Text(selected).font(.title2.bold())
-                        Text("\(rooms[index].messages.count) messages").font(.footnote).foregroundStyle(muted)
+                        Text(messageCount).font(.footnote).foregroundStyle(muted)
+                            .accessibilityIdentifier("message-count")
                     }
                     Spacer()
                 }
@@ -92,11 +108,12 @@ private struct Inbox: View {
                 Divider()
                 HStack(spacing: 10) {
                     TextField("Write a message", text: $draft)
-                    Button("Send") {
-                        rooms[index].messages.append(Message(author: "You", text: draft, outgoing: true))
-                        draft = ""
-                    }
-                    .disabled(draft.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty)
+                        .focused($composing)
+                        .onSubmit(send)
+                        .accessibilityIdentifier("composer")
+                    Button("Send", action: send)
+                        .disabled(draft.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty)
+                        .accessibilityIdentifier("send")
                 }
                 .padding(16)
             }

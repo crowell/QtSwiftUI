@@ -28,11 +28,22 @@ enum Part: Hashable {
             }
         }
     }
-    func widget(_ kind: QSKind, action: ((String) -> Void)? = nil) -> UnsafeMutableRawPointer {
+    func widget(_ kind: QSKind, pressed: ((Bool) -> Void)? = nil, action: ((String) -> Void)? = nil) -> UnsafeMutableRawPointer {
         let entry = host.mount(path: path + [.widget(kind.rawValue)], kind: kind, parent: parent)
-        host.events[entry.id] = action
+        let focus = environment.focus
+        let submit = environment.submit
+        host.events[entry.id] = { kind, value in
+            switch kind {
+            case QSActivate: action?(value)
+            case QSFocusChanged: focus?.change(value == "1")
+            case QSSubmit: submit?()
+            case QSPressedChanged: pressed?(value == "1")
+            default: break
+            }
+        }
         qs_enabled(entry.widget, environment.isEnabled ? 1 : 0)
         qs_accessibility(entry.widget, environment.label, environment.identifier)
+        if let focus { qs_focus(entry.widget, focus.active() ? 1 : 0) }
         return entry.widget
     }
 }
@@ -57,7 +68,7 @@ enum Part: Hashable {
         if disappear[path] == nil && nextDisappear[path] == nil { afterRender.append(appear) }
         nextDisappear[path] = action
     }
-    var events: [Int32: (String) -> Void] = [:]
+    var events: [Int32: (QSEventKind, String) -> Void] = [:]
     private let content: (Context) -> [Element]
     private(set) var window: OpaquePointer!
 
@@ -67,9 +78,9 @@ enum Part: Hashable {
             MainActor.assumeIsolated {
                 Unmanaged<Host>.fromOpaque(pointer!).takeUnretainedValue().render(width: Int(width), height: Int(height))
             }
-        }, { pointer, id, value in
+        }, { pointer, id, kind, value in
             let string = value.map { String(cString: $0) } ?? ""
-            MainActor.assumeIsolated { Unmanaged<Host>.fromOpaque(pointer!).takeUnretainedValue().events[id]?(string) }
+            MainActor.assumeIsolated { Unmanaged<Host>.fromOpaque(pointer!).takeUnretainedValue().events[id]?(kind, string) }
         })
     }
     func open(width: Int, height: Int) { qs_open(window, Int32(width), Int32(height)) }

@@ -32,11 +32,3 @@ extension View {
         }
     }
 }
-
-public struct PlainButtonStyle: Sendable {
-    public init() {}
-    public static var plain: Self { Self() }
-}
-extension View {
-    public func buttonStyle(_ style: PlainButtonStyle) -> some View { environment(\.buttonPlain, true) }
-}
