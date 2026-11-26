@@ -84,6 +84,20 @@ public final class NSItemProvider: NSObject {
         }
         return provider
     }
+    func transferData(for types: [UTType]) -> [(Data, UTType)] {
+        for type in types {
+            guard let match = representation(for: type.identifier) else { continue }
+            if type.conforms(to: .url), let list = String(data: match.data, encoding: .utf8) {
+                return list.split(whereSeparator: \.isNewline).compactMap { entry in
+                    guard !entry.hasPrefix("#"), let url = URL(string: String(entry)), url.scheme != nil else { return nil }
+                    return (Data(url.absoluteString.utf8), type)
+                }
+            }
+            return [(match.data, type)]
+        }
+        return []
+    }
+
     static func clipboardItems(_ mime: UnsafeMutableRawPointer?, matching types: [String], includingData: Bool) -> [NSItemProvider] {
         (0..<qs_clipboard_item_count(mime)).compactMap { index in
             guard let item = qs_clipboard_item(mime, index) else { return nil }

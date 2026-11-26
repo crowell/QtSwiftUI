@@ -20,6 +20,11 @@ void qs_mime_read(void *value, int representations, void *context, QSMimeEntry e
             ? mime->data(format) : QByteArray();
         entry(context, format.toUtf8().constData(), reinterpret_cast<const unsigned char *>(bytes.constData()), size_t(bytes.size()));
     }
+    // Qt's native text clipboard is Unicode even when its MIME offer omits a charset.
+    if (mime->hasText() && !mime->hasFormat(QStringLiteral("text/plain;charset=utf-8"))) {
+        const auto utf8 = representations ? mime->text().toUtf8() : QByteArray();
+        entry(context, "text/plain;charset=utf-8", reinterpret_cast<const unsigned char *>(utf8.constData()), size_t(utf8.size()));
+    }
 }
 
 QWidget *NativeTransfer::enclosing(QWidget *widget, const char *property) {

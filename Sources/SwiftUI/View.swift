@@ -6,9 +6,7 @@ import QtBridge
     @ViewBuilder var body: Body { get }
 }
 
-extension Never: View {
-    public var body: Never { self }
-}
+extension Never: View {}
 
 @MainActor protocol Primitive: View where Body == Never {
     func elements(in context: Context) -> [Element]

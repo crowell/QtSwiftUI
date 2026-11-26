@@ -1,10 +1,15 @@
+@_exported import CoreTransferable
 import QtBridge
 import UniformTypeIdentifiers
 
 public nonisolated struct PasteButton: View {
     private let types: [String]
     private let validatesPayload: Bool
-    private let prepare: ([NSItemProvider]) -> (() -> Void)?
+    private enum Processing {
+        case providers(([NSItemProvider]) -> (() -> Void)?)
+        case typed(any TypedPasteAction)
+    }
+    private let processing: Processing
 
     public init(supportedContentTypes: [UTType], payloadAction: @escaping ([NSItemProvider]) -> Void) {
         self.init(supportedTypes: supportedContentTypes.map(\.identifier), payloadAction: payloadAction)
@@ -18,14 +23,27 @@ public nonisolated struct PasteButton: View {
     public init(supportedTypes: [String], payloadAction: @escaping ([NSItemProvider]) -> Void) {
         types = supportedTypes
         validatesPayload = false
-        prepare = { items in { payloadAction(items) } }
+        processing = .providers { items in { payloadAction(items) } }
     }
 
     public init<Payload>(supportedTypes: [String], validator: @escaping ([NSItemProvider]) -> Payload?,
                          payloadAction: @escaping (Payload) -> Void) {
         types = supportedTypes
         validatesPayload = true
-        prepare = { items in validator(items).map { payload in { payloadAction(payload) } } }
+        processing = .providers { items in validator(items).map { payload in { payloadAction(payload) } } }
+    }
+
+    public init<T>(payloadType: T.Type, onPaste: @escaping ([T]) -> Void) where T: Transferable {
+        types = T.importedContentTypes().map(\.identifier)
+        validatesPayload = false
+        processing = .typed(TypedPaste(onPaste: onPaste))
+    }
+
+    @MainActor private func prepare(_ items: [NSItemProvider]) -> (() -> Void)? {
+        switch processing {
+        case .providers(let validate): return validate(items)
+        case .typed(let payload): return { payload.deliver(items) }
+        }
     }
 
     public nonisolated var body: some View { PasteControl(configuration: self) }
@@ -54,6 +72,26 @@ public nonisolated struct PasteButton: View {
                     if !current.isEmpty { configuration.prepare(current)?() }
                 }
             }.disabled(offered.isEmpty || (configuration.validatesPayload && prepared == nil))
+        }
+    }
+}
+
+private protocol TypedPasteAction {
+    @MainActor func deliver(_ items: [NSItemProvider])
+}
+
+private struct TypedPaste<Value: Transferable>: TypedPasteAction {
+    let onPaste: ([Value]) -> Void
+
+    @MainActor func deliver(_ items: [NSItemProvider]) {
+        let types = Value.importedContentTypes()
+        let data = items.flatMap { $0.transferData(for: types) }
+        Task { @MainActor in
+            var decoded: [Value] = []
+            for (bytes, contentType) in data {
+                if let value = try? await Value(importing: bytes, contentType: contentType) { decoded.append(value) }
+            }
+            if !decoded.isEmpty { onPaste(decoded) }
         }
     }
 }

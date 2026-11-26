@@ -3,6 +3,7 @@
 #include <QClipboard>
 #include <QKeyEvent>
 #include <QMimeData>
+#include <QPointer>
 #include <QUrl>
 #include <memory>
 #include <vector>
@@ -38,7 +39,13 @@ void qs_clipboard_scope(QSWidget item, int command) {
 }
 uint64_t qs_clipboard_revision() {
     static uint64_t revision = 0;
-    static const auto connection = QObject::connect(QApplication::clipboard(), &QClipboard::dataChanged, [] { ++revision; });
+    static QPointer<QClipboard> observed;
+    auto *clipboard = QApplication::clipboard();
+    if (observed != clipboard) {
+        observed = clipboard;
+        ++revision;
+        QObject::connect(clipboard, &QClipboard::dataChanged, clipboard, [] { ++revision; });
+    }
     return revision;
 }
 void *qs_clipboard_contents() { return const_cast<QMimeData *>(QApplication::clipboard()->mimeData()); }

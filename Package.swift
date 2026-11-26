@@ -21,7 +21,8 @@ let package = Package(
         .target(name: "QtBridge", dependencies: ["CQtWidgets"]),
         .target(name: "CoreGraphics", dependencies: ["QtBridge"]),
         .target(name: "UniformTypeIdentifiers"),
-        .target(name: "SwiftUI", dependencies: ["QtBridge", "CoreGraphics", "UniformTypeIdentifiers", "QtSwiftUIMacros"]),
+        .target(name: "CoreTransferable", dependencies: ["UniformTypeIdentifiers"]),
+        .target(name: "SwiftUI", dependencies: ["QtBridge", "CoreGraphics", "UniformTypeIdentifiers", "CoreTransferable", "QtSwiftUIMacros"]),
         .executableTarget(name: "Conversation", dependencies: ["SwiftUI"], path: "Examples/Conversation"),
         .executableTarget(name: "Controls", dependencies: ["SwiftUI"], path: "Examples/Controls"),
         .testTarget(name: "SwiftUITests", dependencies: ["SwiftUI", "QtBridge", "Controls", "Conversation"])
