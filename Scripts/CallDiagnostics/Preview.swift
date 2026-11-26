@@ -8,14 +8,16 @@ struct DiagnosticPreview: App {
         let linking = linkError || CommandLine.arguments.contains("--link-device")
         let leaveCall = CommandLine.arguments.contains("--leave-call")
         let clearing = CommandLine.arguments.contains("--clearing-data")
+        let colorEditor = CommandLine.arguments.contains("--color-editor")
         let populatedGallery = CommandLine.arguments.contains("--gallery-media")
         let gallery = populatedGallery || CommandLine.arguments.contains("--gallery")
         let draft = CommandLine.arguments.contains("--recording-draft")
         let recording = CommandLine.arguments.contains("--recording")
         let discard = CommandLine.arguments.contains("--discard-recording")
         let arabic = CommandLine.arguments.contains("--arabic")
-        WindowGroup(recording || draft || discard ? "Voice message" : gallery ? "All media" : clearing ? "Clearing data" : linking ? "Link device" : leaveCall ? "Leave current call" : "Call diagnostics") {
-            if draft { RecordingDraftPreview() }
+        WindowGroup(colorEditor ? "Custom chat color" : recording || draft || discard ? "Voice message" : gallery ? "All media" : clearing ? "Clearing data" : linking ? "Link device" : leaveCall ? "Leave current call" : "Call diagnostics") {
+            if colorEditor { ColorEditorPreview() }
+            else if draft { RecordingDraftPreview() }
             else if recording || discard { RecordingPreview(discard: discard) }
             else if gallery { GalleryPreview(populated: populatedGallery) }
             else if clearing {
@@ -29,7 +31,19 @@ struct DiagnosticPreview: App {
             else { DiagnosticContent() }
         }
         .defaultSize(width: recording || draft ? 640 : linking || clearing ? 680 : 520,
-                     height: recording || draft ? 84 : discard ? 280 : linking || clearing ? 420 : 440)
+                     height: colorEditor ? 620 : recording || draft ? 84 : discard ? 280 : linking || clearing ? 420 : 440)
+    }
+}
+
+struct ColorEditorPreview: View {
+    @Environment(\.dismiss) private var dismiss
+    var body: some View {
+        AxoBaseDialog.Host {
+            CustomColorEditorDialog(initialGradient: (start: 0xB36409, end: 0x852CB1, angle: 135), onClose: { dismiss() })
+        }
+        .background(AxoColor.surfacePrimary)
+        .environment(\.conversationListNow, Date(timeIntervalSince1970: 1_793_793_600))
+        .environment(\.timeZone, TimeZone(secondsFromGMT: 0)!)
     }
 }
 

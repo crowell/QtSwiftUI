@@ -129,11 +129,29 @@ awk '/^import AppKit/ || /\.background \{ if backdropBlur/ { print "#if canImpor
      /^struct WithinWindowBlur:/ { print "#if canImport(AppKit)"; blur = 1 }
      { print } END { if (!blur) exit 1; print "#endif" }' \
     "$source_dir/Axo/AxoBaseDialog.swift" > "$target_dir/AxoBaseDialog.swift"
-# Copy the alert's actual scrolling, height limit and variant implementations.
-awk 'BEGIN { print "import SwiftUI\npublic enum AxoDialog {" }
-     /^    public enum ActionVariant:/ || /^    struct (HeightLimited|TopAligned|AxoScrollContainer)[<:]/ { inside = 1; count++ }
-     inside { print } /^    }$/ { inside = 0 }
-     END { print "}"; if (count != 4) exit 1 }' "$source_dir/Axo/AxoDialog.swift" > "$target_dir/AxoDialog.swift"
+# The color-editor dialog uses the actual header, tab, scroll and action implementations.
+# Two unrelated slot types use Serein's CoreText-only measurement helpers.
+awk '/^    public struct (BodyTitle|FooterContent):/ { skip=1; count++ }
+     !skip { print } /^    }$/ { skip=0 } END { if (count!=2) exit 1 }' \
+    "$source_dir/Axo/AxoDialog.swift" > "$target_dir/AxoDialog.swift"
+cp "$source_dir/Axo/AxoTabs.swift" "$source_dir/Components/CustomColorEditor.swift" \
+   "$source_dir/Components/Conversation/ExpireTimer.swift" "$source_dir/Tokens/AxoTokens.swift" \
+   "$source_dir/Tokens/AxoTokensTables.generated.swift" "$target_dir/"
+# Inline text uses this CoreText width calculation elsewhere. The editor renders the
+# full MessageMetadata body and measures it through SwiftUI layout.
+awk '/^    @MainActor func width\(i18n:/ { skip=1; count++ }
+     !skip { print } /^    }$/ { skip=0 } END { if (count!=1) exit 1 }' \
+    "$source_dir/Components/Conversation/Message/MessageMetadata.swift" > "$target_dir/MessageMetadata.swift"
+{
+    echo 'import SwiftUI'
+    echo 'import SignalI18n'
+    declarations '^public struct CustomChatColor:|^struct SampleMessage:|^public struct SampleMessageBubbles:' 3 "$source_dir/Components/ChatColorPicker.swift"
+    declarations '^public enum BubbleColor:|^struct BubbleFill:' 2 "$source_dir/Components/Conversation/Message/Message.swift"
+    declarations '^public enum FormatTimestamp ' 1 "$source_dir/Components/LeftPaneDialogs.swift"
+    awk '/^public enum MessageDirection:/ { print; count++ } END { if (count!=1) exit 1 }' "$source_dir/Components/Conversation/MessageTextRenderer.swift"
+    awk 'BEGIN { print "extension EnvironmentValues {" } /@Entry public var chatColorViewport:/ { print; count++ }
+         END { print "}"; if (count!=1) exit 1 }' "$source_dir/Components/Conversation/Message/Message.swift"
+} > "$target_dir/EditorSupport.swift"
 # AxoButton uses the type scale. The rest of AxoType.swift defines a CoreText modifier.
 awk '/^public struct AxoType: / { print "import SwiftUI"; inside = 1 }
      inside { print } inside && /^}$/ { complete = 1; exit } END { if (!complete) exit 1 }' \
