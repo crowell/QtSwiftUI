@@ -62,6 +62,7 @@ public struct CSSTextRun: Hashable, Sendable {
     public var background: AxoColor?
     public var breakAll = false
     public init(_ text: String, color: AxoColor? = nil) { self.text = text; self.color = color }
+    public init(_ text: String, fontName: String) { self.text = text; self.fontName = fontName }
 }
 public struct CSSTextStyle {
     var fontName: String
@@ -146,7 +147,7 @@ struct CSSText: View {
         self.init(value, type: style.type, wrap: wrap, alignment: alignment, color: color)
         self.tabular = style.tabular
     }
-    init(runs: [CSSTextRun], style: CSSTextStyle, wrap: CSSTextWrap, color: AxoColor? = nil, alignment: TextAlignment = .leading) {
+    init(runs: [CSSTextRun], style: CSSTextStyle, wrap: CSSTextWrap = .wrap, color: AxoColor? = nil, alignment: TextAlignment = .leading) {
         let displayed = runs.map { run -> CSSTextRun in
             guard run.breakAll else { return run }
             var copy = run

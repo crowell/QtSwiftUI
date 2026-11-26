@@ -188,13 +188,15 @@ awk 'BEGIN { print "extension SettingsModel {" } /^    static let microphones =/
     "$checkout/Packages/SignalUI/Tests/SignalUITests/Components/Preferences/PreferencesTests.swift" > "$target_dir/SettingsDevices.swift"
 cp "$source_dir/Calling/CallLinkDetails.swift" "$source_dir/Components/Conversation/ConversationDetails/CallHistoryGroupPanelSection.swift" \
    "$source_dir/Components/EditNicknameAndNoteModal.swift" "$source_dir/Axo/AxoAvatar.swift" "$source_dir/Axo/Items/AxoTextItem.swift" \
+   "$source_dir/Axo/AxoThemeOverride.swift" "$source_dir/Axo/AxoContactName.swift" \
    "$source_dir/Axo/Fields/AxoBaseField.swift" "$source_dir/Axo/Fields/AxoFieldGroup.swift" "$source_dir/Axo/Fields/AxoTextField.swift" \
    "$source_dir/Axo/Items/AxoFieldList.swift" "$source_dir/Axo/Items/AxoItem.swift" "$target_dir/"
 {
     echo 'import SwiftUI'
     echo 'import SignalI18n'
     declarations '^func callLinkColor[(]' 1 "$source_dir/Components/Conversation/Message/MessageLinkPreview.swift"
-    declarations '^public struct CallLink(EditModal|AddNameModal):|^struct CallLinkURLButton:' 3 "$source_dir/Calling/CallLinkModals.swift"
+    declarations '^public enum SharedGroupNames |^extension SharedGroupNames ' 2 "$source_dir/Components/Conversation/ConversationHero.swift"
+    declarations '^public struct CallLink(EditModal|AddNameModal|PendingParticipantModal):|^struct CallLinkURLButton:' 4 "$source_dir/Calling/CallLinkModals.swift"
     awk 'BEGIN {print "enum CallingNotification {"} /^    static func directText\(/ { inside=1; count++ }
          inside { print } /^    }$/ { inside=0 } END {print "}"; if (count!=1 || inside) exit 1}' \
         "$source_dir/Components/Conversation/Notifications/CallingNotification.swift"

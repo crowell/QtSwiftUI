@@ -5,7 +5,7 @@ extension Context {
         let font = environment.font ?? .body
         let alignment = environment.multilineTextAlignment
         let leading: Int32 = environment.layoutDirection == .rightToLeft ? 1 : -1
-        qs_style(widget, font.qtFamily, font.size, font.weight.value, font.slanted ? 1 : 0, environment.tracking, environment.foreground.hex(environment.colorScheme),
+        qs_style(widget, font.qtFamily, font.size, font.qtWeight, font.slanted ? 1 : 0, environment.tracking, environment.foreground.hex(environment.colorScheme),
                  alignment == .leading ? leading : alignment == .center ? 0 : -leading, environment.lineLimit == 1 ? 0 : 1)
     }
     func control(_ widget: UnsafeMutableRawPointer, expands: Bool = false) -> Element {
@@ -58,14 +58,19 @@ public struct Text: Primitive {
             qs_text(widget, string)
             ctx.style(widget)
         }
-        return [Element { p in
+        let element = Element { p in
             let hint = qs_measure(widget, p.width ?? -1)
             let line = qs_line_height(widget)
             let minimum = ctx.environment.minimumLines
             let capped = ctx.environment.lineLimit.map { min(hint.height, CGFloat(max(1, $0)) * line) } ?? hint.height
             let height = minimum > 1 ? max(capped, CGFloat(minimum) * line) : capped
             return CGSize(width: hint.width, height: height)
-        } place: { rect, _ in qs_place(widget, rect.minX, rect.minY, rect.width, rect.height) }]
+        } place: { rect, _ in qs_place(widget, rect.minX, rect.minY, rect.width, rect.height) }
+        element.baselines = { _, size in
+            let result = qs_text_baselines(widget, size.width, size.height)
+            return TextBaselines(first: result.first, last: result.last)
+        }
+        return [element]
     }
 }
 public struct Button<Label: View>: Primitive {
@@ -97,13 +102,15 @@ public struct Button<Label: View>: Primitive {
         func inner(_ p: ProposedViewSize) -> ProposedViewSize {
             .init(width: p.width.map { max(0, $0 - 2 * dx) }, height: p.height.map { max(0, $0 - 2 * dy) })
         }
-        return [Element { p in
+        let button = Element { p in
             let size = child.measure(inner(p))
             return CGSize(width: size.width + 2 * dx, height: size.height + 2 * dy)
         } place: { rect, p in
             qs_place(widget, rect.minX, rect.minY, rect.width, rect.height)
             child.place(.init(origin: CGPoint(x: dx, y: dy), size: child.measure(inner(p))), inner(p))
-        }]
+        }
+        button.baselines = { p, _ in child.baselines?(inner(p), child.measure(inner(p)))?.offset(by: dy) }
+        return [button]
     }
 }
 public struct Toggle<Label: View>: Primitive {

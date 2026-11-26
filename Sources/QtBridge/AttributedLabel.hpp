@@ -1,7 +1,10 @@
 #pragma once
+#include "RegisteredFonts.hpp"
 #include <QLabel>
 #include <QTextCursor>
 #include <QTextDocument>
+#include <QAbstractTextDocumentLayout>
+#include <QTextBlock>
 #include <cmath>
 
 // QLabel owns selection and link input. The same formatted document measures the label.
@@ -33,11 +36,8 @@ public:
         if (*foreground) format.setForeground(QColor(QString::fromUtf8(foreground)));
         if (*background) format.setBackground(QColor(QString::fromUtf8(background)));
         if (size > 0) {
-            QFont face = font();
-            if (*family) face.setFamily(QString::fromUtf8(family));
+            QFont face = resolveFont(font(), QString::fromUtf8(family), weight, italic);
             face.setPixelSize(qMax(1, qRound(size)));
-            face.setWeight(static_cast<QFont::Weight>(weight));
-            face.setItalic(italic);
             format.setFont(face);
         }
         QTextCursor cursor(&content);
@@ -57,6 +57,17 @@ public:
         const auto available = wordWrap() && std::isfinite(width) && width >= 0 ? qMin(ideal, width) : ideal;
         content.setTextWidth(available);
         return {available, std::ceil(content.size().height())};
+    }
+
+    QSBaselines baselines(double width, double height) {
+        const auto measured = measure(width);
+        auto baseline = [&](QTextBlock block, bool last) {
+            auto *layout = block.layout();
+            const auto line = layout->lineAt(last ? layout->lineCount() - 1 : 0);
+            return (height - measured.height()) / 2 + content.documentLayout()->blockBoundingRect(block).top()
+                 + line.y() + line.ascent();
+        };
+        return {baseline(content.firstBlock(), false), baseline(content.lastBlock(), true)};
     }
 
 private:

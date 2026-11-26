@@ -128,6 +128,8 @@ extension View {
                 child.wrapping { p in
                     let size = child.measure(inner(p))
                     return CGSize(width: size.width + w, height: size.height + h)
+                } baselines: { p, _ in
+                    child.baselines?(inner(p), child.measure(inner(p)))?.offset(by: insets.top)
                 } place: { rect, p in
                     child.place(CGRect(origin: CGPoint(x: rect.minX + left, y: rect.minY + insets.top),
                                        size: child.measure(inner(p))), inner(p))
@@ -170,6 +172,10 @@ extension View {
                     let (offer, size) = measured(p)
                     return CGSize(width: dimension(size.width, offer.width, minWidth, maxWidth),
                                   height: dimension(size.height, offer.height, minHeight, maxHeight))
+                } baselines: { p, outer in
+                    let (offer, size) = measured(p)
+                    let y = alignment.rect(size, in: CGRect(origin: .zero, size: outer)).minY
+                    return child.baselines?(offer, size)?.offset(by: y)
                 } place: { bounds, p in
                     let (offer, size) = measured(p)
                     child.place(alignment.rect(size, in: bounds, direction: ctx.environment.layoutDirection), offer)
@@ -180,7 +186,7 @@ extension View {
     public func fixedSize(horizontal: Bool, vertical: Bool) -> some View {
         Transform(content: self) { view, ctx in
             func offer(_ p: ProposedViewSize) -> ProposedViewSize { .init(width: horizontal ? nil : p.width, height: vertical ? nil : p.height) }
-            return view.resolve(ctx).map { child in child.wrapping { child.measure(offer($0)) } place: { child.place($0, offer($1)) } }
+            return view.resolve(ctx).map { child in child.wrapping { child.measure(offer($0)) } baselines: { p, size in child.baselines?(offer(p), size) } place: { child.place($0, offer($1)) } }
         }
     }
     public func fixedSize() -> some View { fixedSize(horizontal: true, vertical: true) }
@@ -214,7 +220,15 @@ private nonisolated struct DecoratedView<Content: View, Decoration: View>: View 
                 return child.wrapping(size: child.measure) { bounds, p in
                     let proposal = ProposedViewSize(bounds.size)
                     if above { child.place(bounds, p) }
-                    for d in decorations { d.place(alignment.rect(d.measure(proposal), in: bounds, direction: ctx.environment.layoutDirection), proposal) }
+                    for decoration in decorations {
+                        let size = decoration.measure(proposal)
+                        var rect = alignment.rect(size, in: bounds, direction: ctx.environment.layoutDirection)
+                        if alignment.vertical.isBaseline {
+                            rect.origin.y = bounds.minY + child.baseline(alignment.vertical, proposal: p, size: bounds.size)
+                                - decoration.baseline(alignment.vertical, proposal: proposal, size: size)
+                        }
+                        decoration.place(rect, proposal)
+                    }
                     if !above { child.place(bounds, p) }
                 }
             }

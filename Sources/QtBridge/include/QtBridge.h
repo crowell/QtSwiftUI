@@ -36,6 +36,8 @@ void qs_view_blur(QSWidget, double radius, int opaque);
 void qs_alpha_mask(QSWidget, QSWidget stencil);
 void qs_control_scale(QSWidget, double scale);
 double qs_field_height(QSWidget, double width, int minimumLines, int maximumLines);
+typedef struct { double first, last; } QSBaselines;
+QSBaselines qs_text_baselines(QSWidget, double width, double height);
 double qs_line_height(QSWidget);
 void qs_autocorrection(QSWidget, int disabled);
 void qs_clipboard_text(const char *text);

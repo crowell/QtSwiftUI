@@ -38,7 +38,7 @@ extension Text {
                 qs_attributed_append(widget, bytes, value.utf8.count, run.link?.absoluteString ?? "",
                                      run.foregroundColor?.hex(environment.colorScheme) ?? "",
                                      run.backgroundColor?.hex(environment.colorScheme) ?? "",
-                                     font?.qtFamily ?? "", Double(font?.size ?? 0), font?.weight.value ?? 400, font?.slanted == true ? 1 : 0)
+                                     font?.qtFamily ?? "", Double(font?.size ?? 0), font?.qtWeight ?? 400, font?.slanted == true ? 1 : 0)
             }
         }
         qs_attributed_finish(widget, environment.selectableText ? 1 : 0)

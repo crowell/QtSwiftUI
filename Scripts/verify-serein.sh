@@ -32,6 +32,7 @@ fi
 diagnostics="$preview/diagnostics"
 sh /src/Scripts/prepare-diagnostics.sh "$checkout" "$diagnostics"
 if [ -n "${QTSWIFTUI_SCREENSHOT:-}" ]; then
+    export QTSWIFTUI_REQUEST_REFERENCE="$(dirname "$QTSWIFTUI_SCREENSHOT")"
     export QTSWIFTUI_LINK_SCREENS="$(dirname "$QTSWIFTUI_SCREENSHOT")"
     export QTSWIFTUI_HISTORY_REFERENCE="$(dirname "$QTSWIFTUI_SCREENSHOT")"
     export QTSWIFTUI_SETTINGS_REFERENCE="$(dirname "$QTSWIFTUI_SCREENSHOT")"
@@ -45,6 +46,7 @@ if [ -n "${QTSWIFTUI_SCREENSHOT:-}" ]; then
     QTSWIFTUI_SCREENSHOT="$(dirname "$QTSWIFTUI_SCREENSHOT")/voice-recording.png" "$binary" --recording
     QTSWIFTUI_SCREENSHOT="$(dirname "$QTSWIFTUI_SCREENSHOT")/discard-recording.png" "$binary" --discard-recording
     QTSWIFTUI_SCREENSHOT="$(dirname "$QTSWIFTUI_SCREENSHOT")/data-usage-settings.png" "$binary" --data-usage-settings
+    QTSWIFTUI_SCREENSHOT="$(dirname "$QTSWIFTUI_SCREENSHOT")/join-request.png" "$binary" --join-request
     QTSWIFTUI_SCREENSHOT="$(dirname "$QTSWIFTUI_SCREENSHOT")/call-link.png" "$binary" --call-link
     QTSWIFTUI_SCREENSHOT="$(dirname "$QTSWIFTUI_SCREENSHOT")/nickname-and-note.png" "$binary" --nickname
     QTSWIFTUI_SCREENSHOT="$(dirname "$QTSWIFTUI_SCREENSHOT")/call-history.png" "$binary" --call-history

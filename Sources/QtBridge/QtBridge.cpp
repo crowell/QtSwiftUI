@@ -139,6 +139,9 @@ protected:
         for (auto *child : findChildren<QWidget *>()) {
             auto *group = dynamic_cast<GroupWidget *>(child);
             if (!group || !group->contentShape) continue;
+            auto *owner = group->parentWidget();
+            while (owner && owner != this && !qobject_cast<QAbstractButton *>(owner)) owner = owner->parentWidget();
+            if (owner != this) continue;
             restricted = true;
             if (group->contentShape->contains(group->mapFrom(this, point))) return true;
         }
@@ -943,6 +946,14 @@ void qs_editor_indicators(QSWidget w, int vertical) {
 double qs_field_height(QSWidget w, double width, int minimum, int maximum) {
     return static_cast<PlainTextEditor *>(w)->fieldHeight(width, minimum, maximum);
 }
+QSBaselines qs_text_baselines(QSWidget w, double width, double height) {
+    if (auto *rich = dynamic_cast<AttributedLabel *>(widget(w))) return rich->baselines(width, height);
+    const auto metrics = widget(w)->fontMetrics();
+    const double actual = qs_measure(w, width).height;
+    const double drawn = qMin(actual, height);
+    const double first = (height - drawn) / 2 + metrics.ascent();
+    return {first, first + qMax(0.0, drawn - metrics.height())};
+}
 double qs_line_height(QSWidget w) { return widget(w)->fontMetrics().lineSpacing(); }
 void qs_autocorrection(QSWidget w, int disabled) {
     auto *item = widget(w);
@@ -979,14 +990,15 @@ int qs_register_font(const char *path) {
     const QString font = QString::fromUtf8(path);
     auto loaded = app.property("qsFonts").toStringList();
     if (loaded.contains(font)) return 1;
-    if (QFontDatabase::addApplicationFont(font) < 0) return 0;
+    const int id = QFontDatabase::addApplicationFont(font);
+    if (id < 0) return 0;
+    registerFontNames(app, QRawFont(font, 16), QFontDatabase::applicationFontFamilies(id));
     loaded.append(font);
     app.setProperty("qsFonts", loaded);
     return 1;
 }
 QSFontMetrics qs_font_metrics(const char *family, double size) {
-    auto font = application().font();
-    font.setFamily(QString::fromUtf8(family));
+    const auto font = resolveFont(application().font(), QString::fromUtf8(family), -1, false);
     auto raw = QRawFont::fromFont(font);
     raw.setPixelSize(size);
     return {raw.ascent(), raw.descent(), raw.xHeight()};
@@ -994,12 +1006,9 @@ QSFontMetrics qs_font_metrics(const char *family, double size) {
 void qs_style(QSWidget w, const char *family, double points, int weight, int italic, double tracking,
               const char *color, int alignment, int wrap) {
     auto *item = widget(w);
-    QFont font = application().font();
-    if (*family) font.setFamily(QString::fromUtf8(family));
+    QFont font = resolveFont(application().font(), QString::fromUtf8(family), weight, italic);
     font.setLetterSpacing(QFont::AbsoluteSpacing, tracking);
     font.setPixelSize(qMax(1, qRound(points)));
-    font.setWeight(static_cast<QFont::Weight>(weight));
-    font.setItalic(italic);
     item->setFont(font);
     QPalette palette = application().palette();
     QColor ink(QString::fromUtf8(color));

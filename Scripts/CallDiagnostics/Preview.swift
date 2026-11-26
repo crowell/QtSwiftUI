@@ -8,6 +8,7 @@ struct DiagnosticPreview: App {
         let linking = linkError || CommandLine.arguments.contains("--link-device")
         let leaveCall = CommandLine.arguments.contains("--leave-call")
         let clearing = CommandLine.arguments.contains("--clearing-data")
+        let request = CommandLine.arguments.contains("--join-request")
         let linkDetails = CommandLine.arguments.contains("--call-link")
         let nickname = CommandLine.arguments.contains("--nickname")
         let history = CommandLine.arguments.contains("--call-history")
@@ -22,8 +23,9 @@ struct DiagnosticPreview: App {
         let recording = CommandLine.arguments.contains("--recording")
         let discard = CommandLine.arguments.contains("--discard-recording")
         let arabic = CommandLine.arguments.contains("--arabic")
-        WindowGroup(linkDetails ? "Call link" : nickname ? "Edit nickname and note" : history ? "Call history" : settings ? (calls ? "Calls" : "Data usage") : survey ? "Call quality" : colorPicker ? "Chat color" : colorEditor ? "Custom chat color" : recording || draft || discard ? "Voice message" : gallery ? "All media" : clearing ? "Clearing data" : linking ? "Link device" : leaveCall ? "Leave current call" : "Call diagnostics") {
-            if linkDetails { CallLinkPreview() }
+        WindowGroup(request ? "Request to join" : linkDetails ? "Call link" : nickname ? "Edit nickname and note" : history ? "Call history" : settings ? (calls ? "Calls" : "Data usage") : survey ? "Call quality" : colorPicker ? "Chat color" : colorEditor ? "Custom chat color" : recording || draft || discard ? "Voice message" : gallery ? "All media" : clearing ? "Clearing data" : linking ? "Link device" : leaveCall ? "Leave current call" : "Call diagnostics") {
+            if request { JoinRequestPreview() }
+            else if linkDetails { CallLinkPreview() }
             else if nickname { NicknamePreview() }
             else if history { CallHistoryBrowserPreview() }
             else if settings { SettingsPreview(calls: calls) }
@@ -44,7 +46,7 @@ struct DiagnosticPreview: App {
             else { DiagnosticContent() }
         }
         .defaultSize(width: linkDetails ? 620 : nickname ? 520 : history ? 360 : settings ? 640 : colorPicker ? 780 : recording || draft ? 640 : linking || clearing ? 680 : 520,
-                     height: linkDetails ? 620 : nickname ? 560 : history ? 418 : settings ? 567 : survey ? 600 : colorPicker ? 720 : colorEditor ? 620 : recording || draft ? 84 : discard ? 280 : linking || clearing ? 420 : 440)
+                     height: request ? 510 : linkDetails ? 620 : nickname ? 560 : history ? 418 : settings ? 567 : survey ? 600 : colorPicker ? 720 : colorEditor ? 620 : recording || draft ? 84 : discard ? 280 : linking || clearing ? 420 : 440)
     }
 }
 

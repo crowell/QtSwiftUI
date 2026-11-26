@@ -129,6 +129,8 @@ public struct Font: Hashable, Sendable {
     }
     var size: CGFloat, weight: Weight, slanted = false
     var design: Design = .default
+    var usesFaceWeight = false
+    var qtWeight: Int32 { usesFaceWeight ? -1 : weight.value }
     var family: String?
     var qtFamily: String {
         if let family { return family }
@@ -148,14 +150,14 @@ public struct Font: Hashable, Sendable {
         if let weight { font.weight = weight }
         return font
     }
-    public static func custom(_ name: String, size: CGFloat) -> Self { Self(size: size, weight: .regular, family: name) }
-    public static func custom(_ name: String, fixedSize: CGFloat) -> Self { Self(size: fixedSize, weight: .regular, family: name) }
+    public static func custom(_ name: String, size: CGFloat) -> Self { .custom(name, fixedSize: size) }
+    public static func custom(_ name: String, fixedSize: CGFloat) -> Self { Self(size: fixedSize, weight: .regular, usesFaceWeight: true, family: name) }
     public func monospaced() -> Self { var copy = self; copy.design = .monospaced; copy.family = nil; return copy }
     public static let largeTitle = system(size: 34), title = system(size: 28), title2 = system(size: 22)
     public static let title3 = system(size: 20), headline = system(size: 17, weight: .semibold), body = system(size: 17)
     public static let callout = system(size: 16), subheadline = system(size: 15), footnote = system(size: 13)
     public static let caption = system(size: 12), caption2 = system(size: 11)
-    public func weight(_ weight: Weight) -> Self { var f = self; f.weight = weight; return f }
+    public func weight(_ weight: Weight) -> Self { var f = self; f.weight = weight; f.usesFaceWeight = false; return f }
     public func bold() -> Self { weight(.bold) }
     public func italic() -> Self { var f = self; f.slanted = true; return f }
 }
