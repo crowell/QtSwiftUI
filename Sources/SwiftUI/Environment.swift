@@ -18,7 +18,10 @@ public struct EnvironmentValues {
     public var font: Font?
     public var multilineTextAlignment: TextAlignment = .leading
     public var lineLimit: Int?
+    public var verticalScrollIndicatorVisibility = ScrollIndicatorVisibility.automatic
+    public var horizontalScrollIndicatorVisibility = ScrollIndicatorVisibility.automatic
     var selectableText = false
+    public var displayScale: CGFloat = 1
     var tracking: CGFloat = 0
     var foreground = Color.primary
 

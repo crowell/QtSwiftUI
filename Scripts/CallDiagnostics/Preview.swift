@@ -3,8 +3,20 @@ import SwiftUI
 @main
 struct DiagnosticPreview: App {
     var body: some Scene {
-        WindowGroup("Call diagnostics") { DiagnosticContent() }
+        WindowGroup(CommandLine.arguments.contains("--leave-call") ? "Leave current call" : "Call diagnostics") {
+            if CommandLine.arguments.contains("--leave-call") { LeaveCallPreview() } else { DiagnosticContent() }
+        }
             .defaultSize(width: 520, height: 440)
+    }
+}
+
+struct LeaveCallPreview: View {
+    @Environment(\.dismiss) private var dismiss
+    var body: some View {
+        AxoBaseDialog.Host {
+            ConfirmLeaveCallModal(onCancel: { dismiss() }, leaveCurrentCallAndStartCallingLobby: { dismiss() })
+        }
+        .background(AxoColor.surfacePrimary)
     }
 }
 

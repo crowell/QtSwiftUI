@@ -10,6 +10,7 @@ extension Context {
             prepare?(bounds.size)
             qs_place(group, bounds.minX, bounds.minY, bounds.width, bounds.height)
             child.place(CGRect(origin: .zero, size: bounds.size), proposal)
+            qs_group_finish_layout(group)
         }
         wrapper.values = child.values
         wrapper.priority = child.priority
@@ -26,6 +27,13 @@ extension View {
                     qs_group_shape(group, $0, eoFill ? 1 : 0)
                 }
             }
+        }
+    }
+    public func onTapGesture(count: Int = 1, perform action: @escaping () -> Void) -> some View {
+        Transform(content: self) { view, ctx in
+            let group = ctx.widget(QSGroup, action: { _ in action() })
+            qs_group_tap(group, Int32(clamping: count))
+            return ctx.children(of: view, inside: group)
         }
     }
     public func onHover(perform action: @escaping (Bool) -> Void) -> some View {

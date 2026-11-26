@@ -1,3 +1,5 @@
+import QtBridge
+
 public protocol PreferenceKey {
     associatedtype Value
     static var defaultValue: Value { get }
@@ -50,11 +52,15 @@ extension Context {
 
 extension View {
     public func preference<K: PreferenceKey>(key: K.Type = K.self, value: K.Value) -> some View {
+        deferredPreference(key) { value }
+    }
+
+    func deferredPreference<K: PreferenceKey>(_ key: K.Type, _ read: @escaping () -> K.Value) -> some View {
         Transform(content: self) { view, context in
             var inner = context
             let parent = inner.preferences.removeValue(forKey: ObjectIdentifier(key)) as? PreferenceValues<K>
             let items = view.resolve(inner)
-            if !items.isEmpty { parent?.inputs.append { { value } } }
+            if !items.isEmpty { parent?.inputs.append { read } }
             return items
         }
     }
@@ -78,6 +84,48 @@ extension View {
                 }
             }
             return items
+        }
+    }
+
+    public func overlayPreferenceValue<K: PreferenceKey, V: View>(_ key: K.Type = K.self, alignment: Alignment = .center,
+                                                                  @ViewBuilder _ transform: @escaping (K.Value) -> V) -> some View {
+        preferenceDecoration(key, alignment: alignment, above: true, transform)
+    }
+
+    public func backgroundPreferenceValue<K: PreferenceKey, V: View>(_ key: K.Type = K.self, alignment: Alignment = .center,
+                                                                     @ViewBuilder _ transform: @escaping (K.Value) -> V) -> some View {
+        preferenceDecoration(key, alignment: alignment, above: false, transform)
+    }
+
+    private func preferenceDecoration<K: PreferenceKey, V: View>(_ key: K.Type, alignment: Alignment, above: Bool,
+                                                                 _ transform: @escaping (K.Value) -> V) -> some View {
+        Transform(content: self) { view, context in
+            let values = PreferenceValues<K>()
+            let id = ObjectIdentifier(key)
+            (context.preferences[id] as? PreferenceValues<K>)?.inputs.append(values.producer)
+            var inner = context.descending(.position(0))
+            inner.preferences[id] = values
+            let base = stacked(view.resolve(inner), axis: .vertical, alignment: .center, spacing: 8)
+            let decoration = context.descending(.position(1))
+            let background = above ? nil : decoration.widget(QSGroup)
+            let result = Element(size: base.measure) { bounds, proposal in
+                var target = decoration
+                var area = bounds
+                if let background {
+                    qs_place(background, bounds.minX, bounds.minY, bounds.width, bounds.height)
+                    target.parent = background
+                    area.origin = .zero
+                }
+                base.place(bounds, proposal)
+                let offer = ProposedViewSize(bounds.size)
+                let value = values.producer()?() ?? K.defaultValue
+                for child in transform(value).resolve(target) {
+                    child.place(alignment.rect(child.measure(offer), in: area), offer)
+                }
+            }
+            result.values = base.values
+            result.priority = base.priority
+            return [result]
         }
     }
 

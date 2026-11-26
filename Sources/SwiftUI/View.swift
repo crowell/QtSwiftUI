@@ -67,10 +67,10 @@ public struct _ConditionalContent<TrueContent: View, FalseContent: View>: Primit
 extension Optional: View, Primitive where Wrapped: View {
     func elements(in context: Context) -> [Element] { self?.resolve(context) ?? [] }
 }
-public struct AnyView: Primitive {
+public nonisolated struct AnyView: Primitive {
     private let content: any View
     public init<V: View>(_ view: V) { content = view }
-    func elements(in context: Context) -> [Element] { content.resolve(context) }
+    @MainActor func elements(in context: Context) -> [Element] { content.resolve(context) }
 }
 public struct Group<Content: View>: Primitive {
     let content: Content

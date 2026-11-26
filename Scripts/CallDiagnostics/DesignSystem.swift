@@ -42,6 +42,10 @@ struct CSSTextStyle {
     let type: AxoType
     init(_ type: AxoType) { self.type = type }
 }
+extension EnvironmentValues {
+    @Entry var cssTextWrapWidth: CGFloat? = nil
+    @Entry var axoInheritedTextSize: (size: CGFloat, lineHeight: CGFloat) = (14, 20)
+}
 enum PreviewWrap { case wrap, truncate }
 
 struct CSSText: View {
@@ -49,6 +53,7 @@ struct CSSText: View {
     let type: AxoType
     let wrap: PreviewWrap
     let color: AxoColor?
+    @Environment(\.cssTextWrapWidth) private var wrapWidth
 
     init(_ value: String, type: AxoType, wrap: PreviewWrap = .wrap, color: AxoColor? = nil) {
         self.value = value
@@ -59,11 +64,22 @@ struct CSSText: View {
     init(runs: [CSSTextRun], style: CSSTextStyle, wrap: PreviewWrap) {
         self.init(runs.map(\.text).joined(), type: style.type, wrap: wrap)
     }
-    var body: some View {
+    init(runs: [CSSTextRun], style: CSSTextStyle, onTap: ((String) -> Void)?) {
+        // This preview only supplies plain localized strings to the production dialog.
+        self.init(runs: runs, style: style, wrap: .wrap)
+    }
+    @ViewBuilder private var label: some View {
         let _ = AxoFonts.register()
         let text = Text(verbatim: value).font(type.font).tracking(type.tracking * type.size)
-            .lineLimit(wrap == .truncate ? 1 : nil).frame(height: type.lineHeight)
-        if let color { text.foregroundStyle(color) } else { text }
+        if wrap == .truncate {
+            text.lineLimit(1).frame(height: type.lineHeight)
+        } else {
+            text.fixedSize(horizontal: false, vertical: true)
+                .frame(maxWidth: wrapWidth, minHeight: type.lineHeight, alignment: .leading)
+        }
+    }
+    var body: some View {
+        if let color { label.foregroundStyle(color) } else { label }
     }
 }
 public enum AxoSymbol {

@@ -1,5 +1,13 @@
 import QtBridge
 
+public struct SafeAreaRegions: OptionSet, Sendable {
+    public let rawValue: UInt
+    public init(rawValue: UInt) { self.rawValue = rawValue }
+    public static let container = Self(rawValue: 1)
+    public static let keyboard = Self(rawValue: 2)
+    public static let all = Self(rawValue: .max)
+}
+
 public enum CoordinateSpace: Hashable {
     case local, global, named(AnyHashable)
 }
@@ -45,6 +53,20 @@ extension View {
                     let offset = context.windowOffset
                     origin.point = CGPoint(x: bounds.minX + offset.x, y: bounds.minY + offset.y)
                     child.place(bounds, proposal)
+                }
+            }
+        }
+    }
+    // The desktop host lays out its content entirely inside the window decorations.
+    // Its container and keyboard safe-area insets are both zero.
+    public func ignoresSafeArea(_ regions: SafeAreaRegions = .all, edges: Edge.Set = .all) -> some View { self }
+
+    public func clipShape<S: Shape>(_ shape: S, style: FillStyle = FillStyle()) -> some View {
+        Transform(content: self) { view, ctx in
+            let group = ctx.widget(QSGroup)
+            return ctx.children(of: view, inside: group) { size in
+                shape.path(in: CGRect(origin: .zero, size: size)).withNativePath {
+                    qs_group_clip(group, $0, style.isEOFilled ? 1 : 0, style.isAntialiased ? 1 : 0)
                 }
             }
         }

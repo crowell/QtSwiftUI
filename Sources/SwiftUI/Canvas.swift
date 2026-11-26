@@ -157,7 +157,7 @@ public struct Canvas<Symbols: View>: Primitive {
 }
 extension Shape {
     public func stroke<S: ShapeStyle>(_ content: S, lineWidth: CGFloat = 1) -> some View {
-        Canvas { context, size in context.stroke(path(in: CGRect(origin: .zero, size: size)), with: .style(content), lineWidth: lineWidth) }
+        stroke(style: StrokeStyle(lineWidth: lineWidth)).fill(content)
     }
 }
 extension InsettableShape {

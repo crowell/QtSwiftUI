@@ -5,6 +5,7 @@ public struct AccessibilityTraits: OptionSet, Sendable {
     public init(rawValue: UInt64) { self.rawValue = rawValue }
     public static let isImage = Self(rawValue: 1)
     public static let updatesFrequently = Self(rawValue: 2)
+    public static let isHeader = Self(rawValue: 4), isModal = Self(rawValue: 8)
 }
 public struct AccessibilityChildBehavior: Equatable, Sendable {
     var exposesChildren: Bool
@@ -28,7 +29,11 @@ extension View {
     }
     public func accessibilityAddTraits(_ traits: AccessibilityTraits) -> some View {
         Transform(content: self) { view, ctx in
-            view.resolve(ctx.with(\.accessibilityTraits, ctx.environment.accessibilityTraits.union(traits)))
+            let inner = ctx.with(\.accessibilityTraits, ctx.environment.accessibilityTraits.union(traits))
+            guard !traits.intersection([.isHeader, .isModal]).isEmpty else { return view.resolve(inner) }
+            let group = ctx.widget(QSGroup)
+            qs_group_semantics(group, traits.contains(.isHeader) ? 1 : 0, traits.contains(.isModal) ? 1 : 0)
+            return inner.children(of: view, inside: group)
         }
     }
     public func accessibilityElement(children: AccessibilityChildBehavior = .ignore) -> some View {

@@ -168,6 +168,7 @@ enum Part: Hashable {
     }
     private func layout(width: Int, height: Int) {
         var context = Context(host: self)
+        context.environment.displayScale = qs_window_scale(window)
         context.environment.closePresentation = { [weak self] in
             if let window = self?.window { qs_request_close(window) }
         }

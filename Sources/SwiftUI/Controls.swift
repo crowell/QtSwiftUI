@@ -157,7 +157,8 @@ public struct ScrollView<Content: View>: Primitive {
         inner.parent = qs_scroll_content(widget)
         let view = stacked(content.resolve(inner), axis: .vertical, alignment: .center, spacing: 8)
         let horizontal = axes.contains(.horizontal), vertical = axes.contains(.vertical)
-        qs_scroll_axes(widget, showsIndicators && horizontal ? 1 : 0, showsIndicators && vertical ? 1 : 0)
+        qs_scroll_axes(widget, showsIndicators && horizontal && context.environment.horizontalScrollIndicatorVisibility.showsBar ? 1 : 0,
+                       showsIndicators && vertical && context.environment.verticalScrollIndicatorVisibility.showsBar ? 1 : 0)
         func offer(_ p: ProposedViewSize) -> ProposedViewSize { .init(width: horizontal ? nil : p.width, height: vertical ? nil : p.height) }
         return [Element { p in
             let ideal = view.measure(offer(p))

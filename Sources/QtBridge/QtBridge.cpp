@@ -12,6 +12,7 @@
 #include <QFontDatabase>
 #include <QGraphicsOpacityEffect>
 #include <QEnterEvent>
+#include <QElapsedTimer>
 #include <QLineEdit>
 #include <QKeyEvent>
 #include <QMouseEvent>
@@ -58,11 +59,18 @@ QApplication &application() {
 class GroupWidget final : public QWidget {
 public:
     using QWidget::QWidget;
+    QRect layoutRect;
     bool exposeChildren = true;
     bool isImage = false;
+    bool heading = false;
+    bool modal = false;
     bool updatesFrequently = false;
     QString accessibleValue;
     std::optional<QPainterPath> contentShape;
+    int tapCount = 0, consecutiveTaps = 0;
+    bool trackingTap = false;
+    QPointF pressPosition;
+    QElapsedTimer lastTap;
     bool accessibilityHidden = false;
     void paintEvent(QPaintEvent *event) override {
         QWidget::paintEvent(event);
@@ -98,20 +106,60 @@ protected:
 class AccessibleGroup final : public QAccessibleWidget {
 public:
     explicit AccessibleGroup(GroupWidget *group) : QAccessibleWidget(group), group(group) {}
-    QAccessible::Role role() const override { return group->isImage ? QAccessible::Graphic : QAccessible::Grouping; }
+    QRect rect() const override {
+        return QRect(group->mapToGlobal(group->layoutRect.topLeft()), group->layoutRect.size());
+    }
+    QAccessible::Role role() const override {
+        if (group->modal) return QAccessible::Dialog;
+        if (group->heading) return QAccessible::Heading;
+        return group->isImage ? QAccessible::Graphic : QAccessible::Grouping;
+    }
     QString text(QAccessible::Text kind) const override {
-        return kind == QAccessible::Value ? group->accessibleValue : QAccessibleWidget::text(kind);
+        if (kind == QAccessible::Value) return group->accessibleValue;
+        auto value = QAccessibleWidget::text(kind);
+        if (kind == QAccessible::Name && value.isEmpty() && group->heading) {
+            if (auto *label = group->findChild<QLabel *>()) return label->text();
+        }
+        return value;
     }
     QAccessible::State state() const override {
         auto result = QAccessibleWidget::state();
         if (group->accessibilityHidden) result.invisible = true;
         result.animated = group->updatesFrequently;
+        result.modal = group->modal;
         return result;
     }
     int childCount() const override { return group->exposeChildren && !group->accessibilityHidden ? QAccessibleWidget::childCount() : 0; }
     QAccessibleInterface *child(int index) const override { return group->exposeChildren && !group->accessibilityHidden ? QAccessibleWidget::child(index) : nullptr; }
 private:
     GroupWidget *group;
+};
+class ShapeClipEffect final : public QGraphicsEffect {
+public:
+    using QGraphicsEffect::QGraphicsEffect;
+    QPainterPath path;
+    bool antialias = true;
+protected:
+    void draw(QPainter *painter) override {
+        QPoint offset;
+        const auto source = sourcePixmap(Qt::LogicalCoordinates, &offset, NoPad);
+        if (source.isNull()) return;
+        QImage mask(source.size(), QImage::Format_ARGB32_Premultiplied);
+        mask.setDevicePixelRatio(source.devicePixelRatio());
+        mask.fill(Qt::transparent);
+        QPainter fill(&mask);
+        fill.setRenderHint(QPainter::Antialiasing, antialias);
+        fill.translate(-offset);
+        fill.fillPath(path, Qt::white);
+        fill.end();
+
+        auto image = source.toImage().convertToFormat(QImage::Format_ARGB32_Premultiplied);
+        QPainter compose(&image);
+        compose.setCompositionMode(QPainter::CompositionMode_DestinationIn);
+        compose.drawImage(QPoint(), mask);
+        compose.end();
+        painter->drawImage(offset, image);
+    }
 };
 class RotationEffect final : public QGraphicsEffect {
 public:
@@ -272,6 +320,50 @@ struct QSWindow final : QWidget {
         if ((input->type() == QEvent::Enter || input->type() == QEvent::Leave) && source->property("qsHover").toBool()) {
             event(context, source->property("swiftId").toInt(), QSHoverChanged, input->type() == QEvent::Enter ? "1" : "0");
         }
+        auto *group = dynamic_cast<GroupWidget *>(source);
+        if (group && group->layoutRect != group->rect() &&
+            (input->type() == QEvent::MouseButtonPress || input->type() == QEvent::MouseButtonRelease ||
+             input->type() == QEvent::MouseButtonDblClick || input->type() == QEvent::MouseMove)) {
+            auto *mouse = static_cast<QMouseEvent *>(input);
+            if (!group->layoutRect.contains(mouse->position().toPoint())) {
+                const auto at = mapFromGlobal(mouse->globalPosition().toPoint());
+                // Paint overflow is transparent to input. Find the sibling underneath.
+                group->setAttribute(Qt::WA_TransparentForMouseEvents);
+                auto *under = childAt(at);
+                if (under) {
+                    QMouseEvent forwarded(mouse->type(), under->mapFrom(this, at), mouse->globalPosition(),
+                                          mouse->button(), mouse->buttons(), mouse->modifiers());
+                    QApplication::sendEvent(under, &forwarded);
+                }
+                group->setAttribute(Qt::WA_TransparentForMouseEvents, false);
+                return true;
+            }
+        }
+        if (group && group->tapCount > 0 && (input->type() == QEvent::MouseButtonPress ||
+            input->type() == QEvent::MouseButtonDblClick || input->type() == QEvent::MouseButtonRelease ||
+            input->type() == QEvent::MouseMove)) {
+            const auto *mouse = static_cast<QMouseEvent *>(input);
+            const auto point = mouse->position();
+            const bool moved = (point - group->pressPosition).manhattanLength() > QApplication::startDragDistance();
+            if (input->type() == QEvent::MouseMove && moved) group->trackingTap = false;
+            if (mouse->button() == Qt::LeftButton) {
+                if (input->type() != QEvent::MouseButtonRelease) {
+                    if (!group->lastTap.isValid() || group->lastTap.elapsed() > QApplication::doubleClickInterval() || moved)
+                        group->consecutiveTaps = 0;
+                    group->trackingTap = true;
+                    group->pressPosition = point;
+                } else if (group->trackingTap && !moved && group->rect().contains(point.toPoint())) {
+                    group->trackingTap = false;
+                    group->lastTap.start();
+                    if (++group->consecutiveTaps == group->tapCount) {
+                        group->consecutiveTaps = 0;
+                        event(context, source->property("swiftId").toInt(), QSActivate, "");
+                    }
+                }
+                input->accept();
+                return true;
+            }
+        }
         if (input->type() == QEvent::FocusIn || input->type() == QEvent::FocusOut) {
             event(context, source->property("swiftId").toInt(), QSFocusChanged,
                   input->type() == QEvent::FocusIn ? "1" : "0");
@@ -349,6 +441,8 @@ int qs_run(QSWindow *window, const char *screenshot, QSPump pump) {
     }
     return application().exec();
 }
+double qs_window_scale(QSWindow *window) { return window->devicePixelRatioF(); }
+void qs_group_tap(QSWidget w, int count) { static_cast<GroupWidget *>(w)->tapCount = count; }
 void qs_close(QSWindow *window) {
     delete window;
     if (--liveWindows == 0) {
@@ -561,6 +655,24 @@ void qs_path_clip(QSPath *target, const QSPath *source, int evenOdd, int inverse
 void qs_canvas_clip(QSWidget w, const QSPath *path) {
     static_cast<CanvasWidget *>(w)->drawings.back().clip = *path;
 }
+void qs_group_clip(QSWidget w, const QSPath *path, int evenOdd, int antialias) {
+    auto *group = static_cast<GroupWidget *>(w);
+    auto *effect = dynamic_cast<ShapeClipEffect *>(group->graphicsEffect());
+    if (!effect) {
+        effect = new ShapeClipEffect(group);
+        group->setGraphicsEffect(effect);
+    }
+    effect->path = *path;
+    effect->path.setFillRule(evenOdd ? Qt::OddEvenFill : Qt::WindingFill);
+    effect->antialias = antialias;
+    effect->update();
+}
+void qs_group_semantics(QSWidget w, int heading, int modal) {
+    auto *group = static_cast<GroupWidget *>(w);
+    group->heading = heading;
+    group->modal = modal;
+    group->exposeChildren = !heading || modal;
+}
 void qs_surface_path(QSWidget w, const QSPath *path, int evenOdd, int antialias) {
     auto *surface = static_cast<Surface *>(w);
     surface->customPath = true;
@@ -703,7 +815,9 @@ QSSize qs_measure(QSWidget w, double width) {
 }
 QSSize qs_origin(QSWidget w) {
     auto *item = widget(w);
-    const auto point = QPointF(item->mapTo(item->window(), QPoint())) + item->property("qsFraction").toPointF();
+    const auto *group = dynamic_cast<GroupWidget *>(item);
+    const QPoint origin = group ? group->layoutRect.topLeft() : QPoint();
+    const auto point = QPointF(item->mapTo(item->window(), origin)) + item->property("qsFraction").toPointF();
     return {point.x(), point.y()};
 }
 void qs_place(QSWidget w, double x, double y, double width, double height) {
@@ -720,9 +834,36 @@ void qs_place(QSWidget w, double x, double y, double width, double height) {
     const int bottom = enclose ? qCeil(origin.y() + height) : qRound(origin.y() + height);
     item->setProperty("qsFraction", origin - QPointF(left, top));
     if (vector) item->setProperty("qsSize", QSizeF(width, height));
-    item->setGeometry(left, top, width > 0 ? qMax(0, right - left) : 0, height > 0 ? qMax(0, bottom - top) : 0);
+    QRect geometry(left, top, width > 0 ? qMax(0, right - left) : 0, height > 0 ? qMax(0, bottom - top) : 0);
+    if (auto *surface = dynamic_cast<Surface *>(item); surface && surface->customPath && !geometry.isEmpty()) {
+        // A negative inset or a centered stroke can draw outside a shape's layout frame.
+        const auto bounds = surface->path.boundingRect().translated(origin).toAlignedRect();
+        const QRect viewport(item->parentWidget()->mapFrom(item->window(), QPoint()), item->window()->size());
+        geometry = geometry.united(bounds.intersected(viewport));
+        item->setProperty("qsFraction", origin - QPointF(geometry.topLeft()));
+    }
+    item->setGeometry(geometry);
+    if (auto *group = dynamic_cast<GroupWidget *>(item)) group->layoutRect = group->rect();
     item->raise();
     item->show();
+}
+
+void qs_group_finish_layout(QSWidget w) {
+    auto *group = static_cast<GroupWidget *>(w);
+    // A clip or transform has its own drawing coordinate space. Structural
+    // groups (focus, accessibility, hover) must allow child paint to overflow.
+    if (group->graphicsEffect() || group->contentShape) return;
+    const QRect viewport(group->mapFrom(group->window(), QPoint()), group->window()->size());
+    const auto children = group->findChildren<QWidget *>(QString(), Qt::FindDirectChildrenOnly);
+    QRect paint = group->rect();
+    for (auto *child : children) {
+        if (!child->isHidden()) paint = paint.united(child->geometry().intersected(viewport));
+    }
+    if (paint == group->rect()) return;
+    const QPoint offset = -paint.topLeft();
+    group->layoutRect.translate(offset);
+    group->setGeometry(QRect(group->pos() - offset, paint.size()));
+    for (auto *child : children) child->move(child->pos() + offset);
 }
 
 int qs_click(QSWindow *window, const char *id) {
