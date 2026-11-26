@@ -958,6 +958,7 @@ void qs_open(QSWindow *window, int width, int height) {
     window->show();
     qs_flush();
 }
+void qs_request_window_close(QSWindow *window) { window->close(); }
 void qs_window_raise(QSWindow *window) {
     if (window->isMinimized()) window->showNormal(); else window->show();
     window->raise();
@@ -1028,7 +1029,7 @@ int qs_capture(QSWindow *window, const char *path) {
 int qs_run(QSWindow *window, const char *screenshot, QSPump pump) {
     // Swift's main actor and Foundation timers share the GUI thread with Qt.
     QTimer swiftEvents;
-    QObject::connect(&swiftEvents, &QTimer::timeout, window, [pump] { pump(); });
+    QObject::connect(&swiftEvents, &QTimer::timeout, &swiftEvents, [pump] { pump(); });
     swiftEvents.start(16);
     if (screenshot) {
         auto capture = [window, path = QByteArray(screenshot)] {
@@ -1062,6 +1063,57 @@ void qs_application_appearance(int mode) {
     for (auto role : {QPalette::WindowText, QPalette::Text, QPalette::ButtonText})
         palette.setColor(QPalette::Disabled, role, palette.color(QPalette::PlaceholderText));
     app.setPalette(palette);
+}
+void qs_active_window_state(int fullscreen) {
+    auto *window = QApplication::activeWindow();
+    if (!window) return;
+    if (!fullscreen) window->showMinimized();
+    else if (window->isFullScreen()) window->showNormal();
+    else window->showFullScreen();
+}
+int qs_edit_command(QSEditCommand command) {
+    auto *window = dynamic_cast<QSWindow *>(QApplication::activeWindow());
+    QWidget *field = window ? window->focusWidget() : nullptr;
+    if (!field || !field->isEnabled()) return 0;
+    if (command == QSCopy || command == QSCut || command == QSPaste) {
+        int key = command == QSCopy ? Qt::Key_C : command == QSCut ? Qt::Key_X : Qt::Key_V;
+        QKeyEvent event(QEvent::KeyPress, key, Qt::ControlModifier);
+        if (handleClipboardKey(field, &event, window->transfers.handler, window->context)) return 1;
+    }
+    auto editText = [command](auto *edit) {
+        if (edit->isReadOnly() && command != QSCopy && command != QSSelectAll) return 0;
+        switch (command) {
+        case QSUndo: edit->undo(); break;
+        case QSRedo: edit->redo(); break;
+        case QSCut: edit->cut(); break;
+        case QSCopy: edit->copy(); break;
+        case QSPaste: edit->paste(); break;
+        case QSPastePlain: edit->insertPlainText(QApplication::clipboard()->text()); break;
+        case QSDelete: { auto cursor = edit->textCursor(); cursor.deleteChar(); edit->setTextCursor(cursor); break; }
+        case QSSelectAll: edit->selectAll(); break;
+        }
+        return 1;
+    };
+    if (auto *edit = qobject_cast<QPlainTextEdit *>(field)) return editText(edit);
+    if (auto *edit = qobject_cast<QTextEdit *>(field)) return editText(edit);
+    if (auto *edit = qobject_cast<QLineEdit *>(field)) {
+        if (edit->isReadOnly() && command != QSCopy && command != QSSelectAll) return 0;
+        switch (command) {
+        case QSUndo: edit->undo(); break;
+        case QSRedo: edit->redo(); break;
+        case QSCut: edit->cut(); break;
+        case QSCopy: edit->copy(); break;
+        case QSPaste: case QSPastePlain: edit->paste(); break;
+        case QSDelete: edit->del(); break;
+        case QSSelectAll: edit->selectAll(); break;
+        }
+        return 1;
+    }
+    if (auto *label = qobject_cast<QLabel *>(field); label && command == QSCopy && label->hasSelectedText()) {
+        QApplication::clipboard()->setText(label->selectedText());
+        return 1;
+    }
+    return 0;
 }
 void qs_request_attention(void) {
     for (auto *window : application().topLevelWidgets())

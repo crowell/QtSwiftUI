@@ -10,3 +10,6 @@ grep -Fx 'Appeared at 260 x 100' "$tmp/log"
 grep -Fx 'Observed Waiting -> Ready' "$tmp/log"
 grep -Fx 'Timeline reached its scheduled date' "$tmp/log"
 test -s "$tmp/probe.png"
+timeout 10 "$probe" --windows > "$tmp/windows"
+test "$(grep -Fxc 'Second window opened with 1' "$tmp/windows")" -eq 1
+grep -Fx 'Second window observed shared state after first closed' "$tmp/windows"

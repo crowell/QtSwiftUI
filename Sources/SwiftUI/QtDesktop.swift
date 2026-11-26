@@ -23,6 +23,25 @@ import Glibc
         return Image(rgba8: pixels, width: size, height: size)
     }
 
+    public enum EditCommand: String {
+        case undo, redo, cut, copy, paste, pasteAndMatchStyle, delete, selectAll
+        fileprivate var native: QSEditCommand {
+            switch self {
+            case .undo: QSUndo
+            case .redo: QSRedo
+            case .cut: QSCut
+            case .copy: QSCopy
+            case .paste: QSPaste
+            case .pasteAndMatchStyle: QSPastePlain
+            case .delete: QSDelete
+            case .selectAll: QSSelectAll
+            }
+        }
+    }
+    @discardableResult public static func perform(_ command: EditCommand) -> Bool { qs_edit_command(command.native) != 0 }
+    public static func minimizeWindow() { qs_active_window_state(0) }
+    public static func toggleFullScreen() { qs_active_window_state(1) }
+
     public static var isActive: Bool { qs_application_active() != 0 }
     public static func requestAttention() { qs_request_attention() }
     public static func setAppearance(_ scheme: ColorScheme?) {

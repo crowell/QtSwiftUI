@@ -82,6 +82,9 @@ public struct EnvironmentValues {
     public var isFocusEffectEnabled = true
     var submit: (() -> Void)?
     public internal(set) var isPresented = false
+    var canPresentWindow = false
+    var presentWindow: @MainActor (String) -> Void = { _ in }
+    var dismissScene: @MainActor (String?) -> Void = { _ in }
     var closePresentation: @MainActor () -> Void = {}
     var urlAction: OpenURLAction?
     public var calendar: Calendar = .autoupdatingCurrent

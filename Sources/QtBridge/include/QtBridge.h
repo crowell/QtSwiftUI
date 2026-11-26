@@ -19,6 +19,7 @@ enum QSKind { QSLabel, QSButton, QSToggle, QSEdit, QSSecureEdit, QSSurface, QSSc
 QSWindow *qs_window(const char *title, void *context, QSRender render, QSEvent event);
 void qs_open(QSWindow *, int width, int height);
 void qs_window_raise(QSWindow *);
+void qs_request_window_close(QSWindow *);
 void qs_observe_close(QSWindow *, void (*closed)(void *context));
 void qs_snapshot_window(QSWindow *);
 int qs_snapshot_size(QSWindow *, double width, double height);
@@ -32,6 +33,9 @@ int qs_application_active(void);
 int qs_dark_appearance(void);
 void qs_application_appearance(int mode);
 void qs_request_attention(void);
+enum QSEditCommand { QSUndo, QSRedo, QSCut, QSCopy, QSPaste, QSPastePlain, QSDelete, QSSelectAll };
+int qs_edit_command(enum QSEditCommand);
+void qs_active_window_state(int fullscreen);
 int qs_control_active_state(QSWindow *);
 void qs_animation_frame(QSWindow *);
 typedef void (*QSPump)(void);

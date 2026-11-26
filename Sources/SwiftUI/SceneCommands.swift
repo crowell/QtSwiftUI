@@ -108,16 +108,19 @@ public nonisolated struct CommandMenu<Content: View>: CommandContent {
     }
 }
 
-private nonisolated struct CommandScene<S: Scene, Content: Commands>: Scene, WindowScene {
+private nonisolated struct CommandScene<S: Scene, Content: Commands>: SceneCollection {
     let scene: S
     let commands: Content
-    @MainActor var title: String { scene.windowScene.title }
-    @MainActor var size: CGSize? { scene.windowScene.size }
-    var body: Never { fatalError("CommandScene is a primitive scene") }
-    @MainActor func content(in context: Context) -> [Element] { scene.windowScene.content(in: context) }
-    @MainActor func menus(in context: Context, into menus: MenuEntries) {
-        scene.windowScene.menus(in: context.descending(.position(0)), into: menus)
-        commands.resolve(in: context.descending(.position(1)), into: menus)
+    var body: Never { fatalError("Primitive command scene") }
+    @MainActor var windows: [WindowScene] {
+        scene.sceneWindows.map { original in
+            var result = original
+            result.commands = { context, menus in
+                original.commands(context.descending(.position(0)), menus)
+                commands.resolve(in: context.descending(.position(1)), into: menus)
+            }
+            return result
+        }
     }
 }
 
@@ -131,8 +134,8 @@ extension WindowScene {
     func windowContent(in context: Context) -> [Element] {
         let items = MenuEntries()
         let menuContext = context.descending(.property("window commands"))
-        menus(in: menuContext, into: items)
-        let content = content(in: context)
+        commands(menuContext, items)
+        let content = content(context)
         guard !items.rows.isEmpty else { return content }
         let actions = MenuActions()
         let bar = menuContext.widget(QSMenuBar, action: actions.perform)

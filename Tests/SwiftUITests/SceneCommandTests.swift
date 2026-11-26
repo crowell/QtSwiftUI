@@ -26,7 +26,7 @@ final class SceneCommandTests: XCTestCase {
                     if showEdit { Editing(enabled: enabled) { calls += 1 } }
                 }
                 .defaultSize(width: 240, height: 120)
-                .windowScene.windowContent(in: context)
+                .sceneWindows[0].windowContent(in: context)
         }
         defer { host.close() }
         host.open(width: 240, height: 120)

@@ -173,6 +173,12 @@ enum Part: Hashable {
     private let animationClock: () -> TimeInterval
     private(set) var frameTime: TimeInterval = 0
 
+    /// App-scoped dynamic properties persist independently of native window render passes.
+    init() {
+        content = { _ in [] }
+        animationClock = { ProcessInfo.processInfo.systemUptime }
+    }
+
     init(title: String, animationClock: @escaping () -> TimeInterval = { ProcessInfo.processInfo.systemUptime },
          content: @escaping (Context) -> [Element]) {
         self.animationClock = animationClock
@@ -228,7 +234,9 @@ enum Part: Hashable {
         keys.reset()
         storage.removeAll()
     }
+    var onUpdate: ((Transaction?) -> Void)?
     func update(transaction: Transaction? = nil) {
+        if let onUpdate { onUpdate(transaction); return }
         if let transaction { pendingTransaction = transaction }
         if let window { qs_update(window) }
     }
