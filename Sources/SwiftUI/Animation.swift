@@ -3,6 +3,25 @@ import QtBridge
 public struct Animation: Equatable, Sendable {
     private let x1, y1, x2, y2: Double
     let duration: TimeInterval
+    private var oscillator: DampedSpring?
+
+    public static func interpolatingSpring(mass: Double = 1, stiffness: Double, damping: Double, initialVelocity: Double = 0) -> Self {
+        let spring = DampedSpring(mass: mass, stiffness: stiffness, damping: damping, initialVelocity: initialVelocity)
+        return Self(x1: 0, y1: 0, x2: 1, y2: 1, duration: spring.duration, oscillator: spring)
+    }
+    public static func interpolatingSpring(duration: TimeInterval = 0.5, bounce: Double = 0, initialVelocity: Double = 0) -> Self {
+        let frequency = 2 * Double.pi / max(0.001, duration)
+        let ratio = bounce >= 0 ? max(0, 1 - bounce) : 1 / max(0.001, 1 + bounce)
+        return interpolatingSpring(stiffness: frequency * frequency, damping: 2 * ratio * frequency, initialVelocity: initialVelocity)
+    }
+    public static var interpolatingSpring: Self { .interpolatingSpring() }
+    private var isDefault = false
+    public static let `default`: Self = {
+        var animation = Self.interpolatingSpring(duration: 0.55)
+        animation.isDefault = true
+        return animation
+    }()
+    fileprivate var addsToPreviousSpring: Bool { oscillator != nil }
 
     public static func timingCurve(_ p1x: Double, _ p1y: Double, _ p2x: Double, _ p2y: Double,
                                    duration: TimeInterval = 0.35) -> Self {
@@ -19,6 +38,7 @@ public struct Animation: Equatable, Sendable {
 
     func fraction(at elapsed: TimeInterval) -> Double {
         guard duration > 0 && elapsed < duration else { return 1 }
+        if let oscillator { return oscillator.fraction(at: max(0, elapsed)) }
         let x = max(0, elapsed / duration)
         if x1 == y1 && x2 == y2 { return x }
         func cubic(_ t: Double, _ a: Double, _ b: Double) -> Double {
@@ -34,16 +54,59 @@ public struct Animation: Equatable, Sendable {
     }
 }
 
-private final class AnimatedValue<Value: VectorArithmetic> {
-    var from: Value, to: Value
-    var start: TimeInterval = 0
-    var animation: Animation?
-    init(_ value: Value) { from = value; to = value }
+private struct DampedSpring: Equatable, Sendable {
+    let frequencySquared: Double, decay: Double, initialVelocity: Double
+
+    init(mass: Double, stiffness: Double, damping: Double, initialVelocity: Double) {
+        precondition(mass > 0 && stiffness > 0 && damping >= 0)
+        frequencySquared = stiffness / mass
+        decay = damping / (2 * mass)
+        self.initialVelocity = initialVelocity
+    }
+    var duration: TimeInterval {
+        // Conservative envelope cutoff, including the slow mode of an overdamped system.
+        let rate = decay > sqrt(frequencySquared) ? frequencySquared / (decay + sqrt(decay * decay - frequencySquared)) : decay
+        return rate > 0 ? (12 + log1p(abs(initialVelocity) / sqrt(frequencySquared))) / rate : .infinity
+    }
+    func fraction(at t: TimeInterval) -> Double {
+        let discriminant = frequencySquared - decay * decay
+        if abs(discriminant) <= 1e-10 * frequencySquared {
+            return 1 - exp(-decay * t) * (1 + (decay - initialVelocity) * t)
+        }
+        if discriminant > 0 {
+            let frequency = sqrt(discriminant)
+            return 1 - exp(-decay * t) * (cos(frequency * t) + (decay - initialVelocity) * sin(frequency * t) / frequency)
+        }
+        let root = sqrt(-discriminant)
+        let slow = -frequencySquared / (decay + root), fast = -decay - root
+        let weight = (-initialVelocity - fast) / (slow - fast)
+        return 1 - weight * exp(slow * t) - (1 - weight) * exp(fast * t)
+    }
+}
+
+final class AnimatedValue<Value: VectorArithmetic> {
+    private struct Movement {
+        let delta: Value, start: TimeInterval, animation: Animation
+    }
+    private(set) var target: Value
+    private var movements: [Movement] = []
+    init(_ value: Value) { target = value }
+    var isAnimating: Bool { !movements.isEmpty }
+
+    func update(to value: Value, at time: TimeInterval, animation: Animation?) {
+        guard target != value else { return }
+        let displayed = sample(at: time)
+        let additive = animation?.addsToPreviousSpring == true && movements.last?.animation.addsToPreviousSpring == true
+        let delta = value - (additive ? target : displayed)
+        if !additive { movements.removeAll() }
+        if let animation { movements.append(Movement(delta: delta, start: time, animation: animation)) }
+        target = value
+    }
     func sample(at time: TimeInterval) -> Value {
-        guard let animation else { return to }
-        let elapsed = time - start
-        if elapsed >= animation.duration { self.animation = nil; return to }
-        return from.interpolated(towards: to, amount: animation.fraction(at: elapsed))
+        movements.removeAll { time - $0.start >= $0.animation.duration }
+        return movements.reduce(target) { current, movement in
+            current + movement.delta.scaled(by: movement.animation.fraction(at: time - movement.start) - 1)
+        }
     }
 }
 
@@ -59,14 +122,9 @@ extension Context {
         host.storage[id] = slot
         host.liveStorage.insert(id)
         let now = host.frameTime
-        if slot.to != value {
-            slot.from = slot.sample(at: now)
-            slot.to = value
-            slot.start = now
-            slot.animation = animation
-        }
+        slot.update(to: value, at: now, animation: animation)
         let current = slot.sample(at: now)
-        if slot.animation != nil { qs_animation_frame(host.window) }
+        if slot.isAnimating { qs_animation_frame(host.window) }
         return current
     }
 }
@@ -78,7 +136,7 @@ extension View {
             let trigger = ctx.host.storage[key] as? AnimationTrigger<V> ?? AnimationTrigger(value)
             if trigger.value != value {
                 trigger.value = value
-                inner.animation = animation
+                if !inner.transaction.disablesAnimations { inner.animation = animation }
             }
             ctx.host.storage[key] = trigger
             ctx.host.liveStorage.insert(key)

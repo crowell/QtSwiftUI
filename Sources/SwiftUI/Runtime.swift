@@ -12,7 +12,11 @@ enum Part: Hashable {
     var parent: UnsafeMutableRawPointer?
     var environment = EnvironmentValues()
     var preferences: [ObjectIdentifier: any PreferenceScope] = [:]
-    var animation: Animation?
+    var transaction = Transaction()
+    var animation: Animation? {
+        get { transaction.animation }
+        set { transaction.animation = newValue }
+    }
     var spaces: [AnyHashable: NamedOrigin] = [:]
     var windowOffset: CGPoint {
         guard let parent else { return .zero }
@@ -98,6 +102,7 @@ enum Part: Hashable {
     var liveStorage = Set<[Part]>()
     private var disappear: [[Part]: () -> Void] = [:]
     private var nextDisappear: [[Part]: () -> Void] = [:]
+    private var pendingTransaction: Transaction?
     private var afterRender: [() -> Void] = []
     func afterLayout(_ action: @escaping () -> Void) { afterRender.append(action) }
     func lifetime(at path: [Part], appear: @escaping () -> Void, disappear action: @escaping () -> Void) {
@@ -134,7 +139,10 @@ enum Part: Hashable {
         events.removeAll()
         storage.removeAll()
     }
-    func update() { if let window { qs_update(window) } }
+    func update(transaction: Transaction? = nil) {
+        if let transaction { pendingTransaction = transaction }
+        if let window { qs_update(window) }
+    }
     func mount(path: [Part], kind: QSKind, parent: UnsafeMutableRawPointer?) -> Mount {
         liveMounts.insert(path)
         if let entry = mounts[path] { return entry }
@@ -155,9 +163,10 @@ enum Part: Hashable {
             _ = observationPass.revision
             layout(width: width, height: height)
         } onChange: { [weak self] in
+            let transaction = Transaction.current
             Task { @MainActor in
                 guard let self, self.observationPass.revision == revision else { return }
-                self.update()
+                self.update(transaction: transaction)
             }
         }
         let ended = disappear.filter { nextDisappear[$0.key] == nil }
@@ -169,6 +178,8 @@ enum Part: Hashable {
     }
     private func layout(width: Int, height: Int) {
         var context = Context(host: self)
+        context.transaction = pendingTransaction ?? Transaction()
+        pendingTransaction = nil
         context.environment.displayScale = qs_window_scale(window)
         context.environment.closePresentation = { [weak self] in
             if let window = self?.window { qs_request_close(window) }
@@ -205,16 +216,40 @@ protocol MountedProperty: DynamicProperty {
 
 @propertyWrapper @dynamicMemberLookup public struct Binding<Value>: DynamicProperty {
     private let get: () -> Value
-    private let set: (Value) -> Void
-    public init(get: @escaping () -> Value, set: @escaping (Value) -> Void) { self.get = get; self.set = set }
+    private let set: (Value, Transaction) -> Void
+    private var assignedTransaction: Transaction?
+    public var transaction: Transaction {
+        get { assignedTransaction ?? Transaction() }
+        set { assignedTransaction = newValue }
+    }
+    public init(get: @escaping () -> Value, set: @escaping (Value) -> Void) {
+        self.get = get
+        self.set = { value, _ in set(value) }
+    }
+    public init(get: @escaping () -> Value, set: @escaping (Value, Transaction) -> Void) {
+        self.get = get
+        self.set = set
+    }
     public static func constant(_ value: Value) -> Self { Self(get: { value }, set: { _ in }) }
     public var wrappedValue: Value {
         get { get() }
-        nonmutating set { set(newValue) }
+        nonmutating set {
+            if let assignedTransaction {
+                withTransaction(assignedTransaction) { set(newValue, assignedTransaction) }
+            } else {
+                set(newValue, Transaction())
+            }
+        }
     }
     public var projectedValue: Self { self }
     public subscript<T>(dynamicMember path: WritableKeyPath<Value, T>) -> Binding<T> {
-        Binding<T>(get: { wrappedValue[keyPath: path] }, set: { wrappedValue[keyPath: path] = $0 })
+        var derived = Binding<T>(get: { get()[keyPath: path] }, set: { value, transaction in
+            var root = get()
+            root[keyPath: path] = value
+            set(root, transaction)
+        })
+        derived.assignedTransaction = assignedTransaction
+        return derived
     }
 }
 @propertyWrapper public struct State<Value>: MountedProperty {
@@ -231,10 +266,11 @@ protocol MountedProperty: DynamicProperty {
                     return host
                 }
                 guard let target else { return }
+                let transaction = Transaction.current ?? Transaction()
                 if Thread.isMainThread {
-                    MainActor.assumeIsolated { target.update() }
+                    MainActor.assumeIsolated { target.update(transaction: transaction) }
                 } else {
-                    Task { @MainActor [weak target] in target?.update() }
+                    Task { @MainActor [weak target] in target?.update(transaction: transaction) }
                 }
             }
         }
