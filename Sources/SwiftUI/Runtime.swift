@@ -54,7 +54,8 @@ enum Part: Hashable {
         }
         return owner
     }
-    func widget(_ kind: QSKind, pressed: ((Bool) -> Void)? = nil, exitCommand: (() -> Void)? = nil, action: ((String) -> Void)? = nil) -> UnsafeMutableRawPointer {
+    func widget(_ kind: QSKind, pressed: ((Bool) -> Void)? = nil, exitCommand: (() -> Void)? = nil,
+                hover: ((Bool) -> Void)? = nil, action: ((String) -> Void)? = nil) -> UnsafeMutableRawPointer {
         let entry = host.mount(path: path + [.widget(kind.rawValue)], kind: kind, parent: parent)
         let focus = environment.focus
         let submit = environment.submit
@@ -64,6 +65,7 @@ enum Part: Hashable {
             case QSFocusChanged: focus?.change(value == "1")
             case QSSubmit: submit?()
             case QSExitCommand: exitCommand?()
+            case QSHoverChanged: hover?(value == "1")
             case QSPressedChanged: pressed?(value == "1")
             default: break
             }
@@ -71,6 +73,7 @@ enum Part: Hashable {
         if kind != QSSurface && kind != QSCanvas { qs_hit_testing(entry.widget, environment.allowsHits ? 1 : 0) }
         qs_enabled(entry.widget, environment.isEnabled ? 1 : 0)
         qs_accessibility(entry.widget, environment.label, environment.identifier)
+        qs_help(entry.widget, environment.helpText)
         if let focus { qs_focus(entry.widget, focus.active() ? 1 : 0) }
         return entry.widget
     }

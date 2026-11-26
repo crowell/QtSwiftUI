@@ -5,6 +5,8 @@
 #include <QDir>
 #include <QLabel>
 #include <QFontInfo>
+#include <QGraphicsOpacityEffect>
+#include <QEnterEvent>
 #include <QLineEdit>
 #include <QKeyEvent>
 #include <QMouseEvent>
@@ -126,6 +128,9 @@ struct QSWindow final : QWidget {
         });
     }
     bool eventFilter(QObject *source, QEvent *input) override {
+        if ((input->type() == QEvent::Enter || input->type() == QEvent::Leave) && source->property("qsHover").toBool()) {
+            event(context, source->property("swiftId").toInt(), QSHoverChanged, input->type() == QEvent::Enter ? "1" : "0");
+        }
         if (input->type() == QEvent::FocusIn || input->type() == QEvent::FocusOut) {
             event(context, source->property("swiftId").toInt(), QSFocusChanged,
                   input->type() == QEvent::FocusIn ? "1" : "0");
@@ -238,7 +243,7 @@ QSWidget qs_create(QSWindow *window, QSWidget parent, QSKind kind, int id) {
     }
     case QSGroup: {
         auto *group = new GroupWidget(container);
-        group->setProperty("swiftId", id);
+        window->observeFocus(group, id);
         QAccessible::registerAccessibleInterface(new AccessibleGroup(group));
         return group;
     }
@@ -431,6 +436,22 @@ void qs_group(QSWidget w, int exposeChildren, int isImage) {
     group->isImage = isImage;
 }
 void qs_group_hidden(QSWidget w, int hidden) { static_cast<GroupWidget *>(w)->accessibilityHidden = hidden; }
+void qs_group_hover(QSWidget w, int enabled) { widget(w)->setProperty("qsHover", bool(enabled)); }
+void qs_help(QSWidget w, const char *text) { widget(w)->setToolTip(QString::fromUtf8(text)); }
+void qs_group_opacity(QSWidget w, double value) {
+    auto *item = widget(w);
+    value = qBound(0.0, value, 1.0);
+    if (value == 1.0) {
+        if (item->graphicsEffect()) item->setGraphicsEffect(nullptr);
+        return;
+    }
+    auto *effect = qobject_cast<QGraphicsOpacityEffect *>(item->graphicsEffect());
+    if (!effect) {
+        effect = new QGraphicsOpacityEffect(item);
+        item->setGraphicsEffect(effect);
+    }
+    effect->setOpacity(value);
+}
 unsigned qs_pixel(QSWindow *window, int x, int y) {
     return window->grab().toImage().pixelColor(x, y).rgba();
 }
@@ -551,6 +572,26 @@ int qs_mouse_button(QSWindow *window, const char *id, int down) {
 }
 int qs_mouse_click(QSWindow *window, const char *id) {
     return qs_mouse_button(window, id, 1) && qs_mouse_button(window, id, 0);
+}
+int qs_hover(QSWindow *window, const char *id, int inside) {
+    for (auto *item : window->findChildren<QWidget *>(QString::fromUtf8(id))) {
+        if (!item->property("qsHover").toBool()) continue;
+        if (inside) {
+            const QPointF position = item->rect().center();
+            QEnterEvent enter(position, item->mapTo(window, position), item->mapToGlobal(position));
+            QApplication::sendEvent(item, &enter);
+        } else {
+            QEvent leave(QEvent::Leave);
+            QApplication::sendEvent(item, &leave);
+        }
+        qs_flush();
+        return 1;
+    }
+    return 0;
+}
+int qs_has_help(QSWindow *window, const char *id, const char *expected) {
+    auto *item = window->findChild<QWidget *>(QString::fromUtf8(id));
+    return item && item->toolTip() == QString::fromUtf8(expected);
 }
 int qs_scroll_to_end(QSWindow *window) {
     auto *area = window->findChild<QScrollArea *>();

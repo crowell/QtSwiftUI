@@ -28,7 +28,7 @@ public struct EnvironmentValues {
     var closePresentation: @MainActor () -> Void = {}
     var accessibilityTraits: AccessibilityTraits = []
     var stackAxis = Axis.vertical
-    var label = "", identifier = ""
+    var label = "", identifier = "", helpText = ""
 }
 extension Context {
     func with<T>(_ key: WritableKeyPath<EnvironmentValues, T>, _ value: T) -> Self {
