@@ -74,6 +74,7 @@ extension View {
 
 extension Context {
     func installShortcut(on widget: UnsafeMutableRawPointer) {
+        guard !host.isMeasuringAlternative else { return }
         let shortcut = environment.keyboardShortcut
         qs_button_shortcut(host.window, widget, shortcut.map { String($0.key.character) } ?? "",
                            Int32(truncatingIfNeeded: shortcut?.modifiers.rawValue ?? 0),

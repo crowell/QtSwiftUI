@@ -101,6 +101,18 @@ if [ -f "$lighthouse" ]; then cp "$lighthouse" "$target_dir/Media/"; fi
 # pixel reader. Substitute the portable font shaper for CoreText and bridge CFData on Linux.
 qr="$source_dir/Components/QRCode"
 timeline="$source_dir/Components/Conversation"
+cp "$timeline/ConversationHeader.swift" "$target_dir/"
+{
+    echo 'import SwiftUI'
+    echo 'import SignalI18n'
+    declarations '^public enum MuteOption:' 1 "$source_dir/Components/LeftPane/LeftPaneChatFolders.swift"
+    declarations '^public enum ExpirationTimer ' 1 "$source_dir/Components/DisappearingTimerSelect.swift"
+    declarations '^public struct InContactsIcon:' 1 "$source_dir/Components/ConversationList/ContactListItem.swift"
+} > "$target_dir/HeaderSupport.swift"
+# Measure the tooltip label with the fixture's portable font metrics and balanced text layout.
+awk '/CSSTextLayout.make\(\$0,/ {print "            s.map { AxoFonts.width($0, style: st) + 8 } ?? 0"; count++; next}
+     /let labelWidth = CSSTextLayout.make/ {print "            let labelWidth = min(available, AxoFonts.width(label, style: style))"; count++; next}
+     {print} END {if (count != 2) exit 1}' "$source_dir/Axo/AxoTooltip.swift" > "$target_dir/AxoTooltip.swift"
 cp "$timeline/Timeline.swift" "$timeline/LastSeenIndicator.swift" "$timeline/ScrollDownButton.swift" "$timeline/TimelineDateHeader.swift" "$target_dir/"
 cp "$source_dir/Components/DateTimePickers.swift" "$source_dir/Components/UsernameLinkEditor.swift" "$qr/QrCode.swift" "$qr/QRCodeGenerator.swift" "$qr/BrandedQRCode.swift" "$target_dir/"
 awk '/CSSTextLayout.make\(runs:/ {print "        AxoFonts.width(text, style: style)"; count++; next}

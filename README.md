@@ -72,6 +72,14 @@ The `--username-card` example displays Serein’s branded username QR card for i
 
 The integration tests write the production PNG when `QTSWIFTUI_USERNAME_REFERENCE` names an existing directory. The Apple check also scans the Ubuntu export in `Screenshots/` when present.
 
+The `--conversation` example adds Serein’s production `ConversationHeader` to the message timeline. It uses the Nyah Stroman contact and kitten avatar from Serein’s header stories. Search for “tickets” and press Return to jump to that message. The contact name opens Serein’s contact dialog. The overflow menu supports local pinning, muting, changing the disappearing-message duration and opening the media panel. Call buttons dispatch local callbacks.
+
+![Serein conversation with the header menu open on Ubuntu](Screenshots/conversation-header-menu.png)
+
+[Conversation with its header on Ubuntu](Screenshots/conversation-header.png)
+
+Both platforms exercise the call callbacks, keyboard search, contact details and presentation of the overflow menu. Qt also exercises pin, unpin and All media through the open menu. Synthetic clicks on those menu rows did not invoke their actions in the Apple test window. Set `QTSWIFTUI_HEADER_REFERENCE` to an existing directory to save the captures. The header compiles unchanged. Its tooltip uses the example’s portable font measurement and balanced text layout.
+
 The `--timeline` example opens Serein’s conversation timeline at the newest of eleven local messages. It compiles Serein’s production timeline, date header, unread divider and scroll buttons. The fixture provides Serein’s sample message bubble for each row. The history screenshot shows the oldest message and the button that jumps to the first unread mention.
 
 ![Serein conversation timeline with three unread messages on Ubuntu](Screenshots/conversation-timeline.png)
@@ -216,13 +224,14 @@ The target is source compatibility with Apple's public SwiftUI APIs. The impleme
 | Lazy grids | Fixed, flexible and adaptive columns, per-column and grid alignment, right-to-left layout, full-width section headers and footers, and on-demand rows in a scroll view. Tests compare track frames and check cell state after scrolling and changing the column count. |
 | Lazy stacks | `LazyVStack` measures visible rows, estimates the remaining height and preserves state by row identity. Apple and Ubuntu tests jump between the ends of 200 rows, check retained state, and pin section headers and footers. |
 | Scrolling | `ScrollViewReader` scrolls by explicit or `ForEach` ID, with an optional anchor. Shared tests move both axes, target sibling scroll views, jump to distant lazy rows and remove a target. `scrollDisabled` controls Qt wheel, scrollbar and kinetic input while leaving child actions available. Scroll views and text editors apply per-axis bounce policies to the Qt kinetic scroller. Physical trackpad and touch bounce remain unverified. Native Qt scrolling updates scroll geometry observers. Apple and Ubuntu tests scroll 240 points of content through an 80-point viewport and check old and new values as the offset crosses a threshold. |
+| Adaptive layouts | `ViewThatFits` checks candidates in order, measures ideal size on the requested axes and falls back to the last child. Tests resize across breakpoints and check the chosen button, lifecycle callbacks, preference values, size and alignment guides on Ubuntu and macOS. |
 | Scroll positioning | `ScrollPosition` and ID bindings move a native Qt scroll area by edge, coordinate or target. Tests cover per-role default anchors, short content, visibility thresholds, disabled target layouts and appended rows. Animated scrolling and exact visibility timing remain open. |
 | Keyboard input | Programmatic composer focus, native focus changes, sending with Return, Escape commands and selectable monospaced diagnostic text. |
 | Lifecycle | An async view task updates an observable model while the Qt event loop runs. An on-change handler observes the result. A timeline also advances to a scheduled date inside the Qt event loop. |
 
 `./Scripts/check-apple.sh ../serein` type-checks the example source with Apple's SwiftUI module on a Mac with Xcode. `./Scripts/check-api.sh` extracts public symbol graphs from Xcode and the Linux image. Pass `--missing` to list missing declaration paths. The inventory groups declarations by symbol kind and path, counts overload spellings separately, and excludes underscored and synthesized members. A shared name alone cannot establish matching signatures, constraints, availability or behavior.
 
-The inventory against the macOS 27.2 SDK found 1,373 shared declaration paths out of 7,627 and 878 identical declaration spellings out of 8,735. The examples exercise a smaller set at runtime. Navigation, multiwindow scenes, broader animation support, text shaping parity, gestures and platform integration remain substantial gaps. Font metrics, control appearance and several layout behaviors differ from Apple's implementation.
+The inventory against the macOS 27.2 SDK found 1,376 shared declaration paths out of 7,627 and 881 identical declaration spellings out of 8,735. The examples exercise a smaller set at runtime. Navigation, multiwindow scenes, broader animation support, text shaping parity, gestures and platform integration remain substantial gaps. Font metrics, control appearance and several layout behaviors differ from Apple's implementation.
 
 After capturing the Linux examples, run `./Scripts/compare-artwork.sh ../serein` on macOS to render both illustrations with Apple's `ImageRenderer`. At a threshold of 8/255 in any RGB channel, 101 of 119,680 account artwork pixels (0.084%) and 91 of 49,928 key transparency pixels (0.182%) differed. The mean absolute channel differences were 0.104/255 and 0.095/255 respectively. Both reference images are saved in `.build/artwork/`.
 

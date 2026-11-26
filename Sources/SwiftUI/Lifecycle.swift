@@ -55,6 +55,7 @@ private struct ViewTask<Content: View, ID: Equatable>: Primitive {
     let content: Content, id: ID, priority: TaskPriority
     let action: @MainActor () async -> Void
     func elements(in ctx: Context) -> [Element] {
+        guard !ctx.host.isMeasuringAlternative else { return content.resolve(ctx) }
         let slot = ctx.host.storage[ctx.path] as? TaskSlot<ID> ?? TaskSlot(id)
         ctx.host.liveStorage.insert(ctx.path)
         ctx.host.storage[ctx.path] = slot
@@ -75,6 +76,7 @@ private struct ViewTask<Content: View, ID: Equatable>: Primitive {
 private struct ChangeObserver<Content: View, Value: Equatable>: Primitive {
     let content: Content, value: Value, initial: Bool, action: (Value, Value) -> Void
     func elements(in ctx: Context) -> [Element] {
+        guard !ctx.host.isMeasuringAlternative else { return content.resolve(ctx) }
         ctx.host.liveStorage.insert(ctx.path)
         if let previous = ctx.host.storage[ctx.path] as? Previous<Value> {
             let old = previous.value

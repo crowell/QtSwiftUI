@@ -59,6 +59,7 @@ public enum Axis: Int8, CaseIterable, Sendable {
     let sizing: (ProposedViewSize) -> CGSize
     let place: (CGRect, ProposedViewSize) -> Void
     var guides: [AlignmentKey: (ProposedViewSize, CGSize) -> CGFloat?] = [:]
+    var selectedGuide: ((AlignmentKey, ProposedViewSize, CGSize) -> CGFloat?)?
     var baselines: ((ProposedViewSize, CGSize) -> TextBaselines?)?
     var values: [ObjectIdentifier: Any] = [:]
     var sizesGroupToPositionedContent = false
@@ -74,6 +75,7 @@ public enum Axis: Int8, CaseIterable, Sendable {
         let wrapper = Element(size: size, place: place)
         wrapper.baselines = baselines ?? self.baselines
         wrapper.guides = guides
+        wrapper.selectedGuide = selectedGuide
         wrapper.values = values
         wrapper.isSpacer = isSpacer
         wrapper.priority = priority
@@ -112,17 +114,22 @@ extension View {
 private extension Element {
     func combineGuides(from children: [Element], direction: LayoutDirection,
                        placements: @escaping (ProposedViewSize, CGSize) -> [Placement]) {
-        for key in Set(children.flatMap { $0.guides.keys }) {
-            guard key.custom != nil || key == VerticalAlignment.firstTextBaseline.key || key == VerticalAlignment.lastTextBaseline.key else { continue }
-            guides[key] = { p, size in
-                let values = placements(p, size).map { item -> CGFloat? in
-                    let x = direction == .leftToRight ? item.rect.minX : size.width - item.rect.maxX
-                    let offset = key.vertical ? item.rect.minY : x
-                    return item.child.explicitValue(key, item.proposal, item.rect.size).map { $0 + offset }
-                }
-                return key.combine(values)
-            }
+        func propagates(_ key: AlignmentKey) -> Bool {
+            key.custom != nil || key == VerticalAlignment.firstTextBaseline.key || key == VerticalAlignment.lastTextBaseline.key
         }
+        func combined(_ key: AlignmentKey, _ proposal: ProposedViewSize, _ size: CGSize) -> CGFloat? {
+            guard propagates(key) else { return nil }
+            let values = placements(proposal, size).map { item -> CGFloat? in
+                let x = direction == .leftToRight ? item.rect.minX : size.width - item.rect.maxX
+                let offset = key.vertical ? item.rect.minY : x
+                return item.child.explicitValue(key, item.proposal, item.rect.size).map { $0 + offset }
+            }
+            return key.combine(values)
+        }
+        for key in Set(children.flatMap { $0.guides.keys }) where propagates(key) {
+            guides[key] = { combined(key, $0, $1) }
+        }
+        if children.contains(where: { $0.selectedGuide != nil }) { selectedGuide = combined }
     }
 }
 
@@ -168,8 +175,12 @@ private extension Element {
     }
     typealias Item = (CGSize, ProposedViewSize)
     let crossGuide = axis == .horizontal ? alignment.vertical.key : alignment.horizontal.key
-    let alignsGuides = crossGuide.custom != nil || (axis == .horizontal && alignment.vertical.isBaseline)
+    let fixedGuides = crossGuide.custom != nil || (axis == .horizontal && alignment.vertical.isBaseline)
         || children.contains { $0.guides[crossGuide] != nil }
+    let variableGuides = children.indices.filter { children[$0].selectedGuide != nil }
+    func alignsGuides(_ items: [Item]) -> Bool {
+        fixedGuides || variableGuides.contains { i in children[i].selectedGuide?(crossGuide, items[i].1, items[i].0) != nil }
+    }
     func offsets(_ items: [Item]) -> [CGFloat] {
         zip(children, items).map { child, item in
             child.coordinate(crossGuide, item.1, item.0)
@@ -177,17 +188,18 @@ private extension Element {
     }
     func placements(in bounds: CGRect, items: [Item]) -> [Placement] {
         var cursor = axis == .horizontal ? bounds.minX : bounds.minY
-        let guides = alignsGuides ? offsets(items) : []
+        let aligned = alignsGuides(items)
+        let guides = aligned ? offsets(items) : []
         let shared = guides.max() ?? 0
         return children.indices.map { i in
             let (size, offer) = items[i]
             var rect = alignment.rect(size, in: bounds)
             if axis == .horizontal {
                 rect.origin.x = cursor
-                if alignsGuides { rect.origin.y = bounds.minY + shared - guides[i] }
+                if aligned { rect.origin.y = bounds.minY + shared - guides[i] }
             } else {
                 rect.origin.y = cursor
-                if alignsGuides { rect.origin.x = bounds.minX + shared - guides[i] }
+                if aligned { rect.origin.x = bounds.minX + shared - guides[i] }
             }
             cursor += size[keyPath: axis.main] + spacing
             return Placement(child: children[i], rect: direction.position(rect, in: bounds), proposal: offer)
@@ -198,7 +210,7 @@ private extension Element {
         var size = CGSize.zero
         size[keyPath: axis.main] = gap + items.reduce(0) { $0 + $1.0[keyPath: axis.main] }
         size[keyPath: axis.cross] = items.map { $0.0[keyPath: axis.cross] }.max() ?? 0
-        if alignsGuides {
+        if alignsGuides(items) {
             let guides = offsets(items)
             let after = zip(items, guides).map { $0.0.0[keyPath: axis.cross] - $0.1 }.max() ?? 0
             size[keyPath: axis.cross] = (guides.max() ?? 0) + after

@@ -114,7 +114,7 @@ extension Element {
         ViewDimensions(size: size, resolveExplicit: { key in self.explicitValue(key, p, size) })
     }
     func explicitValue(_ key: AlignmentKey, _ p: ProposedViewSize, _ size: CGSize) -> CGFloat? {
-        if let value = guides[key]?(p, size) { return value }
+        if let value = guides[key]?(p, size) ?? selectedGuide?(key, p, size) { return value }
         if key == VerticalAlignment.firstTextBaseline.key { return baselines?(p, size)?.first }
         if key == VerticalAlignment.lastTextBaseline.key { return baselines?(p, size)?.last }
         return nil
@@ -125,6 +125,12 @@ extension Element {
     // A wrapper reports its child’s explicit guide translated to its own logical origin.
     func translateGuides(from child: Element, placement: @escaping (ProposedViewSize, CGSize) -> (CGRect, ProposedViewSize)) {
         guides = [:]
+        selectedGuide = child.selectedGuide.map { resolve in
+            { key, p, size in
+                let (rect, offer) = placement(p, size)
+                return resolve(key, offer, rect.size).map { $0 + (key.vertical ? rect.minY : rect.minX) }
+            }
+        }
         for (key, value) in child.guides {
             guides[key] = { p, size in
                 let (rect, offer) = placement(p, size)

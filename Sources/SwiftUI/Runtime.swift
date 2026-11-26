@@ -139,8 +139,20 @@ enum Part: Hashable {
     let matches = GeometryMatches()
     private var pendingTransaction: Transaction?
     private var afterRender: [() -> Void] = []
-    func afterLayout(_ action: @escaping () -> Void) { afterRender.append(action) }
+    // Fitting a candidate may need Qt font and control metrics. Only the chosen
+    // branch keeps its widgets and receives focus, lifecycle and layout callbacks.
+    private(set) var isMeasuringAlternative = false
+    func measuringAlternative<T>(_ measure: () -> T) -> T {
+        let previous = isMeasuringAlternative
+        isMeasuringAlternative = true
+        defer { isMeasuringAlternative = previous }
+        return measure()
+    }
+    func afterLayout(_ action: @escaping () -> Void) {
+        if !isMeasuringAlternative { afterRender.append(action) }
+    }
     func lifetime(at path: [Part], appear: @escaping () -> Void, disappear action: @escaping () -> Void) {
+        guard !isMeasuringAlternative else { return }
         if disappear[path] == nil && nextDisappear[path] == nil { afterRender.append(appear) }
         nextDisappear[path] = action
     }
@@ -195,7 +207,7 @@ enum Part: Hashable {
         if let window { qs_update(window) }
     }
     func mount(path: [Part], kind: QSKind, parent: UnsafeMutableRawPointer?) -> Mount {
-        liveMounts.insert(path)
+        if !isMeasuringAlternative { liveMounts.insert(path) }
         if let entry = mounts[path] { return entry }
         nextID += 1
         let entry = Mount(widget: qs_create(window, parent, kind, nextID)!, id: nextID)

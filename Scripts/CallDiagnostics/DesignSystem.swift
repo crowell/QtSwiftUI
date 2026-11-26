@@ -104,8 +104,13 @@ public struct CSSTextStyle {
         self.lineHeight = lineHeight
         self.letterSpacing = letterSpacing
     }
+    var weight: Int {
+        if fontName.hasSuffix("SemiBold") { return 600 }
+        if fontName.hasSuffix("Bold") { return 700 }
+        if fontName.hasSuffix("Medium") { return 500 }
+        return 400
+    }
     var type: AxoType {
-        let weight = fontName == "Inter-SemiBold" ? 600 : fontName == "Inter-Medium" ? 500 : 400
         return AxoType(size: size, lineHeight: lineHeight, weight: weight, tracking: size > 0 ? letterSpacing / size : 0)
     }
 }
