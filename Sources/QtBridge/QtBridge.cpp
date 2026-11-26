@@ -2305,16 +2305,19 @@ int qs_menu_indicator_width(QSWidget w) {
     return button->popup && button->menuIndicator ? button->style()->pixelMetric(QStyle::PM_MenuButtonIndicator, nullptr, button) : 0;
 }
 int qs_button_down(QSWidget w) { return static_cast<QPushButton *>(w)->isDown(); }
-void qs_focus(QSWidget w, int active) {
+int qs_window_has_focus(QSWindow *window) { return window->focusWidget() != nullptr; }
+int qs_try_focus(QSWidget w) {
     auto *item = widget(w);
-    if (!item->isEnabled() || item->focusPolicy() == Qt::NoFocus) return;
-    if (active && !item->hasFocus()) {
-        auto *window = item->window();
-        const QRect bounds(item->mapTo(window, QPoint()), item->size());
-        if (item->isVisibleTo(window) && bounds.intersects(window->rect()))
-            item->setFocus(Qt::OtherFocusReason);
-    }
-    else if (!active && item->hasFocus()) item->clearFocus();
+    if (!item->isEnabled() || item->focusPolicy() == Qt::NoFocus) return 0;
+    auto *window = item->window();
+    const QRect bounds(item->mapTo(window, QPoint()), item->size());
+    if (!item->isVisibleTo(window) || !bounds.intersects(window->rect())) return 0;
+    if (!item->hasFocus()) item->setFocus(Qt::OtherFocusReason);
+    return 1;
+}
+void qs_focus(QSWidget w, int active) {
+    if (active) qs_try_focus(w);
+    else if (widget(w)->hasFocus()) widget(w)->clearFocus();
 }
 void qs_enabled(QSWidget w, int enabled) { widget(w)->setEnabled(enabled); }
 void qs_accessible_control(QSWidget w, int selected, int button, int toggle, int link, int startsMedia) {

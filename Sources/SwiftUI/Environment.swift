@@ -85,6 +85,9 @@ public struct EnvironmentValues {
     public internal(set) var keyboardShortcut: KeyboardShortcut?
     var buttonStyle: ((ButtonStyleConfiguration, Context) -> AnyView)?
     var isLink = false
+    var focusScopes: Set<Namespace.ID> = []
+    var preferredFocus: Set<Namespace.ID> = []
+    var focusReset = ResetFocusAction { _ in }
     var focus: FocusLink?
     public var isFocusEffectEnabled = true
     var submit: (() -> Void)?

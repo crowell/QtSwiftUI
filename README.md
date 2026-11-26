@@ -22,6 +22,8 @@ Ctrl+/ opens the application’s keyboard shortcut guide with Linux key bindings
 
 ![Keyboard Shortcuts in the running Serein Linux release](Screenshots/serein-linux-shortcuts.png)
 
+A `focusScope(_:)` can name a group of controls and mark its preferred field with `prefersDefaultFocus(_:in:)`. The Ubuntu tests open a window, reset keyboard focus to its preferred field and verify that removing the field falls back to an enabled control in the same scope.
+
 Localized `Text` reads `.strings` tables from the supplied bundle. The same tests on Qt and Apple SwiftUI render English and French translations with reordered arguments, escaped percent signs and formatted numbers. The tests compare each translation with the expected verbatim rendering on that platform.
 
 `Picker` uses native Qt combo boxes, segmented buttons and radio groups. It also presents checked options inside a menu. The Linux tests exercise keyboard selection, disabled options and changes to multiple bindings. Both SDKs pass the same checks for explicit tags, optional tags and identifiers supplied by `ForEach`.
@@ -328,7 +330,7 @@ The target is source compatibility with Apple's public SwiftUI APIs. The impleme
 
 `./Scripts/check-apple.sh ../serein` type-checks the example source with Apple's SwiftUI module on a Mac with Xcode. `./Scripts/check-api.sh` extracts public symbol graphs from Xcode and the Linux image. Pass `--missing` to list missing declaration paths. The inventory groups declarations by symbol kind and path, counts overload spellings separately, and excludes underscored and synthesized members. A shared name alone cannot establish matching signatures, constraints, availability or behavior.
 
-The inventory against the macOS 27.2 SDK found 1,696 shared declaration paths out of 7,627 and 1,142 identical declaration spellings out of 8,735. The examples exercise a smaller set at runtime. Navigation, window state restoration, broader animation support, text shaping parity, gestures and platform integration remain substantial gaps. Font metrics, control appearance and several layout behaviors differ from Apple's implementation.
+The inventory against the macOS 27.2 SDK found 1,701 shared declaration paths out of 7,627 and 1,147 identical declaration spellings out of 8,735. The examples exercise a smaller set at runtime. Navigation, window state restoration, broader animation support, text shaping parity, gestures and platform integration remain substantial gaps. Font metrics, control appearance and several layout behaviors differ from Apple's implementation.
 
 After capturing the Linux examples, run `./Scripts/compare-artwork.sh ../serein` on macOS to render both illustrations with Apple's `ImageRenderer`. At a threshold of 8/255 in any RGB channel, 101 of 119,680 account artwork pixels (0.084%) and 91 of 49,928 key transparency pixels (0.182%) differed. The mean absolute channel differences were 0.104/255 and 0.095/255 respectively. Both reference images are saved in `.build/artwork/`.
 

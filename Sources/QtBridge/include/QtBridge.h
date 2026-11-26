@@ -245,6 +245,8 @@ void qs_menu_shortcut(QSWidget menu, int index, const char *key, int modifiers, 
 int qs_popup_item_state(QSWindow *, const char *title);
 int qs_click_popup_item(QSWindow *, const char *title);
 int qs_button_down(QSWidget);
+int qs_window_has_focus(QSWindow *);
+int qs_try_focus(QSWidget);
 void qs_focus(QSWidget, int active);
 void qs_enabled(QSWidget, int);
 void qs_accessible_control(QSWidget, int selected, int button, int toggle, int link, int startsMedia);

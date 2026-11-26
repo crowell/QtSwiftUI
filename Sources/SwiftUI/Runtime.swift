@@ -86,6 +86,7 @@ enum Part: Hashable {
         host.transfers[entry.id] = transfer
         if let drag { host.drags[entry.id] = { drag($0, entry.widget) } }
         else { host.drags[entry.id] = nil }
+        if !host.isMeasuringAlternative { host.focusScopes.include(entry.widget, environment: environment) }
         let focus = environment.focus
         let submit = environment.submit
         host.events[entry.id] = { kind, value in
@@ -166,6 +167,7 @@ enum Part: Hashable {
         if disappear[path] == nil && nextDisappear[path] == nil { afterRender.append(appear) }
         nextDisappear[path] = action
     }
+    let focusScopes = WindowFocusScopes()
     let keys = WindowKeyPresses()
     var transfers: [Int32: TransferAction] = [:]
     var drags: [Int32: (QSDragSample) -> Void] = [:]
@@ -226,6 +228,7 @@ enum Part: Hashable {
     func open(width: Int, height: Int) { qs_open(window, Int32(width), Int32(height)) }
     func close() {
         didClose = nil
+        focusScopes.begin()
         if let window { qs_close(window); self.window = nil }
         for stop in disappear.values { stop() }
         disappear.removeAll()
@@ -259,6 +262,7 @@ enum Part: Hashable {
     func render(proposal: ProposedViewSize, viewport: CGSize?, scale: CGFloat) -> CGSize {
         frameTime = animationClock()
         transitions.begin()
+        focusScopes.begin()
         liveMounts.removeAll(keepingCapacity: true)
         liveStorage.removeAll(keepingCapacity: true)
         nextDisappear.removeAll(keepingCapacity: true)
@@ -279,6 +283,7 @@ enum Part: Hashable {
         let ended = disappear.filter { nextDisappear[$0.key] == nil }
         disappear = nextDisappear
         for action in ended.values { action() }
+        if viewport != nil { focusScopes.finish(window: window) }
         let pending = afterRender
         afterRender.removeAll(keepingCapacity: true)
         for action in pending { action() }
@@ -287,6 +292,10 @@ enum Part: Hashable {
 
     private func layout(proposal: ProposedViewSize, viewport: CGSize?, scale: CGFloat) -> CGSize {
         var context = Context(host: self)
+        context.environment.focusReset = ResetFocusAction { [weak focusScopes] namespace in
+            if Thread.isMainThread { MainActor.assumeIsolated { focusScopes?.reset(in: namespace) } }
+            else { Task { @MainActor [weak focusScopes] in focusScopes?.reset(in: namespace) } }
+        }
         context.environment.colorScheme = qs_dark_appearance() != 0 ? .dark : .light
         context.transaction = pendingTransaction ?? Transaction()
         pendingTransaction = nil
