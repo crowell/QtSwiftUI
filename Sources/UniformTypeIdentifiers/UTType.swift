@@ -10,6 +10,8 @@ public struct UTType: Hashable, Codable, Sendable {
 
     private static let declarations: [String: Declaration] = [
         "public.item": .init(mime: nil, parent: nil),
+        "public.directory": .init(mime: "inode/directory", parent: "public.item"),
+        "public.folder": .init(mime: nil, parent: "public.directory"),
         "public.content": .init(mime: nil, parent: "public.item"),
         "public.data": .init(mime: "application/octet-stream", parent: "public.item"),
         "public.text": .init(mime: nil, parent: "public.data"),
@@ -60,6 +62,7 @@ public struct UTType: Hashable, Codable, Sendable {
     }
 
     public static let item = Self(known: "public.item"), content = Self(known: "public.content"), data = Self(known: "public.data")
+    public static let directory = Self(known: "public.directory"), folder = Self(known: "public.folder")
     public static let text = Self(known: "public.text"), plainText = Self(known: "public.plain-text"), utf8PlainText = Self(known: "public.utf8-plain-text")
     public static let html = Self(known: "public.html"), url = Self(known: "public.url"), fileURL = Self(known: "public.file-url")
     public static let image = Self(known: "public.image"), png = Self(known: "public.png"), jpeg = Self(known: "public.jpeg")

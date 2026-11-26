@@ -37,6 +37,7 @@ public struct EnvironmentValues {
     public var controlSize: ControlSize = .regular
     var menuIndicator = Visibility.automatic
     var menuStyle: (@MainActor (MenuStyleConfiguration) -> AnyView)?
+    var fileDialogDirectory: URL?
     var plainField = false
     var fieldStyle: (@MainActor (TextField<_TextFieldStyleLabel>) -> AnyView)?
     var allowsHits = true

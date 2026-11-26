@@ -484,3 +484,11 @@ let package = Package(name: "CallDiagnostics", platforms: [.macOS("27.0")], depe
                       targets: [.executableTarget(name: "CallDiagnostics", dependencies: dependencies, resources: [.copy("Fonts"), .copy("Media"), .copy("emoji-data.json")]),
                                 .testTarget(name: "ScreenTests", dependencies: ["CallDiagnostics"] + dependencies)])
 SWIFT
+# The avatar editor uses the port branch's cross-platform font metrics and file importer.
+if [ -f "$source_dir/Theme/AvatarTextMetrics.swift" ]; then
+    for name in AvatarEditor AvatarEditorParts AvatarTextEditor AvatarIconEditor AvatarPreview BetterAvatar; do
+        cp "$source_dir/Components/$name.swift" "$target_dir/"
+    done
+    cp "$source_dir/Theme/AvatarTextMetrics.swift" "$root/Scripts/AvatarEditorPreview.swift" "$target_dir/"
+    echo 'package.targets[0].swiftSettings = [.define("SEREIN_AVATAR_EDITOR")]' >> "$target/Package.swift"
+fi

@@ -46,6 +46,12 @@ The `--backup-import` example runs Serein’s “Syncing messages” screen with
 
 ![Serein backup import running on Ubuntu](Screenshots/backup-import.png)
 
+The `--avatar-editor` example builds the Serein Linux branch’s Group Avatar dialog, including its preset artwork, color and text editors, and Photo button. The button opens a Qt file importer restricted to GIF, JPEG, PNG and WebP. An X11 check on Ubuntu opened the picker, canceled it, reopened it and selected a filename containing a space, a hash and a percent sign. The component runner reports the selected URL. Serein’s production app sends the selected photo to its media service for decoding.
+
+![Serein Group Avatar editor on Ubuntu](Screenshots/group-avatar.png)
+
+[Qt file chooser opened by Serein’s Photo button](Screenshots/group-avatar-file-import.png)
+
 The `--call-participants` example displays Serein’s group-call tiles for a blocked participant and a participant with a raised hand. “More Info” opens Serein’s localized alert in a window-modal Qt dialog. Ubuntu tests dismiss it and open it again. Apple and Qt tests both activate the raised-hand control. The alert capture was taken from an X11 display in Docker.
 
 ![Serein’s group-call participant tiles](Screenshots/call-participants.png)
@@ -273,7 +279,7 @@ The target is source compatibility with Apple's public SwiftUI APIs. The impleme
 
 `./Scripts/check-apple.sh ../serein` type-checks the example source with Apple's SwiftUI module on a Mac with Xcode. `./Scripts/check-api.sh` extracts public symbol graphs from Xcode and the Linux image. Pass `--missing` to list missing declaration paths. The inventory groups declarations by symbol kind and path, counts overload spellings separately, and excludes underscored and synthesized members. A shared name alone cannot establish matching signatures, constraints, availability or behavior.
 
-The inventory against the macOS 27.2 SDK found 1,446 shared declaration paths out of 7,627 and 935 identical declaration spellings out of 8,735. The examples exercise a smaller set at runtime. Navigation, multiwindow scenes, broader animation support, text shaping parity, gestures and platform integration remain substantial gaps. Font metrics, control appearance and several layout behaviors differ from Apple's implementation.
+The inventory against the macOS 27.2 SDK found 1,450 shared declaration paths out of 7,627 and 939 identical declaration spellings out of 8,735. The examples exercise a smaller set at runtime. Navigation, multiwindow scenes, broader animation support, text shaping parity, gestures and platform integration remain substantial gaps. Font metrics, control appearance and several layout behaviors differ from Apple's implementation.
 
 After capturing the Linux examples, run `./Scripts/compare-artwork.sh ../serein` on macOS to render both illustrations with Apple's `ImageRenderer`. At a threshold of 8/255 in any RGB channel, 101 of 119,680 account artwork pixels (0.084%) and 91 of 49,928 key transparency pixels (0.182%) differed. The mean absolute channel differences were 0.104/255 and 0.095/255 respectively. Both reference images are saved in `.build/artwork/`.
 

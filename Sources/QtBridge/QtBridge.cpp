@@ -27,7 +27,7 @@
 #include "PathTrim.hpp"
 #include "RasterWidget.hpp"
 #include <QApplication>
-#include <QFileDialog>
+#include "FileImporter.hpp"
 #include <string.h>
 #include <QAccessibleWidget>
 #include <QCheckBox>
@@ -1390,6 +1390,13 @@ double qs_text_width(const char *text, const char *family, double size, double s
     font.setLetterSpacing(QFont::AbsoluteSpacing, spacing);
     return QFontMetricsF(font).horizontalAdvance(QString::fromUtf8(text));
 }
+QSSize qs_text_ink(const char *text, size_t count, const char *family, double size) {
+    if (!std::isfinite(size) || size <= 0 || size > 65535) return {};
+    auto font = resolveFont(application().font(), QString::fromUtf8(family), -1, false);
+    font.setPixelSize(qMax(1, qRound(size)));
+    const auto ink = QFontMetricsF(font).tightBoundingRect(QString::fromUtf8(text, qsizetype(count)));
+    return {ink.width(), ink.height()};
+}
 QSFontMetrics qs_font_metrics(const char *family, double size) {
     const auto font = resolveFont(application().font(), QString::fromUtf8(family), -1, false);
     auto raw = QRawFont::fromFont(font);
@@ -1873,6 +1880,24 @@ QSSize qs_primary_screen_size(void) {
     const QSize size = screen->geometry().size();
     return {double(size.width()), double(size.height())};
 }
+void qs_file_import(QSWidget w, const char *mime_types, int directories, int multiple, const char *default_directory) {
+    auto *group = static_cast<GroupWidget *>(w);
+    if (group->findChild<QFileDialog *>(QString(), Qt::FindDirectChildrenOnly)) return;
+    auto *dialog = new QSFileImporter(group, QString::fromUtf8(mime_types), directories, multiple);
+    if (default_directory) dialog->setDirectory(QString::fromUtf8(default_directory));
+    QObject::connect(dialog, &QDialog::finished, group, [group, dialog](int result) {
+        QStringList urls;
+        if (result == QDialog::Accepted) {
+            for (const auto &url : dialog->importURLs()) urls.append(QString::fromLatin1(url.toEncoded(QUrl::FullyEncoded)));
+        }
+        const QString value = result == QDialog::Rejected ? QStringLiteral("cancel") : urls.join('\n');
+        QTimer::singleShot(0, group, [group, value, finished = QPointer<QFileDialog>(dialog)] {
+            delete finished.data();
+            sendAccessibleEvent(group, QSActivate, value);
+        });
+    });
+    QTimer::singleShot(0, dialog, [dialog] { dialog->open(); });
+}
 int qs_alert_begin(QSWidget w, const char *title, const char *message) {
     auto *group = static_cast<GroupWidget *>(w);
     if (group->findChild<QMessageBox *>(QString(), Qt::FindDirectChildrenOnly)) return 0;
@@ -2134,6 +2159,18 @@ int qs_accessible_element(QSWindow *window, const char *name, int childCount, co
     }
     return 0;
 }
+int qs_select_import_entry(QSWindow *window, const char *path, int extend) {
+    for (auto *view : window->findChildren<QAbstractItemView *>()) {
+        auto *model = qobject_cast<QFileSystemModel *>(view->model());
+        if (!model || !view->isVisible()) continue;
+        const auto index = model->index(QString::fromUtf8(path));
+        if (!index.isValid() || view->rootIndex() != index.parent()) continue;
+        auto changes = extend ? QItemSelectionModel::Select : QItemSelectionModel::ClearAndSelect;
+        view->selectionModel()->select(index, changes | QItemSelectionModel::Rows);
+        return 1;
+    }
+    return 0;
+}
 int qs_click(QSWindow *window, const char *id) {
     auto *button = window->findChild<QAbstractButton *>(QString::fromUtf8(id));
     if (!button || !button->isEnabled()) return 0;
@@ -2178,7 +2215,10 @@ int qs_send_repeated_key(QSWindow *window, const char *keys, int repeats) {
 }
 int qs_key_escape(QSWindow *window) {
     QKeyEvent key(QEvent::KeyPress, Qt::Key_Escape, Qt::NoModifier);
-    QApplication::sendEvent(window->focusWidget() ? window->focusWidget() : window, &key);
+    auto *modal = QApplication::activeModalWidget();
+    QWidget *target = window->focusWidget() ? window->focusWidget() : window;
+    if (modal && window->findChildren<QWidget *>().contains(modal)) target = modal;
+    QApplication::sendEvent(target, &key);
     qs_flush();
     return key.isAccepted();
 }
