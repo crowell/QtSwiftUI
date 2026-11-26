@@ -21,7 +21,10 @@ extension ButtonStyle where Self == PlainButtonStyle {
 extension View {
     public func buttonStyle<S: ButtonStyle>(_ style: S) -> some View {
         Transform(content: self) { view, ctx in
-            view.resolve(ctx.with(\.buttonStyle, { AnyView(style.makeBody(configuration: $0)) }))
+            view.resolve(ctx.with(\.buttonStyle, { configuration, button in
+                let context = button.descending(.type(ObjectIdentifier(S.self)))
+                return AnyView(context.preparing(style).makeBody(configuration: configuration))
+            }))
         }
     }
 }

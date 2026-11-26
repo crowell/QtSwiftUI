@@ -58,6 +58,7 @@ public struct Button<Label: View>: Primitive {
         let widget = context.widget(context.environment.isLink ? QSLink : QSButton, pressed: { [weak host = context.host] _ in
             if style != nil { host?.update() }
         }, action: { _ in action() })
+        context.installShortcut(on: widget)
         qs_plain_button(widget, style != nil ? 1 : 0)
         if style == nil, let text = label as? Text {
             qs_text(widget, text.string)
@@ -68,7 +69,7 @@ public struct Button<Label: View>: Primitive {
         ctx.environment.identifier = ""
         ctx.environment.isLink = false
         ctx.environment.focus = nil
-        let configured = style?(.init(label: .init(content: AnyView(label)), isPressed: qs_button_down(widget) != 0))
+        let configured = style?(.init(label: .init(content: AnyView(label)), isPressed: qs_button_down(widget) != 0), context)
         let child = stacked((configured ?? AnyView(label)).resolve(ctx.descending(.position(0))), axis: .horizontal, alignment: .center, spacing: 4)
         let dx: CGFloat = style == nil ? 8 : 0, dy: CGFloat = style == nil ? 5 : 0
         func inner(_ p: ProposedViewSize) -> ProposedViewSize {
@@ -91,6 +92,7 @@ public struct Toggle<Label: View>: Primitive {
     }
     func elements(in context: Context) -> [Element] {
         let widget = context.widget(QSToggle, action: { isOn.wrappedValue = $0 == "1" })
+        context.installShortcut(on: widget)
         qs_checked(widget, isOn.wrappedValue ? 1 : 0)
         if let text = label as? Text {
             qs_text(widget, text.string)

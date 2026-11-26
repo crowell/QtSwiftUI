@@ -172,6 +172,7 @@ enum Part: Hashable {
         context.environment.closePresentation = { [weak self] in
             if let window = self?.window { qs_request_close(window) }
         }
+        qs_shortcut_begin(window)
         let roots = content(context)
         let root = stacked(roots, axis: .vertical, alignment: .center, spacing: 8)
         let proposal = ProposedViewSize(width: CGFloat(width), height: CGFloat(height))
@@ -185,6 +186,7 @@ enum Part: Hashable {
                 qs_destroy(mount.widget)
             }
         }
+        qs_shortcut_finish(window)
         storage = storage.filter { liveStorage.contains($0.key) }
     }
 }

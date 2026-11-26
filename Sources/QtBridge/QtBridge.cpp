@@ -1,5 +1,6 @@
 #include "QtBridge.h"
 #include "CanvasBlur.hpp"
+#include "WindowShortcuts.hpp"
 #include "PathTrim.hpp"
 #include <QApplication>
 #include <QAccessibleWidget>
@@ -353,6 +354,7 @@ struct QSWindow final : QWidget {
     QSRender render;
     QSEvent event;
     bool pending = false, framePending = false;
+    WindowShortcuts shortcuts;
 
     void schedule() {
         if (pending) return;
@@ -475,6 +477,11 @@ void qs_open(QSWindow *window, int width, int height) {
     window->resize(width, height);
     window->show();
     qs_flush();
+}
+void qs_shortcut_begin(QSWindow *window) { window->shortcuts.begin(); }
+void qs_shortcut_finish(QSWindow *window) { window->shortcuts.finish(); }
+void qs_button_shortcut(QSWindow *window, QSWidget item, const char *key, int flags, int automatic) {
+    window->shortcuts.add(window, static_cast<QAbstractButton *>(item), QString::fromUtf8(key), flags, automatic);
 }
 void qs_request_close(QSWindow *window) { window->close(); }
 int qs_open_url(const char *url) {
@@ -992,6 +999,17 @@ int qs_enter(QSWindow *window, const char *id, const char *value) {
     if (!edit || !edit->isEnabled()) return 0;
     edit->selectAll();
     edit->insert(QString::fromUtf8(value));
+    qs_flush();
+    return 1;
+}
+int qs_send_key_sequence(QSWindow *window, const char *keys) {
+    const auto sequence = QKeySequence::fromString(QString::fromUtf8(keys), QKeySequence::PortableText);
+    if (sequence.count() != 1 || !window->windowHandle()) return 0;
+    auto combination = sequence[0];
+    QKeyEvent press(QEvent::KeyPress, combination.key(), combination.keyboardModifiers());
+    QKeyEvent release(QEvent::KeyRelease, combination.key(), combination.keyboardModifiers());
+    QApplication::sendEvent(window->windowHandle(), &press);
+    QApplication::sendEvent(window->windowHandle(), &release);
     qs_flush();
     return 1;
 }

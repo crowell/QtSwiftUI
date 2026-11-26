@@ -38,6 +38,9 @@ void qs_style(QSWidget, const char *family, double points, int weight, int itali
 void qs_selectable(QSWidget, int enabled);
 void qs_exit_scope(QSWidget, int enabled);
 void qs_request_close(QSWindow *);
+void qs_shortcut_begin(QSWindow *);
+void qs_shortcut_finish(QSWindow *);
+void qs_button_shortcut(QSWindow *, QSWidget, const char *key, int flags, int automatic);
 int qs_open_url(const char *url);
 void qs_surface(QSWidget, const char *color, double radius);
 QSPath *qs_path_new(void);
@@ -93,6 +96,7 @@ int qs_enter(QSWindow *, const char *identifier, const char *value);
 int qs_read_text(QSWindow *, const char *identifier, const char *expected);
 int qs_key_return(QSWindow *, const char *identifier);
 int qs_key_escape(QSWindow *);
+int qs_send_key_sequence(QSWindow *, const char *keys);
 int qs_scroll_to_end(QSWindow *);
 int qs_hover(QSWindow *, const char *identifier, int inside);
 int qs_has_help(QSWindow *, const char *identifier, const char *expected);

@@ -34,6 +34,16 @@ awk '/^import AppKit/ { print "#if canImport(AppKit)"; print; print "#endif"; ne
          print line; print "#else"; print; print "#endif"; next }
      { print }' "$source_dir/Components/InstallScreen/InstallScreen.swift" > "$target_dir/InstallScreen.swift"
 { echo '#if canImport(AppKit)'; cat "$source_dir/Theme/CASpin.swift"; echo '#endif'; } > "$target_dir/CASpin.swift"
+# Exercise the exact hidden keyboard controls from the Serein call lobby.
+awk 'BEGIN { print "import SwiftUI\nstruct LobbyKeyboardControls: View {"
+             print "    var hasLocalVideo: Bool, hasLocalAudio: Bool"
+             print "    var setLocalVideo: (Bool) -> Void, setLocalAudio: (Bool) -> Void"
+             print "    var body: some View {" }
+     /^            Group \{/ { group=$0; next }
+     /Button\(""\) \{ setLocalVideo/ { print group; emit=1 }
+     emit { print }
+     emit && /\.accessibilityHidden\(true\)/ { done=1; exit }
+     END { print "    }\n}"; if (!done) exit 1 }' "$source_dir/Calling/CallingLobby.swift" > "$target_dir/LobbyKeyboardControls.swift"
 # CallingAudioIndicator shares this color initializer with the call controls.
 awk '/^extension Color \{/ { print "import SwiftUI"; inside = 1 }
      inside { print } inside && /^}$/ { complete = 1; exit } END { if (!complete) exit 1 }' \

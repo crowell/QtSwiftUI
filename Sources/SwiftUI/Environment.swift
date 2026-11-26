@@ -26,7 +26,8 @@ public struct EnvironmentValues {
     var tracking: CGFloat = 0
     var foreground = Color.primary
 
-    var buttonStyle: ((ButtonStyleConfiguration) -> AnyView)?
+    public internal(set) var keyboardShortcut: KeyboardShortcut?
+    var buttonStyle: ((ButtonStyleConfiguration, Context) -> AnyView)?
     var isLink = false
     var focus: FocusLink?
     public var isFocusEffectEnabled = true
