@@ -27,6 +27,8 @@ public struct AnyGradient: Hashable, ShapeStyle, Sendable {
         LinearGradient(self, startPoint: .top, endPoint: .bottom)
     }
 
+    func stops(for scheme: ColorScheme) -> [QSGradientStop] { space.mode.stops(gradient.stops, scheme: scheme) }
+
     @MainActor func shade(_ widget: UnsafeMutableRawPointer, from start: CGPoint, to end: CGPoint,
                           scheme: ColorScheme, options: GraphicsContext.GradientOptions = []) {
         guard gradient.stops.count > 1 else {

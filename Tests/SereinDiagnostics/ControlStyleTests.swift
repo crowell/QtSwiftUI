@@ -53,6 +53,46 @@ final class ControlStyleTests: XCTestCase {
         XCTAssertEqual(value, "Alice")
     }
 
+    @MainActor func testTextGradientDrawsBothEnds() async throws {
+        let gradient = LinearGradient(colors: [.red, .blue], startPoint: .leading, endPoint: .trailing)
+        let view = Text(verbatim: "██████").font(.system(size: 26)).foregroundStyle(gradient)
+            .fixedSize().frame(width: 170, height: 44).background(Color.white)
+        #if os(Linux)
+        let window = try await ScreenWindow(view, width: 170, height: 44)
+        defer { window.close() }
+        let row = stride(from: 8, to: 164, by: 4).map { window.pixel($0, 22) }
+        #else
+        let bitmap = NSBitmapImageRep(cgImage: try XCTUnwrap(ImageRenderer(content: view).cgImage))
+        let row = try stride(from: 8, to: 164, by: 4).map { x in
+            let color = try XCTUnwrap(bitmap.colorAt(x: x, y: 22)?.usingColorSpace(.sRGB))
+            return UInt32(color.redComponent * 255) << 16 | UInt32(color.greenComponent * 255) << 8 | UInt32(color.blueComponent * 255)
+        }
+        #endif
+        func hasInk(_ pixel: UInt32, red: Bool) -> Bool {
+            let r = Int((pixel >> 16) & 255), b = Int(pixel & 255)
+            return (red ? r - b : b - r) > 65 && (pixel >> 8) & 255 < 180
+        }
+        XCTAssertTrue(row.prefix(row.count / 2).contains { hasInk($0, red: true) }, row.description)
+        XCTAssertTrue(row.suffix(row.count / 2).contains { hasInk($0, red: false) }, row.description)
+    }
+
+    @MainActor func testCheckboxAndRoundedTextFieldRespondToInput() async throws {
+        var checked = false, text = ""
+        let view = VStack(spacing: 0) {
+            Toggle("Favorite", isOn: Binding { checked } set: { checked = $0 }).toggleStyle(.checkbox)
+                .frame(width: 160, height: 40)
+            TextField("Name", text: Binding { text } set: { text = $0 }, prompt: Text("Contact").foregroundStyle(.blue))
+                .textFieldStyle(.roundedBorder).frame(width: 140, height: 40)
+        }
+        let window = try await ScreenWindow(view, width: 160, height: 80)
+        defer { window.close() }
+        try await window.click(70, 20)
+        XCTAssertTrue(checked)
+        try await window.click(50, 60)
+        try await window.type("Ferry")
+        XCTAssertEqual(text, "Ferry")
+    }
+
     @MainActor func testBlurSoftensAHighContrastEdge() async throws {
         let view = Color.white.overlay { Color.black.frame(width: 30, height: 30) }
             .frame(width: 80, height: 60).blur(radius: 4)

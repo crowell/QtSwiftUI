@@ -14,6 +14,39 @@ public struct Animation: Equatable, Sendable {
         return copy
     }
     private var oscillator: DampedSpring?
+    fileprivate var persistent: PersistentSpring?
+
+    @_disfavoredOverload
+    public static func spring(response: Double = 0.5, dampingFraction: Double = 0.825,
+                              blendDuration: TimeInterval = 0) -> Self {
+        let spring = PersistentSpring(response: max(0, response), damping: max(0, dampingFraction), blend: max(0, blendDuration))
+        return Self(x1: 0, y1: 0, x2: 1, y2: 1, duration: spring.duration, persistent: spring)
+    }
+    public static func spring(duration: TimeInterval = 0.5, bounce: Double = 0, blendDuration: Double = 0) -> Self {
+        .spring(response: duration, dampingFraction: dampingRatio(bounce), blendDuration: blendDuration)
+    }
+    public static var spring: Self { .spring() }
+
+    @_disfavoredOverload
+    public static func interactiveSpring(response: Double = 0.15, dampingFraction: Double = 0.86,
+                                         blendDuration: TimeInterval = 0.25) -> Self {
+        .spring(response: response, dampingFraction: dampingFraction, blendDuration: blendDuration)
+    }
+    public static func interactiveSpring(duration: TimeInterval = 0.15, extraBounce: Double = 0, blendDuration: TimeInterval = 0.25) -> Self {
+        .spring(duration: duration, bounce: 0.15 + extraBounce, blendDuration: blendDuration)
+    }
+    public static var interactiveSpring: Self { .interactiveSpring() }
+    public static func smooth(duration: TimeInterval = 0.5, extraBounce: Double = 0) -> Self { .spring(duration: duration, bounce: extraBounce) }
+    public static func snappy(duration: TimeInterval = 0.5, extraBounce: Double = 0) -> Self { .spring(duration: duration, bounce: 0.15 + extraBounce) }
+    public static func bouncy(duration: TimeInterval = 0.5, extraBounce: Double = 0) -> Self { .spring(duration: duration, bounce: 0.3 + extraBounce) }
+    public static var smooth: Self { .smooth() }
+    public static var snappy: Self { .snappy() }
+    public static var bouncy: Self { .bouncy() }
+
+    private static func dampingRatio(_ bounce: Double) -> Double {
+        if bounce <= -1 { return .infinity }
+        return bounce < 0 ? 1 / (1 + bounce) : max(0, 1 - bounce)
+    }
 
     public static func interpolatingSpring(mass: Double = 1, stiffness: Double, damping: Double, initialVelocity: Double = 0) -> Self {
         let spring = DampedSpring(mass: mass, stiffness: stiffness, damping: damping, initialVelocity: initialVelocity)
@@ -46,13 +79,19 @@ public struct Animation: Equatable, Sendable {
     public static func easeOut(duration: TimeInterval) -> Self { .timingCurve(0, 0, 0.58, 1, duration: duration) }
     public static func easeInOut(duration: TimeInterval) -> Self { .timingCurve(0.42, 0, 0.58, 1, duration: duration) }
 
-    func fraction(at time: TimeInterval) -> Double {
+    fileprivate func elapsed(at time: TimeInterval) -> TimeInterval {
         var elapsed = time
         for delay in delays.reversed() {
             if elapsed < delay { return 0 }
             elapsed -= delay
         }
+        return max(0, elapsed)
+    }
+
+    func fraction(at time: TimeInterval) -> Double {
+        let elapsed = elapsed(at: time)
         guard duration > 0 && elapsed < duration else { return 1 }
+        if let persistent { return 1 - persistent.motion(offset: 1.0, velocity: 0, from: nil, at: elapsed).offset }
         if let oscillator { return oscillator.fraction(at: max(0, elapsed)) }
         let x = max(0, elapsed / duration)
         if x1 == y1 && x2 == y2 { return x }
@@ -84,24 +123,85 @@ private struct DampedSpring: Equatable, Sendable {
         return rate > 0 ? (12 + log1p(abs(initialVelocity) / sqrt(frequencySquared))) / rate : .infinity
     }
     func fraction(at t: TimeInterval) -> Double {
+        1 + advance(offset: -1.0, velocity: initialVelocity, time: t).offset
+    }
+
+    // The two fundamental solutions multiply the initial displacement and velocity.
+    func advance<V: VectorArithmetic>(offset: V, velocity: V, time t: TimeInterval) -> (offset: V, velocity: V) {
+        guard t > 0 else { return (offset, velocity) }
+        guard decay.isFinite else { return (offset, .zero) }
         let discriminant = frequencySquared - decay * decay
+        let a, b: Double
         if abs(discriminant) <= 1e-10 * frequencySquared {
-            return 1 - exp(-decay * t) * (1 + (decay - initialVelocity) * t)
+            let envelope = exp(-decay * t)
+            b = envelope * t
+            a = envelope + decay * b
+        } else if discriminant > 0 {
+            let frequency = sqrt(discriminant), envelope = exp(-decay * t)
+            b = envelope * sin(frequency * t) / frequency
+            a = envelope * cos(frequency * t) + decay * b
+        } else {
+            let root = sqrt(-discriminant)
+            let slow = -frequencySquared / (decay + root), fast = -decay - root
+            let slowMode = exp(slow * t), fastMode = exp(fast * t)
+            b = (slowMode - fastMode) / (slow - fast)
+            a = slowMode - slow * b
         }
-        if discriminant > 0 {
-            let frequency = sqrt(discriminant)
-            return 1 - exp(-decay * t) * (cos(frequency * t) + (decay - initialVelocity) * sin(frequency * t) / frequency)
+        return (offset.scaled(by: a) + velocity.scaled(by: b),
+                offset.scaled(by: -frequencySquared * b) + velocity.scaled(by: a - 2 * decay * b))
+    }
+}
+
+private struct PersistentSpring: Equatable, Sendable {
+    let response, damping, blend: Double
+
+    private func oscillator(response: Double) -> DampedSpring {
+        let frequency = 2 * Double.pi / max(0.000001, response)
+        return DampedSpring(mass: 1, stiffness: frequency * frequency, damping: 2 * damping * frequency, initialVelocity: 0)
+    }
+    var duration: Double { response == 0 ? 0 : oscillator(response: response).duration }
+
+    func response(from previous: Double?, at time: Double) -> Double {
+        guard let previous, blend > 0, time < blend else { return response }
+        return previous + (response - previous) * time / blend
+    }
+
+    func motion<V: VectorArithmetic>(offset: V, velocity: V, from previous: Double?, at time: Double) -> (offset: V, velocity: V) {
+        guard response > 0 else { return (.zero, .zero) }
+        var state = (offset: offset, velocity: velocity)
+        var elapsed = 0.0
+        if let previous, blend > 0 {
+            // Integrate the changing response in fixed intervals. Outside the blend
+            // interval the harmonic oscillator has an exact closed-form solution.
+            let end = min(time, blend), step = max(1 / 240.0, blend / 120)
+            while elapsed < end {
+                let next = min(end, elapsed + step)
+                let period = response(from: previous, at: (elapsed + next) / 2)
+                state = oscillator(response: period).advance(offset: state.offset, velocity: state.velocity, time: next - elapsed)
+                elapsed = next
+            }
         }
-        let root = sqrt(-discriminant)
-        let slow = -frequencySquared / (decay + root), fast = -decay - root
-        let weight = (-initialVelocity - fast) / (slow - fast)
-        return 1 - weight * exp(slow * t) - (1 - weight) * exp(fast * t)
+        return oscillator(response: response).advance(offset: state.offset, velocity: state.velocity, time: time - elapsed)
     }
 }
 
 final class AnimatedValue<Value: VectorArithmetic> {
     private struct Movement {
         let delta: Value, start: TimeInterval, animation: Animation
+        let initialVelocity: Value
+        let previousResponse: Double?
+
+        func motion(at time: TimeInterval) -> (offset: Value, velocity: Value) {
+            let age = time - start
+            if let spring = animation.persistent {
+                return spring.motion(offset: .zero - delta, velocity: initialVelocity,
+                                     from: previousResponse, at: animation.elapsed(at: age))
+            }
+            return (delta.scaled(by: animation.fraction(at: age) - 1), .zero)
+        }
+        var duration: TimeInterval {
+            animation.totalDuration + (previousResponse == nil ? 0 : animation.persistent?.blend ?? 0)
+        }
     }
     private(set) var target: Value
     private var movements: [Movement] = []
@@ -113,15 +213,23 @@ final class AnimatedValue<Value: VectorArithmetic> {
         let displayed = sample(at: time)
         let additive = animation?.addsToPreviousSpring == true && movements.last?.animation.addsToPreviousSpring == true
         let delta = value - (additive ? target : displayed)
+        var velocity = Value.zero
+        var previousResponse: Double?
+        if let spring = animation?.persistent, let last = movements.last, let previous = last.animation.persistent {
+            velocity = last.motion(at: time).velocity
+            let response = previous.response(from: last.previousResponse, at: last.animation.elapsed(at: time - last.start))
+            if spring.blend > 0 && response != spring.response { previousResponse = response }
+        }
         if !additive { movements.removeAll() }
-        if let animation { movements.append(Movement(delta: delta, start: time, animation: animation)) }
+        if let animation {
+            movements.append(Movement(delta: delta, start: time, animation: animation,
+                                      initialVelocity: velocity, previousResponse: previousResponse))
+        }
         target = value
     }
     func sample(at time: TimeInterval) -> Value {
-        movements.removeAll { time - $0.start >= $0.animation.totalDuration }
-        return movements.reduce(target) { current, movement in
-            current + movement.delta.scaled(by: movement.animation.fraction(at: time - movement.start) - 1)
-        }
+        movements.removeAll { time - $0.start >= $0.duration }
+        return movements.reduce(target) { $0 + $1.motion(at: time).offset }
     }
 }
 

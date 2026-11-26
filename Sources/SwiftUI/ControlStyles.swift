@@ -29,6 +29,16 @@ public struct PlainTextFieldStyle: TextFieldStyle {
     }
 }
 
+public struct RoundedBorderTextFieldStyle: TextFieldStyle {
+    public init() {}
+    public func _body(configuration: TextField<_Label>) -> some View {
+        Transform(content: configuration) { view, ctx in view.resolve(ctx.with(\.roundedField, true)) }
+    }
+}
+extension TextFieldStyle where Self == RoundedBorderTextFieldStyle {
+    public static var roundedBorder: Self { Self() }
+}
+
 public struct DefaultTextFieldStyle: TextFieldStyle {
     public init() {}
     public func _body(configuration: TextField<_Label>) -> some View { configuration }

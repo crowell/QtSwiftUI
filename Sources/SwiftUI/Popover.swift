@@ -14,6 +14,10 @@ public enum PopoverAttachmentAnchor {
     }
 }
 
+@MainActor final class PresentationInteraction {
+    var dismissalDisabled = false
+}
+
 private protocol PopoverSelection {
     associatedtype Item: Identifiable
     @MainActor var item: Item? { get }
@@ -44,6 +48,8 @@ private nonisolated struct PopoverView<Source: View, Selection: PopoverSelection
         var inner = context.descending(.property("popover"))
         let dismiss: @MainActor () -> Void = { if selection.item?.id == item.id { selection.dismiss() } }
         let popup = inner.widget(QSPopover, action: { _ in dismiss() })
+        let interaction = PresentationInteraction()
+        inner.presentation = interaction
         inner.parent = popup
         inner.verticalViewport = nil
         inner.scrollTargets = nil
@@ -53,6 +59,7 @@ private nonisolated struct PopoverView<Source: View, Selection: PopoverSelection
         inner.environment.isPresented = true
         let panel = stacked(content(item).resolve(inner.descending(.id(AnyHashable(item.id)))),
                             axis: .vertical, alignment: .center, spacing: 8, direction: inner.environment.layoutDirection)
+        qs_popover_dismiss_disabled(popup, interaction.dismissalDisabled ? 1 : 0)
         let direction = context.environment.layoutDirection
         let side: QSPopoverEdge
         switch edge ?? .top {
@@ -76,6 +83,13 @@ private nonisolated struct PopoverView<Source: View, Selection: PopoverSelection
 }
 
 extension View {
+    nonisolated public func interactiveDismissDisabled(_ isDisabled: Bool = true) -> some View {
+        Transform(content: self) { view, context in
+            if isDisabled { context.presentation?.dismissalDisabled = true }
+            return view.resolve(context)
+        }
+    }
+
     nonisolated public func popover<Content: View>(isPresented: Binding<Bool>, attachmentAnchor: PopoverAttachmentAnchor = .rect(.bounds),
                                                    arrowEdge: Edge? = nil, @ContentBuilder content: @escaping () -> Content) -> some View {
         PopoverView(source: self, selection: BooleanSelection(binding: isPresented), attachment: attachmentAnchor,

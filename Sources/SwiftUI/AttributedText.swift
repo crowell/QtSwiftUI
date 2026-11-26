@@ -58,7 +58,7 @@ extension Text {
             let strike = resolved(strikethroughOverride ?? environment.textStrikethrough, run.strikethroughStyle)
             value.withCString { bytes in
                 append(target, bytes, value.utf8.count, run.link?.absoluteString ?? "",
-                                     (run.foregroundColor ?? foregroundOverride)?.hex(environment.colorScheme) ?? "",
+                                     run.foregroundColor?.hex(environment.colorScheme) ?? "",
                                      run.backgroundColor?.hex(environment.colorScheme) ?? "",
                                      font?.qtFamily ?? "", Double(font?.size ?? 0), font?.qtWeight ?? 400, font?.slanted == true ? 1 : 0,
                                      underline?.pattern.qt ?? 0, underline?.color?.hex(environment.colorScheme) ?? "",

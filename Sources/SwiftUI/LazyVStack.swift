@@ -25,10 +25,10 @@ private struct LazyRow {
     return [row]
 }
 extension Group: LazyRowSource {
-    fileprivate func rows(at path: [Part]) -> [LazyRow] { SwiftUI.rows(content, at: path) }
+    @MainActor fileprivate func rows(at path: [Part]) -> [LazyRow] { SwiftUI.rows(content, at: path) }
 }
 extension TupleView: LazyRowSource {
-    fileprivate func rows(at path: [Part]) -> [LazyRow] {
+    @MainActor fileprivate func rows(at path: [Part]) -> [LazyRow] {
         Mirror(reflecting: value).children.enumerated().flatMap { index, child -> [LazyRow] in
             guard let child = child.value as? any View else { return [] }
             return SwiftUI.rows(child, at: path + [.position(index)])
@@ -42,7 +42,7 @@ extension Optional: LazyRowSource where Wrapped: View {
     fileprivate func rows(at path: [Part]) -> [LazyRow] { map { SwiftUI.rows($0, at: path) } ?? [] }
 }
 extension _ConditionalContent: LazyRowSource where TrueContent: View, FalseContent: View {
-    fileprivate func rows(at path: [Part]) -> [LazyRow] {
+    @MainActor fileprivate func rows(at path: [Part]) -> [LazyRow] {
         switch storage {
         case .first(let view): SwiftUI.rows(view, at: path + [.position(0)])
         case .second(let view): SwiftUI.rows(view, at: path + [.position(1)])

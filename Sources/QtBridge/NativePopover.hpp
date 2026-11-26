@@ -11,6 +11,7 @@ public:
     void disconnectDismissal() { dismissed = {}; }
 
 protected:
+    void closeEvent(QCloseEvent *) override;
     void hideEvent(QHideEvent *) override;
     void keyPressEvent(QKeyEvent *) override;
     void mousePressEvent(QMouseEvent *) override;

@@ -58,7 +58,7 @@ extension Optional: Commands, CommandContent where Wrapped: Commands {
 
 extension _ConditionalContent: Commands, CommandContent where TrueContent: Commands, FalseContent: Commands {
     public var body: Never { fatalError("Conditional commands are rendered directly") }
-    fileprivate func collect(in context: Context, into menus: MenuEntries) {
+    @MainActor fileprivate func collect(in context: Context, into menus: MenuEntries) {
         switch storage {
         case .first(let content): content.resolve(in: context.descending(.position(0)), into: menus)
         case .second(let content): content.resolve(in: context.descending(.position(1)), into: menus)

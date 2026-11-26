@@ -72,6 +72,13 @@ QRect NativePopover::present(const QRectF &anchor, QSizeF content, QSPopoverEdge
     return rect().adjusted(margin, margin, -margin, -margin);
 }
 
+void qs_popover_dismiss_disabled(QSWidget popup, int disabled) {
+    static_cast<NativePopover *>(popup)->setProperty("qsDismissDisabled", bool(disabled));
+}
+void NativePopover::closeEvent(QCloseEvent *event) {
+    if (property("qsDismissDisabled").toBool()) event->ignore();
+    else QWidget::closeEvent(event);
+}
 void NativePopover::hideEvent(QHideEvent *event) {
     QWidget::hideEvent(event);
     if (dismissed) dismissed();

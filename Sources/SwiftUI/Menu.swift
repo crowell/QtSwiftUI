@@ -7,6 +7,7 @@ import QtBridge
 @MainActor final class MenuEntries {
     struct Entry {
         var title = ""
+        var systemImage: String?
         var enabled = true
         var shortcut: KeyboardShortcut?
         var checked: Bool?
@@ -48,6 +49,7 @@ import QtBridge
             let submenu = qs_menu_item(menu, Int32(index), row.title, row.enabled ? 1 : 0,
                                        row.checked.map { $0 ? 1 : 0 } ?? -1, row.separator ? 1 : 0,
                                        row.children == nil ? 0 : 1, Int32(id))
+            qs_menu_symbol(menu, Int32(index), row.systemImage ?? "")
             qs_menu_shortcut(menu, Int32(index), row.shortcut.map { String($0.key.character) } ?? "",
                              Int32(row.shortcut?.modifiers.rawValue ?? 0), row.shortcut?.localization.value == 0 ? 1 : 0)
             if let submenu, let children = row.children { children.install(on: submenu, actions: &actions) }
@@ -76,7 +78,11 @@ import QtBridge
 
 extension Button: MenuEntrySource {
     func collect(in context: Context, into entries: MenuEntries) {
-        entries.rows.append(.init(title: MenuEntries.title(label, in: context), enabled: context.environment.isEnabled, shortcut: context.environment.keyboardShortcut, action: action))
+        let symbolLabel = label as? SwiftUI.Label<Text, Image>
+        let title = symbolLabel?.title.string ?? MenuEntries.title(label, in: context)
+        entries.rows.append(.init(title: context.environment.label.isEmpty ? title : context.environment.label,
+                                  systemImage: symbolLabel?.icon.systemName, enabled: context.environment.isEnabled,
+                                  shortcut: context.environment.keyboardShortcut, action: action))
     }
 }
 extension Toggle: MenuEntrySource {

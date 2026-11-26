@@ -34,44 +34,44 @@ public typealias ContentBuilder = ViewBuilder
 
 @resultBuilder public enum ViewBuilder {
     public static func buildExpression<V: View>(_ v: V) -> V { v }
-    @MainActor public static func buildBlock() -> EmptyView { EmptyView() }
+    public static func buildBlock() -> EmptyView { EmptyView() }
     public static func buildBlock<V: View>(_ v: V) -> V { v }
-    @MainActor public static func buildBlock<each V: View>(_ v: repeat each V) -> TupleView<(repeat each V)> {
+    public static func buildBlock<each V: View>(_ v: repeat each V) -> TupleView<(repeat each V)> {
         TupleView((repeat each v))
     }
     public static func buildIf<V: View>(_ v: V?) -> V? { v }
-    @MainActor public static func buildEither<T: View, F: View>(first: T) -> _ConditionalContent<T, F> { .init(first: first) }
-    @MainActor public static func buildEither<T: View, F: View>(second: F) -> _ConditionalContent<T, F> { .init(second: second) }
-    @MainActor public static func buildLimitedAvailability<V: View>(_ v: V) -> AnyView { AnyView(v) }
+    public static func buildEither<T: View, F: View>(first: T) -> _ConditionalContent<T, F> { .init(first: first) }
+    public static func buildEither<T: View, F: View>(second: F) -> _ConditionalContent<T, F> { .init(second: second) }
+    public static func buildLimitedAvailability<V: View>(_ v: V) -> AnyView { AnyView(v) }
 }
 
 public struct EmptyView: Primitive {
     public nonisolated init() {}
     func elements(in context: Context) -> [Element] { [] }
 }
-public struct TupleView<T>: Primitive {
+public nonisolated struct TupleView<T>: Primitive {
     public var value: T
     public init(_ value: T) { self.value = value }
-    func elements(in context: Context) -> [Element] {
+    @MainActor func elements(in context: Context) -> [Element] {
         Mirror(reflecting: value).children.enumerated().flatMap { index, child in
             (child.value as? any View)?.resolve(context.descending(.position(index)).preferenceBranch()) ?? []
         }
     }
 }
-public struct _ConditionalContent<TrueContent, FalseContent> {
+public nonisolated struct _ConditionalContent<TrueContent, FalseContent> {
     enum Storage { case first(TrueContent), second(FalseContent) }
     let storage: Storage
     init(first: TrueContent) { storage = .first(first) }
     init(second: FalseContent) { storage = .second(second) }
 }
 extension _ConditionalContent: View, Primitive, SubviewSource where TrueContent: View, FalseContent: View {
-    func subviews(in context: Context) -> [Subview] {
+    @MainActor func subviews(in context: Context) -> [Subview] {
         switch storage {
         case .first(let view): view.collectSubviews(in: context.descending(.position(0)))
         case .second(let view): view.collectSubviews(in: context.descending(.position(1)))
         }
     }
-    func elements(in context: Context) -> [Element] {
+    @MainActor func elements(in context: Context) -> [Element] {
         switch storage {
         case .first(let view): view.resolve(context.descending(.position(0)))
         case .second(let view): view.resolve(context.descending(.position(1)))
@@ -87,10 +87,10 @@ public nonisolated struct AnyView: Primitive, SubviewSource {
     public init<V: View>(_ view: V) { content = view }
     @MainActor func elements(in context: Context) -> [Element] { content.resolve(context) }
 }
-public struct Group<Content: View>: Primitive {
+public nonisolated struct Group<Content: View>: Primitive {
     let content: Content
     public init(@ViewBuilder content: () -> Content) { self.content = content() }
-    func elements(in context: Context) -> [Element] { content.resolve(context) }
+    @MainActor func elements(in context: Context) -> [Element] { content.resolve(context) }
 }
 public struct ForEach<Data: RandomAccessCollection, ID: Hashable, Content: View>: Primitive {
     public var data: Data

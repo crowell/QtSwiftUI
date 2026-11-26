@@ -32,7 +32,7 @@ enum ResolvedPaint: Sendable {
         }
     }
 }
-public struct Color: ShapeStyle, Primitive, Hashable, Sendable {
+public nonisolated struct Color: ShapeStyle, Primitive, Hashable, Sendable {
     private let light: UInt32, dark: UInt32
     private nonisolated init(rgb: UInt32, dark: UInt32? = nil) {
         self.light = 0xff000000 | rgb; self.dark = 0xff000000 | (dark ?? rgb)
@@ -86,7 +86,7 @@ public struct Color: ShapeStyle, Primitive, Hashable, Sendable {
     public nonisolated static let teal = Color(rgb: 0x30b0c7), cyan = Color(rgb: 0x32ade6), blue = Color(rgb: 0x007aff)
     public nonisolated static let indigo = Color(rgb: 0x5856d6), purple = Color(rgb: 0xaf52de), pink = Color(rgb: 0xff2d55)
     public nonisolated static let brown = Color(rgb: 0xa2845e), accentColor = blue
-    func elements(in context: Context) -> [Element] {
+    @MainActor func elements(in context: Context) -> [Element] {
         let widget = context.widget(QSSurface)
         qs_surface(widget, hex(context.environment.colorScheme), 0)
         return [Element { $0.replacingUnspecifiedDimensions() } place: { rect, _ in

@@ -11,6 +11,7 @@ enum Part: Hashable {
     var path: [Part] = []
     var parent: UnsafeMutableRawPointer?
     var verticalViewport: UnsafeMutableRawPointer?
+    var presentation: PresentationInteraction?
     var registerScrollArea: [(ScrollAreaTargets) -> Void] = []
     var scrollTargets: ScrollAreaTargets?
     var isScrollTargetLayout = false
@@ -115,7 +116,8 @@ enum Part: Hashable {
             if kind == QSGroup { qs_direct_touch(entry.widget, traits.contains(.allowsDirectInteraction) ? 1 : 0) }
             qs_accessible_control(entry.widget, traits.contains(.isSelected) ? 1 : 0,
                                   traits.contains(.isButton) ? 1 : 0, traits.contains(.isToggle) ? 1 : 0,
-                                  traits.contains(.isLink) || (kind == QSLink && !environment.removedAccessibilityTraits.contains(.isLink)) ? 1 : 0)
+                                  traits.contains(.isLink) || (kind == QSLink && !environment.removedAccessibilityTraits.contains(.isLink)) ? 1 : 0,
+                                  traits.contains(.startsMediaSession) ? 1 : 0)
         }
         qs_help(entry.widget, environment.helpText)
         qs_focus_effect(entry.widget, environment.isFocusEffectEnabled ? 1 : 0)
@@ -202,8 +204,19 @@ enum Part: Hashable {
             MainActor.assumeIsolated { Unmanaged<Host>.fromOpaque(pointer!).takeUnretainedValue().drags[id]?(sample) }
         }
     }
+    private var didClose: (() -> Void)?
+    func observeClose(_ callback: @escaping () -> Void) {
+        didClose = callback
+        qs_observe_close(window) { pointer in
+            guard let pointer else { return }
+            let host = Unmanaged<Host>.fromOpaque(pointer).takeUnretainedValue()
+            Task { @MainActor in host.didClose?() }
+        }
+    }
+
     func open(width: Int, height: Int) { qs_open(window, Int32(width), Int32(height)) }
     func close() {
+        didClose = nil
         if let window { qs_close(window); self.window = nil }
         for stop in disappear.values { stop() }
         disappear.removeAll()
@@ -263,12 +276,20 @@ enum Part: Hashable {
 
     private func layout(proposal: ProposedViewSize, viewport: CGSize?, scale: CGFloat) -> CGSize {
         var context = Context(host: self)
+        context.environment.colorScheme = qs_dark_appearance() != 0 ? .dark : .light
         context.transaction = pendingTransaction ?? Transaction()
         pendingTransaction = nil
         switch qs_scene_phase(window) {
         case 2: context.environment.scenePhase = .active
         case 1: context.environment.scenePhase = .inactive
         default: context.environment.scenePhase = .background
+        }
+        if viewport != nil {
+            switch qs_control_active_state(window) {
+            case 2: context.environment.controlActiveState = .key
+            case 1: context.environment.controlActiveState = .active
+            default: context.environment.controlActiveState = .inactive
+            }
         }
         context.environment.isPresented = viewport != nil
         context.environment.displayScale = scale

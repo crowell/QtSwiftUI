@@ -3,6 +3,7 @@ public protocol EnvironmentKey {
     static var defaultValue: Value { get }
 }
 public enum ScenePhase: Comparable, Hashable, Sendable { case background, inactive, active }
+public enum ControlActiveState: Hashable, CaseIterable, Sendable { case key, active, inactive }
 public enum ColorScheme: Sendable, Hashable { case light, dark }
 public enum LayoutDirection: Hashable, CaseIterable, Sendable {
     case leftToRight, rightToLeft
@@ -30,6 +31,11 @@ public struct EnvironmentValues {
     }
     public var backgroundMaterial: Material?
     public var scenePhase: ScenePhase = .background
+    public var controlActiveState: ControlActiveState = .key
+    public var appearsActive: Bool {
+        get { controlActiveState != .inactive }
+        set { controlActiveState = newValue ? .key : .inactive }
+    }
     public var colorScheme: ColorScheme = .light
     public var layoutDirection: LayoutDirection = Locale.current.language.characterDirection == .rightToLeft ? .rightToLeft : .leftToRight
     public var isEnabled = true
@@ -39,6 +45,8 @@ public struct EnvironmentValues {
     var menuStyle: (@MainActor (MenuStyleConfiguration) -> AnyView)?
     var fileDialogDirectory: URL?
     var plainField = false
+    var roundedField = false
+    var toggleStyle: (@MainActor (ToggleStyleConfiguration) -> AnyView)?
     var fieldStyle: (@MainActor (TextField<_TextFieldStyleLabel>) -> AnyView)?
     var allowsHits = true
     var keyPressHandlers: [KeyPressHandler] = []

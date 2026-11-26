@@ -7,6 +7,13 @@ extension Context {
         let leading: Int32 = environment.layoutDirection == .rightToLeft ? 1 : -1
         qs_style(widget, font.qtFamily, font.size, font.qtWeight, font.slanted ? 1 : 0, environment.tracking, environment.foreground.hex(environment.colorScheme),
                  alignment == .leading ? leading : alignment == .center ? 0 : -leading, environment.lineLimit == 1 ? 0 : 1)
+        if case .linear(let gradient) = environment.foregroundPaint {
+            gradient.gradient.stops(for: environment.colorScheme).withUnsafeBufferPointer { stops in
+                let start = gradient.startPoint, end = gradient.endPoint
+                qs_text_gradient(widget, leading > 0 ? 1 - start.x : start.x, start.y,
+                                 leading > 0 ? 1 - end.x : end.x, end.y, stops.baseAddress, stops.count)
+            }
+        }
     }
     func control(_ widget: UnsafeMutableRawPointer, expands: Bool = false) -> Element {
         let scale = environment.controlSize.qtScale
@@ -29,7 +36,7 @@ public nonisolated struct Text: Primitive {
         string = String(attributedContent.characters)
         attributed = attributedContent
     }
-    private(set) var foregroundOverride: Color?
+    private(set) var foregroundOverride: AnyShapeStyle?
     private var attributes: [(inout EnvironmentValues) -> Void] = []
     public nonisolated init<S: StringProtocol>(_ content: S) { string = String(content) }
     public nonisolated init(verbatim content: String) { string = content }
@@ -40,7 +47,12 @@ public nonisolated struct Text: Primitive {
     public func italic(_ active: Bool = true) -> Text { modified { if active { $0.font = ($0.font ?? .body).italic() } } }
     public func foregroundColor(_ color: Color?) -> Text {
         var copy = self
-        copy.foregroundOverride = color
+        copy.foregroundOverride = color.map(AnyShapeStyle.init)
+        return copy
+    }
+    public func foregroundStyle<S: ShapeStyle>(_ style: S) -> Text {
+        var copy = self
+        copy.foregroundOverride = AnyShapeStyle(style)
         return copy
     }
     private func modified(_ change: @escaping (inout EnvironmentValues) -> Void) -> Self {
@@ -49,7 +61,7 @@ public nonisolated struct Text: Primitive {
     func styledEnvironment(_ environment: EnvironmentValues) -> EnvironmentValues {
         var result = environment
         for attribute in attributes { attribute(&result) }
-        if let foregroundOverride { result.foreground = foregroundOverride }
+        if let foregroundOverride { result.foregroundPaint = foregroundOverride.resolvedPaint(in: result) }
         return result
     }
     @MainActor func styled(_ context: Context) -> Context {
@@ -163,25 +175,29 @@ public struct Toggle<Label: View>: Primitive {
         self.init(isOn: isOn) { Text(title) }
     }
     func elements(in context: Context) -> [Element] {
+        if let style = context.environment.toggleStyle {
+            let configuration = ToggleStyleConfiguration(label: .init(content: AnyView(label), plainText: label as? Text), isOn: isOn)
+            return style(configuration).resolve(context.with(\.toggleStyle, nil))
+        }
         let widget = context.widget(QSToggle, action: { isOn.wrappedValue = $0 == "1" })
         context.installShortcut(on: widget)
         qs_checked(widget, isOn.wrappedValue ? 1 : 0)
-        if let text = label as? Text, text.attributed == nil {
+        if let text = (label as? Text) ?? (label as? ToggleStyleConfiguration.Label)?.plainText, text.attributed == nil {
             qs_text(widget, text.string)
             return [text.styled(context).control(widget)]
         }
         return [stacked([context.control(widget)] + label.resolve(context.descending(.position(0))), axis: .horizontal, alignment: .center, spacing: 4, direction: context.environment.layoutDirection)]
     }
 }
-@MainActor private func field(_ title: String, text: Binding<String>, secure: Bool, selection: EditorSelection?, in context: Context) -> Element {
+@MainActor private func field(_ title: String, promptColor: String, text: Binding<String>, secure: Bool, selection: EditorSelection?, in context: Context) -> Element {
     let widget = context.widget(secure ? QSSecureEdit : QSEdit, cursorChanged: { selection?.changed($0) },
                                 action: { text.wrappedValue = $0 })
     qs_text(widget, text.wrappedValue)
     selection?.apply(to: widget)
-    qs_hint(widget, title)
     qs_autocorrection(widget, context.environment.autocorrectionDisabled ? 1 : 0)
     let control = context.control(widget, expands: true)
-    qs_field_style(widget, context.environment.plainField ? 1 : 0)
+    qs_hint(widget, title, promptColor)
+    qs_field_style(widget, context.environment.roundedField ? 2 : context.environment.plainField ? 1 : 0)
     return control
 }
 public nonisolated struct TextField<Label: View>: Primitive {
@@ -226,12 +242,13 @@ public nonisolated struct TextField<Label: View>: Primitive {
         var context = context
         if context.environment.label.isEmpty { context.environment.label = title }
         let placeholder = prompt?.string ?? title
+        let promptColor = prompt?.foregroundOverride?.resolvedPaint(in: context.environment).representativeColor.hex(context.environment.colorScheme) ?? ""
         let cursor = selection.map { EditorSelection(binding: $0, text: text, affinity: context.environment.selectionAffinity) }
-        guard axis == .vertical else { return [field(placeholder, text: text, secure: secure, selection: cursor, in: context)] }
+        guard axis == .vertical else { return [field(placeholder, promptColor: promptColor, text: text, secure: secure, selection: cursor, in: context)] }
         let widget = boundEditor(QSMultilineField, text: text, selection: cursor, in: context)
-        qs_hint(widget, placeholder)
         context.style(widget)
-        qs_field_style(widget, context.environment.plainField ? 1 : 0)
+        qs_hint(widget, placeholder, promptColor)
+        qs_field_style(widget, context.environment.roundedField ? 2 : context.environment.plainField ? 1 : 0)
         let minimum = Int32(clamping: context.environment.minimumLines)
         let maximum = Int32(clamping: context.environment.lineLimit.map { max(1, $0) } ?? 0)
         return [Element { proposal in

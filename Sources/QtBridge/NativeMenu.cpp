@@ -1,5 +1,6 @@
 #include "QtBridge.h"
 #include "NativeMenu.hpp"
+#include "SymbolIcons.hpp"
 #include "WindowShortcuts.hpp"
 #include <QKeyEvent>
 #include <QVariant>
@@ -58,6 +59,14 @@ QSWidget qs_menu_item(QSWidget handle, int index, const char *title, int enabled
     if (checked >= 0) item->setChecked(checked != 0);
     item->setData(action);
     return item->menu();
+}
+
+void qs_menu_symbol(QSWidget handle, int index, const char *name) {
+    auto *menu = static_cast<QWidget *>(handle);
+    if (auto *item = menu->actions().value(index)) {
+        const auto icon = systemSymbol(QString::fromUtf8(name), 16, menu->palette().color(QPalette::WindowText));
+        if (!icon.isNull() || !item->icon().isNull()) item->setIcon(icon);
+    }
 }
 
 void qs_menu_shortcut(QSWidget handle, int index, const char *key, int modifiers, int mirror) {

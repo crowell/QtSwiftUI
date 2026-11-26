@@ -3,6 +3,32 @@ import XCTest
 @testable import SwiftUI
 
 final class TransferTests: XCTestCase {
+    @MainActor func testURLDropPreservesURIListOrderAndLocation() async {
+        var payload = "# screen capture\r\nfile:///tmp/Blue%20sky.png\r\nhttps://example.org/ferry\r\n"
+        var points: [CGPoint] = [], targeting: [Bool] = [], received: [URL] = []
+        let host = Host(title: "URL drop") { context in
+            HStack(spacing: 0) {
+                Color.blue.onDrag { NSItemProvider(item: payload as NSString, typeIdentifier: UTType.url.identifier) }
+                Color.green.dropDestination(for: URL.self) { urls, point in
+                    points.append(point)
+                    received = urls
+                    return urls.count == 2
+                } isTargeted: { targeting.append($0) }
+            }.resolve(context)
+        }
+        defer { host.close() }
+        host.open(width: 120, height: 40)
+        XCTAssertEqual(qs_transfer_between(host.window, 10, 10, 72, 13), 1)
+        XCTAssertEqual(points, [CGPoint(x: 12, y: 13)])
+        XCTAssertEqual(targeting, [true, false])
+        XCTAssertEqual(received.map(\.absoluteString), ["file:///tmp/Blue%20sky.png", "https://example.org/ferry"])
+        payload = "file:///tmp/One.png"
+        XCTAssertEqual(qs_transfer_between(host.window, 10, 10, 72, 13), 0)
+        payload = "# no URLs\r\nrelative/path"
+        XCTAssertEqual(qs_transfer_between(host.window, 10, 10, 72, 13), 0)
+        XCTAssertEqual(points.count, 2)
+    }
+
     @MainActor func testTypedDropUsesNativeMimeDataAndLocalCoordinates() async {
         var produced = 0, points: [CGPoint] = [], targeting: [Bool] = [], accepts = true
         let targeted = Binding(get: { targeting.last ?? false }, set: { targeting.append($0) })

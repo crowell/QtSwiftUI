@@ -28,6 +28,30 @@ final class TransactionTests: XCTestCase {
         XCTAssertNotEqual(Animation.default, Animation.interpolatingSpring(duration: 0.55))
     }
 
+    func testRaisedHandSpringMatchesNativeDisplacement() {
+        for (time, expected) in [(0.0, 0.0), (0.1, 0.5825511416790141), (0.25, 1.4908280513219978), (0.5, 0.7606473716164275)] {
+            #if os(Linux)
+            let value = Animation.spring(response: 0.5, dampingFraction: 0.22).fraction(at: time)
+            #else
+            let value = Spring(response: 0.5, dampingRatio: 0.22).value(target: 1.0, initialVelocity: 0.0, time: time)
+            #endif
+            XCTAssertEqual(value, expected, accuracy: 1e-8)
+        }
+        XCTAssertEqual(Animation.snappy, .spring(duration: 0.5, bounce: 0.15))
+        XCTAssertEqual(Animation.interactiveSpring, .spring(duration: 0.15, bounce: 0.15, blendDuration: 0.25))
+    }
+
+    func testControlActiveStateAndAppearanceShareEnvironmentStorage() {
+        var environment = EnvironmentValues()
+        XCTAssertEqual(environment.controlActiveState, .key)
+        environment.controlActiveState = .active
+        XCTAssertTrue(environment.appearsActive)
+        environment.appearsActive = false
+        XCTAssertEqual(environment.controlActiveState, .inactive)
+        environment.appearsActive = true
+        XCTAssertEqual(environment.controlActiveState, .key)
+    }
+
     func testSegmentedIndicatorSpringSamplesMatchTheSDK() {
         for (mass, stiffness, damping, speed, time, expected) in [
             (1.0, 422.0, 37.3, 0.3, 0.1, 0.648712950759878),

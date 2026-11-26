@@ -248,6 +248,12 @@ protected:
 };
 static void sendAccessibleEvent(GroupWidget *target, QSEventKind kind, const QString &value = {});
 static void activateAccessibleButton(QAbstractButton *button);
+static void notifyMediaAction(QWidget *widget) {
+    if (widget->property("qsStartsMedia").toBool()) {
+        QAccessibleEvent event(widget, QAccessible::SoundPlayed);
+        QAccessible::updateAccessibility(&event);
+    }
+}
 
 class AccessibleGroup final : public QAccessibleWidget {
 public:
@@ -306,6 +312,7 @@ public:
             return;
         }
         if (group->tapCount == 1 && action == QAccessibleActionInterface::pressAction()) {
+            notifyMediaAction(group);
             sendAccessibleEvent(group, QSActivate);
             return;
         }
@@ -485,8 +492,10 @@ public:
         return {pressAction()};
     }
     void doAction(const QString &action) override {
-        if (button->isEnabled() && (action == pressAction() || (role() == QAccessible::ButtonMenu && action == showMenuAction())))
+        if (button->isEnabled() && (action == pressAction() || (role() == QAccessible::ButtonMenu && action == showMenuAction()))) {
+            notifyMediaAction(button);
             activateAccessibleButton(button);
+        }
     }
     QAccessible::State state() const override {
         auto state = QAccessibleWidget::state();
@@ -652,6 +661,7 @@ struct QSWindow final : QWidget {
     void *context;
     QSRender render;
     QSEvent event;
+    void (*closed)(void *) = nullptr;
     QSDragHandler dragHandler = nullptr;
     QSKeyHandler keyHandler = nullptr;
     bool pending = false, framePending = false, snapshot = false;
@@ -899,9 +909,15 @@ struct QSWindow final : QWidget {
     }
     void resizeEvent(QResizeEvent *) override { schedule(); }
     void moveEvent(QMoveEvent *) override { schedule(); }
+    void closeEvent(QCloseEvent *event) override {
+        QWidget::closeEvent(event);
+        if (closed && event->isAccepted()) QTimer::singleShot(0, this, [this] {
+            if (!isVisible() && closed) closed(context);
+        });
+    }
     void changeEvent(QEvent *change) override {
         QWidget::changeEvent(change);
-        if (change->type() == QEvent::WindowStateChange || change->type() == QEvent::ActivationChange) schedule();
+        if (change->type() == QEvent::WindowStateChange || change->type() == QEvent::ActivationChange || change->type() == QEvent::PaletteChange) schedule();
     }
 };
 
@@ -942,6 +958,12 @@ void qs_open(QSWindow *window, int width, int height) {
     window->show();
     qs_flush();
 }
+void qs_window_raise(QSWindow *window) {
+    if (window->isMinimized()) window->showNormal(); else window->show();
+    window->raise();
+    window->activateWindow();
+}
+void qs_observe_close(QSWindow *window, void (*closed)(void *)) { window->closed = closed; }
 void qs_snapshot_window(QSWindow *window) {
     window->snapshot = true;
     window->setAttribute(Qt::WA_DontShowOnScreen);
@@ -1016,10 +1038,50 @@ int qs_run(QSWindow *window, const char *screenshot, QSPump pump) {
     }
     return application().exec();
 }
+int qs_application_active(void) {
+    return QGuiApplication::applicationState() == Qt::ApplicationActive;
+}
+int qs_dark_appearance(void) {
+    const auto palette = application().palette();
+    return palette.color(QPalette::Window).lightness() < palette.color(QPalette::WindowText).lightness();
+}
+void qs_application_appearance(int mode) {
+    auto &app = application();
+    app.setPalette(QPalette());
+    if (mode == 0 || qs_dark_appearance() == (mode == 2)) return;
+    const bool dark = mode == 2;
+    const QColor background = dark ? QColor(44, 44, 46) : QColor(245, 245, 247);
+    const QColor text = dark ? QColor(245, 245, 247) : QColor(28, 28, 30);
+    QPalette palette(background);
+    for (auto role : {QPalette::WindowText, QPalette::Text, QPalette::ButtonText, QPalette::ToolTipText})
+        palette.setColor(role, text);
+    palette.setColor(QPalette::Base, dark ? QColor(28, 28, 30) : QColor(Qt::white));
+    palette.setColor(QPalette::PlaceholderText, dark ? QColor(167, 167, 172) : QColor(100, 100, 105));
+    palette.setColor(QPalette::Highlight, QColor(50, 105, 220));
+    palette.setColor(QPalette::HighlightedText, Qt::white);
+    for (auto role : {QPalette::WindowText, QPalette::Text, QPalette::ButtonText})
+        palette.setColor(QPalette::Disabled, role, palette.color(QPalette::PlaceholderText));
+    app.setPalette(palette);
+}
+void qs_request_attention(void) {
+    for (auto *window : application().topLevelWidgets())
+        if (dynamic_cast<QSWindow *>(window) && window->isVisible()) QApplication::alert(window);
+}
 int qs_scene_phase(QSWindow *window) {
     const auto app = QGuiApplication::applicationState();
     if (!window->isVisible() || window->isMinimized() || app == Qt::ApplicationHidden || app == Qt::ApplicationSuspended) return 0;
     return app == Qt::ApplicationActive && window->isActiveWindow() ? 2 : 1;
+}
+int qs_control_active_state(QSWindow *window) {
+    if (!window->isVisible() || window->isMinimized() || QGuiApplication::applicationState() != Qt::ApplicationActive) return 0;
+    const auto *active = QApplication::activeWindow();
+    if (active == window) return 2;
+    // A transient panel can hold keyboard focus while its owning window
+    // retains the active appearance.
+    for (auto *handle = active ? active->windowHandle() : nullptr; handle; handle = handle->transientParent()) {
+        if (handle == window->windowHandle()) return 1;
+    }
+    return 0;
 }
 void qs_minimize(QSWindow *window, int minimized) {
     if (minimized) window->showMinimized();
@@ -1329,7 +1391,11 @@ void qs_control_scale(QSWidget w, double scale) {
     item->updateGeometry();
     item->update();
 }
-void qs_field_style(QSWidget w, int plain) {
+void qs_field_style(QSWidget w, int style) {
+    const bool plain = style == 1;
+    auto *item = widget(w);
+    const QString sheet = style == 2 ? QStringLiteral("QLineEdit, QPlainTextEdit { border: 1px solid palette(mid); border-radius: 5px; padding: 2px 5px; background: palette(base); } QLineEdit:focus, QPlainTextEdit:focus { border-color: palette(highlight); }") : QString();
+    if (item->styleSheet() != sheet) item->setStyleSheet(sheet);
     if (auto *multi = qobject_cast<QPlainTextEdit *>(widget(w))) {
         multi->setFrameShape(plain ? QFrame::NoFrame : QFrame::StyledPanel);
         multi->viewport()->setAutoFillBackground(!plain);
@@ -1444,8 +1510,24 @@ char *qs_choose_save_path(const char *filename, const char *filter) {
     const QString path = QFileDialog::getSaveFileName(application().activeWindow(), {}, QString::fromUtf8(filename), QString::fromUtf8(filter));
     return path.isEmpty() ? nullptr : strdup(path.toUtf8().constData());
 }
+char *qs_choose_files(const char *mimeTypes, int directory, int multiple, const char *start, const char *prompt) {
+    QSFileImporter dialog(application().activeWindow(), QString::fromUtf8(mimeTypes), directory, multiple);
+    if (start) dialog.setDirectory(QString::fromUtf8(start));
+    if (prompt) dialog.setLabelText(QFileDialog::Accept, QString::fromUtf8(prompt));
+    if (dialog.exec() != QDialog::Accepted) return nullptr;
+    QStringList result;
+    for (const auto &url : dialog.importURLs())
+        if (url.isLocalFile()) result.append(QString::fromLatin1(url.toEncoded(QUrl::FullyEncoded)));
+    return result.isEmpty() ? nullptr : strdup(result.join('\n').toUtf8().constData());
+}
 void qs_clipboard_text(const char *text) { application().clipboard()->setText(QString::fromUtf8(text)); }
-void qs_hint(QSWidget w, const char *s) {
+void qs_hint(QSWidget w, const char *s, const char *color) {
+    auto *item = widget(w);
+    if (*color) {
+        auto palette = item->palette();
+        palette.setColor(QPalette::PlaceholderText, QColor(QString::fromUtf8(color)));
+        item->setPalette(palette);
+    }
     if (auto *editor = qobject_cast<QPlainTextEdit *>(widget(w))) editor->setPlaceholderText(QString::fromUtf8(s));
     else static_cast<QLineEdit *>(w)->setPlaceholderText(QString::fromUtf8(s));
 }
@@ -1509,6 +1591,7 @@ void qs_style(QSWidget w, const char *family, double points, int weight, int ita
     font.setLetterSpacing(QFont::AbsoluteSpacing, tracking);
     font.setPixelSize(qMax(1, qRound(points)));
     item->setFont(font);
+    item->setProperty("qsTextBrush", {});
     QPalette palette = application().palette();
     QColor ink(QString::fromUtf8(color));
     if (ink.isValid()) {
@@ -1681,14 +1764,31 @@ void qs_canvas_material(QSWidget w, double radius, unsigned tint) {
 void qs_canvas_color(QSWidget w, const char *color) {
     static_cast<CanvasWidget *>(w)->drawings.back().color = QColor(QString::fromUtf8(color));
 }
+static QGradientStops qtStops(const QSGradientStop *stops, size_t count) {
+    QGradientStops colors;
+    colors.reserve(count);
+    for (size_t i = 0; i < count; ++i) colors.append({stops[i].location, QColor::fromRgba(stops[i].argb)});
+    return colors;
+}
+void qs_text_gradient(QSWidget w, double x1, double y1, double x2, double y2, const QSGradientStop *stops, size_t count) {
+    QLinearGradient gradient(x1, y1, x2, y2);
+    gradient.setStops(qtStops(stops, count));
+    widget(w)->setProperty("qsTextBrush", QBrush(gradient));
+}
+static void applyTextBrush(QWidget *item, const QBrush &unit, QSize size) {
+    auto brush = unit;
+    brush.setTransform(QTransform::fromScale(size.width(), size.height()));
+    auto palette = item->palette();
+    for (auto role : {QPalette::WindowText, QPalette::Text, QPalette::ButtonText})
+        for (auto group : {QPalette::Active, QPalette::Inactive})
+            palette.setBrush(group, role, brush);
+    item->setPalette(palette);
+}
 void qs_canvas_gradient(QSWidget w, double x1, double y1, double x2, double y2, unsigned options,
                         const QSGradientStop *stops, size_t count) {
     auto &gradient = static_cast<CanvasWidget *>(w)->drawings.back().gradient.emplace(x1, y1, x2, y2);
     gradient.setSpread((options & 2) ? QGradient::ReflectSpread : (options & 1) ? QGradient::RepeatSpread : QGradient::PadSpread);
-    QGradientStops colors;
-    colors.reserve(count);
-    for (size_t i = 0; i < count; ++i) colors.append({stops[i].location, QColor::fromRgba(stops[i].argb)});
-    gradient.setStops(colors);
+    gradient.setStops(qtStops(stops, count));
 }
 void qs_direction(QSWidget w, int rtl) { widget(w)->setLayoutDirection(rtl ? Qt::RightToLeft : Qt::LeftToRight); }
 void qs_direct_touch(QSWidget w, int enabled) {
@@ -2099,13 +2199,14 @@ void qs_focus(QSWidget w, int active) {
     else if (!active && item->hasFocus()) item->clearFocus();
 }
 void qs_enabled(QSWidget w, int enabled) { widget(w)->setEnabled(enabled); }
-void qs_accessible_control(QSWidget w, int selected, int button, int toggle, int link) {
+void qs_accessible_control(QSWidget w, int selected, int button, int toggle, int link, int startsMedia) {
     auto *item = widget(w);
     const bool changed = item->property("qsSelected").toBool() != bool(selected);
     item->setProperty("qsSelected", bool(selected));
     item->setProperty("qsAXLink", bool(link));
     item->setProperty("qsAXButton", bool(button));
     item->setProperty("qsAXToggle", bool(toggle));
+    item->setProperty("qsStartsMedia", bool(startsMedia));
     if (changed) {
         QAccessible::State state;
         state.selected = true;
@@ -2185,6 +2286,8 @@ void qs_place(QSWidget w, double x, double y, double width, double height) {
         item->setProperty("qsFraction", origin - QPointF(geometry.topLeft()));
     }
     item->setGeometry(geometry);
+    if (const auto brush = item->property("qsTextBrush"); brush.isValid())
+        applyTextBrush(item, brush.value<QBrush>(), geometry.size());
     if (auto *group = dynamic_cast<GroupWidget *>(item)) group->layoutRect = group->rect();
     if (!item->property("qsDrawingOnly").toBool()) {
         item->raise();

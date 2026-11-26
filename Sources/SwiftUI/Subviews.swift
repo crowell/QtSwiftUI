@@ -69,10 +69,10 @@ nonisolated public struct SubviewsCollectionSlice: RandomAccessCollection, Primi
     @MainActor func elements(in context: Context) -> [SwiftUI.Element] { items.flatMap { $0.elements(in: context.preferenceBranch()) } }
 }
 
-public struct GroupElementsOfContent<Subviews: View, Content: View>: Primitive {
+public nonisolated struct GroupElementsOfContent<Subviews: View, Content: View>: Primitive {
     let base: Subviews
     let transform: (SubviewsCollection) -> Content
-    func elements(in context: Context) -> [Element] {
+    @MainActor func elements(in context: Context) -> [Element] {
         let items = base.collectSubviews(in: context).map { child in
             child.applying { view, destination in
                 var source = destination
@@ -114,10 +114,10 @@ extension EmptyView: SubviewSource {
     func subviews(in context: Context) -> [Subview] { [] }
 }
 extension Group: SubviewSource {
-    func subviews(in context: Context) -> [Subview] { content.collectSubviews(in: context) }
+    @MainActor func subviews(in context: Context) -> [Subview] { content.collectSubviews(in: context) }
 }
 extension TupleView: SubviewSource {
-    func subviews(in context: Context) -> [Subview] {
+    @MainActor func subviews(in context: Context) -> [Subview] {
         Mirror(reflecting: value).children.enumerated().flatMap { index, child in
             (child.value as? any View)?.collectSubviews(in: context.descending(.position(index))) ?? []
         }

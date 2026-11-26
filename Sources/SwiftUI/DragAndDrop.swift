@@ -36,7 +36,7 @@ public final class NSItemProvider: NSObject {
         representations = [.init(identifier: identifier, format: mime, data: bytes)]
     }
 
-    private func representation(for identifier: String) -> Representation? {
+    fileprivate func representation(for identifier: String) -> Representation? {
         representations.first { item in
             if item.identifier == identifier { return true }
             guard let offered = UTType(item.identifier), let requested = UTType(identifier) else { return false }
@@ -158,6 +158,22 @@ extension View {
             payloadAction(payload)
             return true
         }))
+    }
+    nonisolated public func dropDestination(for payloadType: URL.Type = URL.self,
+                                             action: @escaping ([URL], CGPoint) -> Bool,
+                                             isTargeted: @escaping (Bool) -> Void = { _ in }) -> some View {
+        let target = Binding(get: { false }, set: { isTargeted($0) })
+        return onDrop(of: [UTType.url], isTargeted: target) { providers, location in
+            let urls = providers.flatMap { provider -> [URL] in
+                guard let data = provider.representation(for: UTType.url.identifier)?.data,
+                      let list = String(data: data, encoding: .utf8) else { return [] }
+                return list.split(whereSeparator: \.isNewline).compactMap { entry in
+                    guard !entry.hasPrefix("#"), let url = URL(string: String(entry)), url.scheme != nil else { return nil }
+                    return url
+                }
+            }
+            return !urls.isEmpty && action(urls, location)
+        }
     }
     nonisolated public func onDrag(_ data: @escaping () -> NSItemProvider) -> some View {
         TransferView(content: self, transfer: TransferAction(source: data))

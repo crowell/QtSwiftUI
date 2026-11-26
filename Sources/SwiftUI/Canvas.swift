@@ -180,13 +180,13 @@ public struct GraphicsContext {
     public struct ResolvedImage {
         fileprivate let image: Image
         fileprivate let environment: EnvironmentValues
-        public var size: CGSize { image.naturalSize }
+        public var size: CGSize { image.naturalSize(in: environment) }
         public let baseline: CGFloat
         public var shading: Shading?
     }
 
     public func resolve(_ image: Image) -> ResolvedImage {
-        ResolvedImage(image: image, environment: environment, baseline: image.naturalSize.height)
+        ResolvedImage(image: image, environment: environment, baseline: image.naturalSize(in: environment).height)
     }
 
     public func draw(_ image: Image, in rect: CGRect, style: FillStyle = FillStyle()) {
@@ -230,7 +230,7 @@ public struct GraphicsContext {
             case .text(let text, let size):
                 let (paragraph, _) = text.paragraph(in: size)
                 qs_canvas_text_take(widget, paragraph)
-                shading = text.shading
+                shading = text.text.foregroundOverride.map(Shading.style) ?? text.shading
             case .image(let resolved):
                 resolved.image.withRaster(in: resolved.environment) { qs_canvas_image(widget, $0, resolved.shading == nil ? 0 : 1) }
                 guard let tint = resolved.shading else { continue }

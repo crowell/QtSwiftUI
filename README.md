@@ -178,6 +178,10 @@ Tests on Apple and Ubuntu choose a screen, switch to a window, submit a source w
 
 ![Serein screen-sharing picker with a window selected on Ubuntu](Screenshots/share-picker-selected.png)
 
+The [sticker creator check](Scripts/StickerCreatorCheck) links Serein’s complete `SignalUI` library. Its X11 check selects a JPEG in the Qt file picker and sends it through Serein’s confined decoder. The resulting preview enables the next step in the sticker pack workflow. Upload requires an authenticated Serein session.
+
+![Sticker creator after adding a kitten through the Qt file picker](Screenshots/sticker-creator.png)
+
 The `--stickers` example runs Serein’s `StickerManager`, `StickerPreviewModal`, and uninstall confirmation with its sticker-manager test packs. Right-click a pack to add or remove it, or click its row to open the preview. Changes last for the lifetime of the example. The preview uses three kitten images from the desktop fixtures and falls back to Serein’s bundled cat frame when those images are absent. Qt supplies the native context menu and clipboard. The shared text adapter draws the two-line caption on the preview’s stacked buttons.
 
 Tests on Ubuntu and macOS install from both the context menu and the preview. They check that canceling uninstall keeps a shared pack and confirming it removes the pack. Nested context menus select the innermost available commands on both platforms. At 600 × 460, the pack preview differed from the Apple capture in 6,995 pixels (2.53%) by more than 8/255 in any RGB channel. Set `QTSWIFTUI_STICKER_REFERENCE` to an existing directory to capture these screens during tests.
@@ -302,7 +306,7 @@ The target is source compatibility with Apple's public SwiftUI APIs. The impleme
 
 `./Scripts/check-apple.sh ../serein` type-checks the example source with Apple's SwiftUI module on a Mac with Xcode. `./Scripts/check-api.sh` extracts public symbol graphs from Xcode and the Linux image. Pass `--missing` to list missing declaration paths. The inventory groups declarations by symbol kind and path, counts overload spellings separately, and excludes underscored and synthesized members. A shared name alone cannot establish matching signatures, constraints, availability or behavior.
 
-The inventory against the macOS 27.2 SDK found 1,524 shared declaration paths out of 7,627 and 1,020 identical declaration spellings out of 8,735. The examples exercise a smaller set at runtime. Navigation, multiwindow scenes, broader animation support, text shaping parity, gestures and platform integration remain substantial gaps. Font metrics, control appearance and several layout behaviors differ from Apple's implementation.
+The inventory against the macOS 27.2 SDK found 1,573 shared declaration paths out of 7,627 and 1,041 identical declaration spellings out of 8,735. The examples exercise a smaller set at runtime. Navigation, multiwindow scenes, broader animation support, text shaping parity, gestures and platform integration remain substantial gaps. Font metrics, control appearance and several layout behaviors differ from Apple's implementation.
 
 After capturing the Linux examples, run `./Scripts/compare-artwork.sh ../serein` on macOS to render both illustrations with Apple's `ImageRenderer`. At a threshold of 8/255 in any RGB channel, 101 of 119,680 account artwork pixels (0.084%) and 91 of 49,928 key transparency pixels (0.182%) differed. The mean absolute channel differences were 0.104/255 and 0.095/255 respectively. Both reference images are saved in `.build/artwork/`.
 

@@ -3,6 +3,7 @@ import QtBridge
 public struct AccessibilityTraits: OptionSet, Sendable {
     public var rawValue: UInt64
     public init(rawValue: UInt64) { self.rawValue = rawValue }
+    public static let startsMediaSession = Self(rawValue: 1024)
     public static let allowsDirectInteraction = Self(rawValue: 512)
     public static let isLink = Self(rawValue: 256)
     public static let isSearchField = Self(rawValue: 128)

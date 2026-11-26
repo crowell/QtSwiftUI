@@ -139,7 +139,7 @@ final class PopoverTests: XCTestCase {
             var body: some View {
                 Color.gray.frame(width: 80, height: 40)
                     .popover(item: $model.item, attachmentAnchor: .point(.bottomTrailing), arrowEdge: .bottom) {
-                        Panel(id: $0.id, model: model)
+                        Panel(id: $0.id, model: model).interactiveDismissDisabled()
                     }
             }
         }
@@ -151,6 +151,11 @@ final class PopoverTests: XCTestCase {
         let first = try XCTUnwrap(window.popoverFrame)
         XCTAssertEqual(first.midX, 280, accuracy: 2)
         XCTAssertEqual(first.minY, 230, accuracy: 2)
+        #if os(Linux)
+        try await window.escapePopover()
+        XCTAssertEqual(model.item?.id, 1)
+        XCTAssertNotNil(window.popoverFrame)
+        #endif
         model.item = .init(id: 2)
         try await window.settlePopover()
         let frame = try XCTUnwrap(window.popoverFrame)

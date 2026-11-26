@@ -24,13 +24,22 @@ public nonisolated struct Image: View, Equatable, Sendable {
     public enum ResizingMode: Hashable, Sendable { case tile, stretch }
     public enum Interpolation: Hashable, Sendable { case none, low, medium, high }
 
-    let source: CGImage
+    let source: CGImage?
+    let systemName: String?
     let scale: CGFloat
     let orientation: Orientation
     private let label: String?
     var caps = EdgeInsets()
     var resizing: ResizingMode?
     var interpolation: Interpolation?
+
+    public init(systemName: String) {
+        self.systemName = systemName
+        source = nil
+        scale = 1
+        orientation = .up
+        label = systemName.replacingOccurrences(of: ".", with: " ")
+    }
 
     public init(decorative cgImage: CGImage, scale: CGFloat, orientation: Orientation = .up) {
         self.init(source: cgImage, scale: scale, orientation: orientation, label: nil)
@@ -46,6 +55,7 @@ public nonisolated struct Image: View, Equatable, Sendable {
     }
 
     private init(source: CGImage, scale: CGFloat, orientation: Orientation, label: String?) {
+        systemName = nil
         self.source = source
         self.scale = scale.isFinite && scale > 0 ? scale : 1
         self.orientation = orientation
@@ -66,7 +76,7 @@ public nonisolated struct Image: View, Equatable, Sendable {
     }
 
     public static func == (lhs: Image, rhs: Image) -> Bool {
-        lhs.source === rhs.source && lhs.scale == rhs.scale && lhs.orientation == rhs.orientation &&
+        lhs.systemName == rhs.systemName && lhs.source === rhs.source && lhs.scale == rhs.scale && lhs.orientation == rhs.orientation &&
         lhs.label == rhs.label && lhs.caps == rhs.caps && lhs.resizing == rhs.resizing && lhs.interpolation == rhs.interpolation
     }
 
@@ -80,21 +90,38 @@ public nonisolated struct Image: View, Equatable, Sendable {
 }
 
 extension Image {
-    var naturalSize: CGSize {
+    func naturalSize(in environment: EnvironmentValues) -> CGSize {
+        guard let source else {
+            let extent = environment.font?.size ?? Font.body.size
+            return CGSize(width: extent, height: extent)
+        }
         let rotated = orientation.rawValue >= Orientation.left.rawValue
         return CGSize(width: CGFloat(rotated ? source.height : source.width) / scale,
                       height: CGFloat(rotated ? source.width : source.height) / scale)
     }
 
     func withRaster(in environment: EnvironmentValues, _ draw: (QSRasterImage) -> Void) {
-        guard let data = source.dataProvider?.data else { return }
+        var bitmap = source
+        var rasterScale = scale
+        if let systemName {
+            let points = naturalSize(in: environment).width
+            guard points.isFinite, points > 0 else { return }
+            let extent = Int32(min(1024, max(1, ceil(points * max(1, environment.displayScale)))))
+            var pixels: Data?
+            _ = qs_symbol_image(systemName, extent, environment.foreground.argb(environment.colorScheme), &pixels) { raw, bytes, count, _ in
+                if let raw, let bytes { raw.assumingMemoryBound(to: Data?.self).pointee = Data(bytes: bytes, count: count) }
+            }
+            bitmap = pixels.flatMap { CGImage.rgba8($0, width: Int(extent), height: Int(extent)) }
+            rasterScale = CGFloat(extent) / points
+        }
+        guard let source = bitmap, let data = source.dataProvider?.data else { draw(QSRasterImage()); return }
         let rtl = environment.layoutDirection == .rightToLeft
         let smooth = interpolation.map { $0 != .none } ?? source.shouldInterpolate
         withExtendedLifetime(data) {
             draw(QSRasterImage(bytes: CFDataGetBytePtr(data), width: Int32(source.width), height: Int32(source.height),
                                stride: source.bytesPerRow, alpha: Int32(source.alphaInfo.rawValue),
                                little: source.bitmapInfo.contains(.byteOrder32Little) ? 1 : 0,
-                               orientation: Int32(orientation.rawValue), scale: scale, smooth: smooth ? 1 : 0,
+                               orientation: Int32(orientation.rawValue), scale: rasterScale, smooth: smooth ? 1 : 0,
                                left: max(0, rtl ? caps.trailing : caps.leading), top: max(0, caps.top),
                                right: max(0, rtl ? caps.leading : caps.trailing), bottom: max(0, caps.bottom),
                                tile: resizing == .tile ? 1 : 0))
@@ -107,7 +134,7 @@ private struct Raster: Primitive {
 
     func elements(in context: Context) -> [Element] {
         let widget = context.widget(QSRaster)
-        let ideal = image.naturalSize
+        let ideal = image.naturalSize(in: context.environment)
         image.withRaster(in: context.environment) { qs_raster_image(widget, $0) }
         return [Element { image.resizing == nil ? ideal : $0.replacingUnspecifiedDimensions(by: ideal) } place: { rect, _ in
             qs_place(widget, rect.minX, rect.minY, rect.width, rect.height)
