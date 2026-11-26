@@ -55,11 +55,11 @@ The target is source compatibility with Apple's public SwiftUI APIs. The impleme
 | Graphics | Canvas fills and strokes, even-odd paths, gradient stops, affine transforms and path hit testing. The Linux CoreGraphics module supplies geometry for these APIs. |
 | Links and pointer input | Link activation, accessible link labels, custom URL handling, Qt tooltips and hover callbacks. Ubuntu uses the desktop URL handler for system actions. |
 | Keyboard input | Programmatic composer focus, native focus changes, sending with Return, Escape commands and selectable monospaced diagnostic text. |
-| Lifecycle | An async view task updates an observable model while the Qt event loop runs. An on-change handler observes the result. |
+| Lifecycle | An async view task updates an observable model while the Qt event loop runs. An on-change handler observes the result. A timeline also advances to a scheduled date inside the Qt event loop. |
 
 `./Scripts/check-apple.sh ../serein` type-checks the example source with Apple's SwiftUI module on a Mac with Xcode. `./Scripts/check-api.sh` extracts public symbol graphs from Xcode and the Linux image. Pass `--missing` to list missing declaration paths. The inventory groups declarations by symbol kind and path, counts overload spellings separately, and excludes underscored and synthesized members. A shared name alone cannot establish matching signatures, constraints, availability or behavior.
 
-The inventory against the macOS 27.2 SDK found 557 shared declaration paths out of 7,627 and 259 identical declaration spellings out of 8,735. The examples exercise a smaller set at runtime. Navigation, multiwindow scenes, animation, text shaping parity, gestures and platform integration remain substantial gaps. Font metrics, control appearance and several layout behaviors differ from Apple's implementation.
+The inventory against the macOS 27.2 SDK found 599 shared declaration paths out of 7,627 and 290 identical declaration spellings out of 8,735. The examples exercise a smaller set at runtime. Navigation, multiwindow scenes, animation, text shaping parity, gestures and platform integration remain substantial gaps. Font metrics, control appearance and several layout behaviors differ from Apple's implementation.
 
 After capturing the Linux examples, run `./Scripts/compare-artwork.sh ../serein` on macOS to render both illustrations with Apple's `ImageRenderer`. At a threshold of 8/255 in any RGB channel, 208 of 119,680 account artwork pixels (0.174%) and 251 of 49,928 key transparency pixels (0.503%) differed. The mean absolute channel differences were 0.128/255 and 0.129/255 respectively. Both reference images are saved in `.build/artwork/`.
 
