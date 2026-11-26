@@ -80,6 +80,11 @@ enum Part: Hashable {
         qs_direction(entry.widget, environment.layoutDirection == .rightToLeft ? 1 : 0)
         qs_enabled(entry.widget, environment.isEnabled ? 1 : 0)
         qs_accessibility(entry.widget, environment.label, environment.identifier)
+        if kind == QSGroup || kind == QSButton || kind == QSLink {
+            let traits = environment.accessibilityTraits
+            qs_accessible_control(entry.widget, traits.contains(.isSelected) ? 1 : 0,
+                                  traits.contains(.isButton) ? 1 : 0, traits.contains(.isToggle) ? 1 : 0)
+        }
         qs_help(entry.widget, environment.helpText)
         qs_focus_effect(entry.widget, environment.isFocusEffectEnabled ? 1 : 0)
         if let focus { qs_focus(entry.widget, focus.active() ? 1 : 0) }
@@ -102,6 +107,7 @@ enum Part: Hashable {
     var liveStorage = Set<[Part]>()
     private var disappear: [[Part]: () -> Void] = [:]
     private var nextDisappear: [[Part]: () -> Void] = [:]
+    let matches = GeometryMatches()
     private var pendingTransaction: Transaction?
     private var afterRender: [() -> Void] = []
     func afterLayout(_ action: @escaping () -> Void) { afterRender.append(action) }
@@ -191,6 +197,7 @@ enum Part: Hashable {
         let size = root.measure(proposal)
         root.place(CGRect(x: (CGFloat(width) - size.width) / 2, y: (CGFloat(height) - size.height) / 2,
                           width: size.width, height: size.height), proposal)
+        matches.place(at: frameTime, window: window)
         // Qt owns descendant widgets. Release stale descendants before their scroll area.
         for path in mounts.keys.filter({ !liveMounts.contains($0) }).sorted(by: { $0.count > $1.count }) {
             if let mount = mounts.removeValue(forKey: path) {

@@ -116,6 +116,8 @@ public:
         return QRect(group->mapToGlobal(group->layoutRect.topLeft()), group->layoutRect.size());
     }
     QAccessible::Role role() const override {
+        if (group->property("qsAXToggle").toBool()) return QAccessible::CheckBox;
+        if (group->property("qsAXButton").toBool()) return QAccessible::Button;
         if (group->modal) return QAccessible::Dialog;
         if (group->heading) return QAccessible::Heading;
         return group->isImage ? QAccessible::Graphic : QAccessible::Grouping;
@@ -150,6 +152,8 @@ public:
         if (group->accessibilityHidden) result.invisible = true;
         result.animated = group->updatesFrequently;
         result.modal = group->modal;
+        result.selected = group->property("qsSelected").toBool();
+        if (group->property("qsAXToggle").toBool()) { result.checkable = true; result.checked = result.selected; }
         return result;
     }
     int childCount() const override { return group->exposeChildren && !group->accessibilityHidden ? QAccessibleWidget::childCount() : 0; }
@@ -241,12 +245,14 @@ private:
         return t;
     }
 };
-class AccessibleLink final : public QAccessibleWidget {
+class AccessibleButton final : public QAccessibleWidget {
 public:
-    explicit AccessibleLink(QPushButton *button) : QAccessibleWidget(button, QAccessible::Link), button(button) {}
+    AccessibleButton(QPushButton *button, bool link)
+        : QAccessibleWidget(button, link ? QAccessible::Link : QAccessible::Button), button(button) {}
     QString text(QAccessible::Text kind) const override {
         const QString value = QAccessibleWidget::text(kind);
         if (kind != QAccessible::Name || !value.isEmpty()) return value;
+        if (!button->text().isEmpty()) return button->text();
         QStringList parts;
         for (const auto *label : button->findChildren<QLabel *>()) parts.append(label->text());
         return parts.join(' ');
@@ -257,7 +263,10 @@ public:
     }
     QAccessible::State state() const override {
         auto state = QAccessibleWidget::state();
-        state.linked = true;
+        state.linked = role() == QAccessible::Link;
+        state.selected = button->property("qsSelected").toBool();
+        state.pressed = button->isDown();
+        state.defaultButton = button->isDefault();
         return state;
     }
 private:
@@ -536,8 +545,8 @@ QSWidget qs_create(QSWindow *window, QSWidget parent, QSKind kind, int id) {
         auto *button = new SwiftButton(container);
         if (kind == QSLink) {
             button->setCursor(Qt::PointingHandCursor);
-            QAccessible::registerAccessibleInterface(new AccessibleLink(button));
         }
+        QAccessible::registerAccessibleInterface(new AccessibleButton(button, kind == QSLink));
         window->observeFocus(button, id);
         QObject::connect(button, &QPushButton::clicked, window, [=] { window->event(window->context, id, QSActivate, ""); });
         QObject::connect(button, &QPushButton::pressed, window, [=] { window->event(window->context, id, QSPressedChanged, "1"); });
@@ -895,6 +904,19 @@ void qs_focus(QSWidget w, int active) {
     else if (!active && item->hasFocus()) item->clearFocus();
 }
 void qs_enabled(QSWidget w, int enabled) { widget(w)->setEnabled(enabled); }
+void qs_accessible_control(QSWidget w, int selected, int button, int toggle) {
+    auto *item = widget(w);
+    const bool changed = item->property("qsSelected").toBool() != bool(selected);
+    item->setProperty("qsSelected", bool(selected));
+    item->setProperty("qsAXButton", bool(button));
+    item->setProperty("qsAXToggle", bool(toggle));
+    if (changed) {
+        QAccessible::State state;
+        state.selected = true;
+        QAccessibleStateChangeEvent event(item, state);
+        QAccessible::updateAccessibility(&event);
+    }
+}
 void qs_accessibility(QSWidget w, const char *label, const char *identifier) {
     widget(w)->setAccessibleName(QString::fromUtf8(label));
     widget(w)->setObjectName(QString::fromUtf8(identifier));
@@ -950,6 +972,35 @@ void qs_place(QSWidget w, double x, double y, double width, double height) {
     item->show();
 }
 
+void qs_match_place(QSWidget drawing, QSWidget marker, double x, double y, double width, double height) {
+    auto *layer = widget(drawing);
+    auto *parent = widget(marker);
+    auto *window = parent->window();
+    QWidget *branch = nullptr;
+    const QRectF target(x, y, width, height);
+    while (parent != window) {
+        const auto origin = qs_origin(parent);
+        if (QRectF(origin.width, origin.height, parent->width(), parent->height()).contains(target)) break;
+        // Structural wrappers and flat button labels permit overflow. Retain explicit
+        // clipping and scrolling boundaries even while the two views exchange places.
+        const auto *button = dynamic_cast<SwiftButton *>(parent);
+        if (parent->graphicsEffect() || (!dynamic_cast<GroupWidget *>(parent) && !(button && button->isFlat()))) break;
+        branch = parent;
+        parent = parent->parentWidget();
+    }
+    if (layer->parentWidget() != parent) layer->setParent(parent);
+    const auto origin = parent == window ? QSSize{0, 0} : qs_origin(parent);
+    qs_place(layer, x - origin.width, y - origin.height, width, height);
+    if (branch) {
+        // A background moving between sibling controls still paints behind their labels.
+        for (auto *sibling : parent->findChildren<QWidget *>(QString(), Qt::FindDirectChildrenOnly)) {
+            if (sibling == branch || dynamic_cast<SwiftButton *>(sibling)) {
+                layer->stackUnder(sibling);
+                break;
+            }
+        }
+    }
+}
 void qs_group_finish_layout(QSWidget w) {
     auto *group = static_cast<GroupWidget *>(w);
     // A frame around paint-only descendants must leave the controls underneath reachable.
@@ -1067,7 +1118,8 @@ int qs_click_point(QSWindow *window, int x, int y) {
 }
 int qs_click_named_button(QSWindow *window, const char *name) {
     for (auto *button : window->findChildren<QAbstractButton *>()) {
-        if (button->accessibleName() != QString::fromUtf8(name)) continue;
+        auto *accessible = QAccessible::queryAccessibleInterface(button);
+        if (!accessible || accessible->text(QAccessible::Name) != QString::fromUtf8(name)) continue;
         const auto center = button->mapTo(window, button->rect().center());
         return qs_click_point(window, center.x(), center.y());
     }

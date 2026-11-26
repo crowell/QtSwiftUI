@@ -72,7 +72,7 @@ extension EnvironmentValues {
     @Entry var cssTextWrapWidth: CGFloat? = nil
     @Entry var axoInheritedTextSize: (size: CGFloat, lineHeight: CGFloat) = (14, 20)
 }
-enum PreviewWrap { case wrap, truncate }
+enum PreviewWrap { case wrap, truncate, nowrap }
 
 struct CSSText: View {
     let value: String
@@ -89,8 +89,8 @@ struct CSSText: View {
         self.alignment = alignment
         self.color = color
     }
-    init(_ value: String, style: CSSTextStyle, alignment: TextAlignment, color: AxoColor? = nil) {
-        self.init(value, type: style.type, alignment: alignment, color: color)
+    init(_ value: String, style: CSSTextStyle, wrap: PreviewWrap = .wrap, alignment: TextAlignment = .leading, color: AxoColor? = nil) {
+        self.init(value, type: style.type, wrap: wrap, alignment: alignment, color: color)
     }
     init(runs: [CSSTextRun], style: CSSTextStyle, wrap: PreviewWrap) {
         self.init(runs.map(\.text).joined(), type: style.type, wrap: wrap)
@@ -102,7 +102,9 @@ struct CSSText: View {
     @ViewBuilder private var label: some View {
         let _ = AxoFonts.register()
         let text = Text(verbatim: value).font(type.font).tracking(type.tracking * type.size)
-        if wrap == .truncate {
+        if wrap == .nowrap {
+            text.lineLimit(1).fixedSize(horizontal: true, vertical: false).frame(height: type.lineHeight)
+        } else if wrap == .truncate {
             text.lineLimit(1).frame(height: type.lineHeight)
         } else {
             text.fixedSize(horizontal: false, vertical: true)

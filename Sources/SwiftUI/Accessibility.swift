@@ -5,6 +5,7 @@ public struct AccessibilityTraits: OptionSet, Sendable {
     public init(rawValue: UInt64) { self.rawValue = rawValue }
     public static let isImage = Self(rawValue: 1)
     public static let updatesFrequently = Self(rawValue: 2)
+    public static let isSelected = Self(rawValue: 16), isButton = Self(rawValue: 32), isToggle = Self(rawValue: 64)
     public static let isHeader = Self(rawValue: 4), isModal = Self(rawValue: 8)
 }
 public struct AccessibilityChildBehavior: Equatable, Sendable {
