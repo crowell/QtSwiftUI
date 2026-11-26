@@ -1,5 +1,6 @@
 #include "QtBridge.h"
 #include <QMenuBar>
+#include <QMessageBox>
 #include "AlphaMask.hpp"
 #include "BusyIndicator.hpp"
 #include "ViewBlur.hpp"
@@ -34,6 +35,7 @@
 #include <QDesktopServices>
 #include <QUrl>
 #include <QWindow>
+#include <QScreen>
 #include <QWheelEvent>
 #include <QVariantAnimation>
 #include <algorithm>
@@ -1846,6 +1848,73 @@ void qs_context_request_scope(QSWidget w, int enabled) {
     auto *group = static_cast<GroupWidget *>(w);
     group->customContextRequest = enabled;
     if (enabled) installContextMenuFilter();
+}
+int qs_theme_icon(const char *name, int extent, void *context, QSImageBytes receive) {
+    application();
+    const QString key = QString::fromUtf8(name);
+    if (!receive || extent <= 0 || extent > 1024 || key.isEmpty() || key.contains('/')) return 0;
+    const auto icon = QIcon::fromTheme(key);
+    if (icon.isNull()) return 0;
+    auto image = icon.pixmap(extent, extent).toImage();
+    if (image.isNull()) return 0;
+    QImage canvas(extent, extent, QImage::Format_RGBA8888);
+    canvas.fill(Qt::transparent);
+    QPainter painter(&canvas);
+    image.setDevicePixelRatio(1);
+    const auto fit = image.size().scaled(extent, extent, Qt::KeepAspectRatio);
+    painter.drawImage(QRect(QPoint((extent - fit.width()) / 2, (extent - fit.height()) / 2), fit), image);
+    painter.end();
+    receive(context, canvas.constBits(), canvas.sizeInBytes(), canvas.bytesPerLine());
+    return 1;
+}
+QSSize qs_primary_screen_size(void) {
+    auto *screen = application().primaryScreen();
+    if (!screen) return {0, 0};
+    const QSize size = screen->geometry().size();
+    return {double(size.width()), double(size.height())};
+}
+int qs_alert_begin(QSWidget w, const char *title, const char *message) {
+    auto *group = static_cast<GroupWidget *>(w);
+    if (group->findChild<QMessageBox *>(QString(), Qt::FindDirectChildrenOnly)) return 0;
+    auto *box = new QMessageBox(QMessageBox::NoIcon, QString::fromUtf8(title), QString::fromUtf8(title),
+                                QMessageBox::NoButton, group);
+    box->setTextFormat(Qt::PlainText);
+    box->setInformativeText(QString::fromUtf8(message));
+    box->setWindowModality(Qt::WindowModal);
+    QObject::connect(box, &QDialog::finished, group, [group, box] {
+        auto *clicked = box->clickedButton();
+        int index = clicked ? clicked->property("qsAlertIndex").toInt() : -1;
+        QTimer::singleShot(0, group, [group, index] { sendAccessibleEvent(group, QSActivate, QString::number(index)); });
+    });
+    return 1;
+}
+void qs_alert_button(QSWidget w, int index, const char *label, int role) {
+    auto *box = widget(w)->findChild<QMessageBox *>(QString(), Qt::FindDirectChildrenOnly);
+    if (!box) return;
+    auto *button = label ? box->addButton(QString::fromUtf8(label).replace('&', "&&"),
+                                          role == 1 ? QMessageBox::RejectRole : role == 2 ? QMessageBox::DestructiveRole : QMessageBox::AcceptRole)
+                         : box->addButton(role == 1 ? QMessageBox::Cancel : QMessageBox::Ok);
+    button->setProperty("qsAlertIndex", index);
+    if (role == 1) box->setEscapeButton(button);
+    else if (!box->defaultButton()) box->setDefaultButton(button);
+}
+int qs_alert_response(QSWindow *window, const char *title, const char *message, const char *button) {
+    for (auto *box : window->findChildren<QMessageBox *>()) {
+        if (!box->isVisible() || box->text() != QString::fromUtf8(title) || box->informativeText() != QString::fromUtf8(message)) continue;
+        if (!button) return 1;
+        for (auto *entry : box->buttons()) {
+            if (entry->text().remove('&') != QString::fromUtf8(button)) continue;
+            entry->click();
+            qs_flush();
+            return 1;
+        }
+    }
+    return 0;
+}
+void qs_alert_show(QSWidget w) {
+    if (auto *box = widget(w)->findChild<QMessageBox *>(QString(), Qt::FindDirectChildrenOnly)) {
+        QTimer::singleShot(0, box, [box] { box->open(); });
+    }
 }
 QSWidget qs_context_menu(QSWidget w) {
     auto *group = static_cast<GroupWidget *>(w);

@@ -149,7 +149,11 @@ sed 's/@testable import SignalUI/@testable import CallDiagnostics/' \
 # Assemble Serein's source selector and its static snapshot inputs. Only the optional
 # bundle-icon lookup needs AppKit. The picker receives thumbnails from its caller.
 {
+    echo '#if os(Linux)'
+    echo '@_spi(Qt) import SwiftUI'
+    echo '#else'
     echo 'import SwiftUI'
+    echo '#endif'
     echo 'import SignalI18n'
     declarations '^public struct PresentableSource:' 1 "$source_dir/Calling/ScreenShare.swift"
     declarations '^public struct CallingSelectPresentingSourcesModal:|^struct (SourceCard|SourceThumbnail|AspectBox):' 4 "$source_dir/Calling/ScreenShareViews.swift" |
@@ -269,6 +273,25 @@ done
     echo '}'
 } > "$target_dir/InstallScreenDependencies.swift"
 { echo '#if canImport(AppKit)'; cat "$source_dir/Theme/CASpin.swift"; echo '#endif'; } > "$target_dir/CASpin.swift"
+cp "$source_dir/Calling/GroupCallRemoteParticipant.swift" "$target_dir/"
+video="$source_dir/Calling/CallVideoViews.swift"
+constants="$source_dir/Calling/CallVideoConstants.swift"
+[ -f "$constants" ] || constants="$source_dir/Calling/CameraCapture.swift"
+{
+    echo 'import SwiftUI'
+    echo 'public enum VideoRenderer { public typealias Fit = ObjectFit }'
+    declarations '^public enum CallVideoConstants ' 1 "$constants"
+    echo '@MainActor'
+    declarations '^public protocol CallVideoFrameSource:' 1 "$video"
+    declarations '^struct StaticRemoteVideo:|^public struct RemoteVideoStack:' 2 "$video"
+    if [ -f "$source_dir/Linux/CallVideoViews+Qt.swift" ]; then
+        declarations '^public struct RemoteVideoView:' 1 "$source_dir/Linux/CallVideoViews+Qt.swift"
+    else
+        # The component preview uses the original snapshot renderer on pre-port checkouts.
+        echo 'struct RemoteVideoView: View { let source: (any CallVideoFrameSource)?; let fit: VideoRenderer.Fit; let onSize: ((Int, Int) -> Void)?
+              var body: some View { if let source { StaticRemoteVideo(source: source, fit: fit, maxWidth: 640, maxHeight: 480) } } }'
+    fi
+} > "$target_dir/RemoteVideo.swift"
 # Exercise the exact hidden keyboard controls from the Serein call lobby.
 awk 'BEGIN { print "import SwiftUI\nstruct LobbyKeyboardControls: View {"
              print "    var hasLocalVideo: Bool, hasLocalAudio: Bool"
@@ -415,7 +438,7 @@ cp "$source_dir/Components/Conversation/AboutContactModal.swift" "$source_dir/Co
     cat "$source_dir/Components/About.swift"
     declarations '^public struct NotePreviewModal:' 1 "$source_dir/Components/SmallDialogs.swift"
 } > "$target/ContactDialogs.swift"
-awk '!/^import AppKit$/ {printLine=$0; gsub(/NSWorkspace.shared.open/, "openURL", printLine); print printLine
+awk '/@Environment\(.*openURL\) private var openURL/ {next} !/^import AppKit$/ {printLine=$0; gsub(/NSWorkspace.shared.open/, "openURL", printLine); print printLine
      if (/^public struct (About|NotePreviewModal):/) {print "    @Environment(\\.openURL) private var openURL"; count++}}
      END {if (count!=2) exit 1}' "$target/ContactDialogs.swift" > "$target_dir/ContactDialogs.swift"
 cp "$source_dir/Components/Inbox.swift" "$source_dir/Components/NavTabs.swift" "$target_dir/"

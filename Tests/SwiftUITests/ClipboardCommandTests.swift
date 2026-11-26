@@ -1,6 +1,6 @@
 import QtBridge
 import XCTest
-@testable import SwiftUI
+@testable @_spi(Qt) import SwiftUI
 
 final class ClipboardCommandTests: XCTestCase {
     @MainActor func testFocusedCutCopyAndValidatedPaste() async {
@@ -45,7 +45,7 @@ final class ClipboardCommandTests: XCTestCase {
         _ = qs_click_point(host.window, 90, 66)
         key("Ctrl+V")
         XCTAssertEqual(received.count, 1)
-        qs_clipboard_text("External clipboard")
+        QtDesktop.copy("External clipboard")
         key("Ctrl+V")
         received.first?.loadDataRepresentation(forTypeIdentifier: UTType.text.identifier) { data, _ in
             XCTAssertEqual(data, Data("External clipboard".utf8))

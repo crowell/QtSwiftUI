@@ -1,7 +1,14 @@
 import CoreFoundation
+import struct Foundation.Data
 
 public final class CGDataProvider: @unchecked Sendable {
     public let data: CFData?
+    @_spi(Qt) public var bytes: Data? {
+        guard let data else { return nil }
+        let length = CFDataGetLength(data)
+        guard length > 0 else { return Data() }
+        return Data(bytes: CFDataGetBytePtr(data), count: length)
+    }
     public init?(data: CFData) {
         guard let copy = CFDataCreateCopy(nil, data) else { return nil }
         self.data = copy

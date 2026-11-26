@@ -52,6 +52,8 @@ QSBaselines qs_text_baselines(QSWidget, double width, double height);
 double qs_line_height(QSWidget);
 void qs_autocorrection(QSWidget, int disabled);
 void qs_clipboard_text(const char *text);
+QSSize qs_primary_screen_size(void);
+int qs_theme_icon(const char *name, int extent, void *context, QSImageBytes receive);
 // The caller frees the selected UTF-8 path. Cancel returns NULL.
 char *qs_choose_save_path(const char *filename, const char *filter);
 void qs_field_style(QSWidget, int plain);
@@ -182,6 +184,10 @@ typedef void (*QSMimeEntry)(void *context, const char *format, const unsigned ch
 void qs_mime_read(void *mime, int representations, void *context, QSMimeEntry entry);
 int qs_transfer_between(QSWindow *, int fromX, int fromY, int toX, int toY);
 void qs_context_request_scope(QSWidget group, int enabled);
+int qs_alert_begin(QSWidget owner, const char *title, const char *message);
+void qs_alert_button(QSWidget owner, int index, const char *label, int role);
+void qs_alert_show(QSWidget owner);
+int qs_alert_response(QSWindow *, const char *title, const char *message, const char *button);
 QSWidget qs_context_menu(QSWidget group);
 int qs_open_context_menu(QSWindow *, int x, int y, int keyboard);
 int qs_menu_indicator_width(QSWidget button);

@@ -1,4 +1,5 @@
 import CoreFoundation
+@_spi(Qt) import CoreGraphics
 import XCTest
 @testable @_spi(Qt) import SwiftUI
 
@@ -12,8 +13,17 @@ final class RasterInputTests: XCTestCase {
         XCTAssertEqual(image.orientation, .left)
         XCTAssertEqual(image.scale, 2)
         let copy = try XCTUnwrap(image.source.dataProvider?.data)
+        XCTAssertEqual(image.source.dataProvider?.bytes, Data([0, 1, 2, 0, 253, 254, 255, 127]))
         XCTAssertEqual(CFDataGetLength(copy), 8)
         XCTAssertEqual(CFDataGetBytePtr(copy)[7], 127)
+    }
+
+    @MainActor func testPrimaryDisplayAndMissingDesktopIcons() async throws {
+        let size = try XCTUnwrap(QtDesktop.primaryScreenSize)
+        XCTAssertGreaterThan(size.width, 0)
+        XCTAssertGreaterThan(size.height, 0)
+        XCTAssertNil(QtDesktop.icon(named: "/tmp/not-a-theme-icon.png", size: 32))
+        XCTAssertNil(QtDesktop.icon(named: "folder", size: -1))
     }
 
     func testRejectsInvalidExtentsAndIncompleteOrTrailingPixels() {
