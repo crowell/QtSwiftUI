@@ -1,0 +1,4 @@
+module CQtWidgets [system] {
+    header "shim.h"
+    export *
+}
