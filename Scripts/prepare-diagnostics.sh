@@ -5,20 +5,28 @@ checkout=${1:?pass the Serein checkout path}
 target=${2:?pass the temporary package directory}
 source_dir="$checkout/Packages/SignalUI/Sources/SignalUI"
 root=$(cd "$(dirname "$0")/.." && pwd)
+link_package() {
+    if [ -L "$2" ] && [ "$(readlink "$2")" = "$1" ]; then return; fi
+    if [ -e "$2" ] || [ -L "$2" ]; then
+        echo "Expected a package link to $1 at $2" >&2
+        exit 1
+    fi
+    ln -s "$1" "$2"
+}
 mkdir -p "$target/Sources/CallDiagnostics" "$target/Tests/ScreenTests"
 cp "$root"/Tests/SereinDiagnostics/*.swift "$root/Tests/SwiftUITests/LocalizedStringTests.swift" "$target/Tests/ScreenTests/"
-ln -s "$checkout/Packages/SignalI18n" "$target/SignalI18n"
-ln -s "$checkout/Packages/SignalText" "$target/SignalText"
+link_package "$checkout/Packages/SignalI18n" "$target/SignalI18n"
+link_package "$checkout/Packages/SignalText" "$target/SignalText"
 codecs="$checkout/Packages/SignalCodecs"
 if [ "$(uname -s)" = Linux ]; then
     mkdir -p "$target/SignalCodecs"
     cp -R "$codecs/Sources" "$target/SignalCodecs/"
-    ln -s "$codecs/Package.swift" "$target/SignalCodecs/Package.swift"
-    ln -s "$codecs/Tests" "$target/SignalCodecs/Tests"
+    link_package "$codecs/Package.swift" "$target/SignalCodecs/Package.swift"
+    link_package "$codecs/Tests" "$target/SignalCodecs/Tests"
     # Serein's codec math uses the same scoped C functions from Linux libm.
     sed 's/Darwin\./Glibc./g' "$codecs/Sources/CodecCore/Math/LibM.swift" > "$target/SignalCodecs/Sources/CodecCore/Math/LibM.swift"
 else
-    ln -s "$codecs" "$target/SignalCodecs"
+    link_package "$codecs" "$target/SignalCodecs"
 fi
 cp "$source_dir/Calling/CallDiagnosticWindow.swift" "$source_dir/Theme/I18nEnvironment.swift" \
     "$source_dir/Theme/AxoColor.swift" "$source_dir/Theme/AxoFocusRing.swift" \
