@@ -24,6 +24,21 @@ public nonisolated struct Image: View, Equatable, Sendable {
         self.init(source: cgImage, scale: scale, orientation: orientation, label: label.string)
     }
 
+    @_spi(Qt) public init?(rgba8 pixels: Data, width: Int, height: Int, scale: CGFloat = 1, orientation: Orientation = .up) {
+        guard width > 0, height > 0, width <= Int(Int32.max), height <= Int(Int32.max), width <= Int.max / 4 else { return nil }
+        let rowBytes = width * 4
+        guard pixels.count.isMultiple(of: rowBytes), pixels.count / rowBytes == height else { return nil }
+        let data = pixels.withUnsafeBytes { bytes in
+            CFDataCreate(nil, bytes.bindMemory(to: UInt8.self).baseAddress, bytes.count)
+        }
+        guard let data, let provider = CGDataProvider(data: data), let space = CGColorSpace(name: CGColorSpace.sRGB),
+              let cg = CGImage(width: width, height: height, bitsPerComponent: 8, bitsPerPixel: 32,
+                               bytesPerRow: rowBytes, space: space,
+                               bitmapInfo: CGBitmapInfo(rawValue: CGImageAlphaInfo.last.rawValue),
+                               provider: provider, decode: nil, shouldInterpolate: true, intent: .defaultIntent) else { return nil }
+        self.init(decorative: cg, scale: scale, orientation: orientation)
+    }
+
     private init(source: CGImage, scale: CGFloat, orientation: Orientation, label: String?) {
         self.source = source
         self.scale = scale.isFinite && scale > 0 ? scale : 1

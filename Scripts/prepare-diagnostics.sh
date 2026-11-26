@@ -88,6 +88,9 @@ awk '/^            Rectangle\(\)$/ { replacing=1; next }
          print "            raster.frame(width: rect.width, height: rect.height).offset(x: rect.minX, y: rect.minY)"
          replacing=0; count++; next }
      !replacing { print } END { if (count != 1 || replacing) exit 1 }' "$target/PixelImageSource.swift" > "$target_dir/PixelImage.swift"
+if [ -f "$source_dir/Linux/PixelImage+Qt.swift" ]; then
+    cp "$source_dir/Linux/PixelImage+Qt.swift" "$target_dir/"
+fi
 gallery_tests="$checkout/Packages/SignalUI/Tests/SignalUITests/Components/MediaGallery"
 cp "$gallery_tests/AttachmentSectionFixtures.swift" "$target_dir/"
 mkdir -p "$target_dir/Media"
@@ -238,6 +241,7 @@ awk 'BEGIN { print "import SwiftUI" } /^public struct TitlebarDragArea:/{ found=
 # The Linux port uses the SwiftUI URL environment for these three screens.
 # Older Serein checkouts still call NSWorkspace directly.
 install="$source_dir/Components/InstallScreen"
+cp "$install/InstallScreenBackupImportStep.swift" "$target_dir/"
 for file in InstallScreen InstallScreenQrCodeNotScannedStep InstallScreenUpdateDialog; do
     if grep -q 'NSWorkspace.shared.open' "$install/$file.swift"; then
         awk '/^import AppKit$/ {next}

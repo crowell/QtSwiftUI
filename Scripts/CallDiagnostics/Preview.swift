@@ -5,6 +5,7 @@ import SignalI18n
 struct DiagnosticPreview: App {
     @State private var showingShortcuts = CommandLine.arguments.contains("--shortcut-guide")
     var body: some Scene {
+        let backup = CommandLine.arguments.contains("--backup-import")
         let qrLink = CommandLine.arguments.contains("--link-qr")
         let linkError = CommandLine.arguments.contains("--link-error")
         let linking = linkError || CommandLine.arguments.contains("--link-device")
@@ -43,8 +44,9 @@ struct DiagnosticPreview: App {
         let recording = CommandLine.arguments.contains("--recording")
         let discard = CommandLine.arguments.contains("--discard-recording")
         let arabic = CommandLine.arguments.contains("--arabic")
-        WindowGroup(qrLink ? "Link device" : folders ? "Chat folders" : lobby ? "Call lobby" : typing ? "Ferry crew" : conversation ? "Nyah Stroman" : timeline ? "Conversation timeline" : muteUntil ? "Mute until" : usernameEditor ? "Username link" : usernameCard ? "Username QR card" : screenShare ? "Share your screen" : stickers ? "Stickers" : timer ? "Disappearing messages" : photoViewer ? "Photo" : callsTab ? "Calls" : inbox ? "Inbox" : appAbout ? "About" : about ? "About contact" : note ? "Contact note" : request ? "Request to join" : linkDetails ? "Call link" : nickname ? "Edit nickname and note" : history ? "Call history" : settings ? (calls ? "Calls" : "Data usage") : survey ? "Call quality" : colorPicker ? "Chat color" : colorEditor ? "Custom chat color" : recording || draft || discard ? "Voice message" : gallery ? "All media" : clearing ? "Clearing data" : linking ? "Link device" : leaveCall ? "Leave current call" : "Call diagnostics") {
-            if qrLink { DeviceLinkQRPreview() }
+        WindowGroup(backup ? "Syncing messages" : qrLink ? "Link device" : folders ? "Chat folders" : lobby ? "Call lobby" : typing ? "Ferry crew" : conversation ? "Nyah Stroman" : timeline ? "Conversation timeline" : muteUntil ? "Mute until" : usernameEditor ? "Username link" : usernameCard ? "Username QR card" : screenShare ? "Share your screen" : stickers ? "Stickers" : timer ? "Disappearing messages" : photoViewer ? "Photo" : callsTab ? "Calls" : inbox ? "Inbox" : appAbout ? "About" : about ? "About contact" : note ? "Contact note" : request ? "Request to join" : linkDetails ? "Call link" : nickname ? "Edit nickname and note" : history ? "Call history" : settings ? (calls ? "Calls" : "Data usage") : survey ? "Call quality" : colorPicker ? "Chat color" : colorEditor ? "Custom chat color" : recording || draft || discard ? "Voice message" : gallery ? "All media" : clearing ? "Clearing data" : linking ? "Link device" : leaveCall ? "Leave current call" : "Call diagnostics") {
+            if backup { InstallScreenBackupImportStep(step: .download(currentBytes: 23_000_000, totalBytes: 50_000_000)).axoViewport() }
+            else if qrLink { DeviceLinkQRPreview() }
             else if folders { ChatFoldersPreview() }
             else if lobby { LobbyPreview() }
             else if conversation {
@@ -97,8 +99,8 @@ struct DiagnosticPreview: App {
                 }
             }
         }
-        .defaultSize(width: qrLink ? 880 : folders ? 640 : lobby ? 900 : conversation || timeline ? 560 : muteUntil ? 640 : usernameCard ? 424 : screenShare ? 840 : stickers ? 600 : photoViewer ? 760 : callsTab ? 760 : inbox ? 840 : linkDetails ? 620 : nickname ? 520 : history ? 360 : settings ? 640 : colorPicker ? 780 : recording || draft ? 640 : linking || clearing ? 680 : 520,
-                     height: qrLink ? 610 : folders ? 730 : lobby ? 590 : desktopMenus ? 660 : conversation ? 502 : timeline ? 450 : muteUntil ? 600 : usernameEditor ? 540 : usernameCard ? 576 : screenShare ? 620 : stickers ? 460 : photoViewer ? 560 : callsTab || inbox ? 520 : about ? 620 : note ? 380 : request ? 510 : linkDetails ? 620 : nickname ? 560 : history ? 418 : settings ? 567 : survey ? 600 : colorPicker ? 720 : colorEditor ? 620 : recording || draft ? 84 : discard ? 280 : linking || clearing ? 420 : 440)
+        .defaultSize(width: qrLink || backup ? 880 : folders ? 640 : lobby ? 900 : conversation || timeline ? 560 : muteUntil ? 640 : usernameCard ? 424 : screenShare ? 840 : stickers ? 600 : photoViewer ? 760 : callsTab ? 760 : inbox ? 840 : linkDetails ? 620 : nickname ? 520 : history ? 360 : settings ? 640 : colorPicker ? 780 : recording || draft ? 640 : linking || clearing ? 680 : 520,
+                     height: qrLink || backup ? 610 : folders ? 730 : lobby ? 590 : desktopMenus ? 660 : conversation ? 502 : timeline ? 450 : muteUntil ? 600 : usernameEditor ? 540 : usernameCard ? 576 : screenShare ? 620 : stickers ? 460 : photoViewer ? 560 : callsTab || inbox ? 520 : about ? 620 : note ? 380 : request ? 510 : linkDetails ? 620 : nickname ? 560 : history ? 418 : settings ? 567 : survey ? 600 : colorPicker ? 720 : colorEditor ? 620 : recording || draft ? 84 : discard ? 280 : linking || clearing ? 420 : 440)
     }
 }
 

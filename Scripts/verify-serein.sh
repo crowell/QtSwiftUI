@@ -87,6 +87,7 @@ if [ -n "${QTSWIFTUI_SCREENSHOT:-}" ]; then
     QTSWIFTUI_SCREENSHOT="$(dirname "$QTSWIFTUI_SCREENSHOT")/media-gallery.png" "$binary" --gallery
     QTSWIFTUI_SCREENSHOT="$(dirname "$QTSWIFTUI_SCREENSHOT")/call-diagnostics.png" "$binary"
     QTSWIFTUI_SCREENSHOT="$(dirname "$QTSWIFTUI_SCREENSHOT")/confirm-leave-call.png" "$binary" --leave-call
+    QTSWIFTUI_SCREENSHOT="$(dirname "$QTSWIFTUI_SCREENSHOT")/backup-import.png" "$binary" --backup-import
     QTSWIFTUI_SCREENSHOT="$(dirname "$QTSWIFTUI_SCREENSHOT")/link-qr.png" "$binary" --link-qr
     QTSWIFTUI_SCREENSHOT="$(dirname "$QTSWIFTUI_SCREENSHOT")/link-device.png" "$binary" --link-device
     QTSWIFTUI_SCREENSHOT="$(dirname "$QTSWIFTUI_SCREENSHOT")/link-error.png" "$binary" --link-error

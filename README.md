@@ -42,6 +42,10 @@ The `--link-qr` example runs Serein’s production device-link QR screen with th
 
 [Provisioning timeout and retry in the same screen](Screenshots/link-qr-retry.png)
 
+The `--backup-import` example runs Serein’s “Syncing messages” screen with a 23 MB of 50 MB test transfer. On both Ubuntu and macOS, tests measure the 46% progress boundary and click the end-to-end encryption help link. The Ubuntu test also dismisses and reopens the cancellation dialog before confirming. The 880 × 610 captures differed by 0.52/255 per RGB channel on average.
+
+![Serein backup import running on Ubuntu](Screenshots/backup-import.png)
+
 The device-link fixture runs Serein’s `InstallScreenLinkInProgressStep` and `InstallScreenErrorStep` with the production Signal logo, localized text, masks, buttons and title-bar drag region. The Linux fixture routes two AppKit URL calls through `openURL` and uses a repeating Qt rotation in place of Core Animation. A test checks that the spinner advances while the Swift view graph is idle. Ubuntu tests click through all four error variants and read the combined sync announcement through Qt accessibility. Shared pixel checks cover the logo, button and progress arc. Set `QTSWIFTUI_LINK_REFERENCE` to an existing directory to capture the Apple references. Desktop window movement requires a compositor and is outside the offscreen test.
 
 ![Serein device-link error on Ubuntu](Screenshots/link-error.png)
@@ -263,7 +267,7 @@ The target is source compatibility with Apple's public SwiftUI APIs. The impleme
 
 `./Scripts/check-apple.sh ../serein` type-checks the example source with Apple's SwiftUI module on a Mac with Xcode. `./Scripts/check-api.sh` extracts public symbol graphs from Xcode and the Linux image. Pass `--missing` to list missing declaration paths. The inventory groups declarations by symbol kind and path, counts overload spellings separately, and excludes underscored and synthesized members. A shared name alone cannot establish matching signatures, constraints, availability or behavior.
 
-The inventory against the macOS 27.2 SDK found 1,435 shared declaration paths out of 7,627 and 924 identical declaration spellings out of 8,735. The examples exercise a smaller set at runtime. Navigation, multiwindow scenes, broader animation support, text shaping parity, gestures and platform integration remain substantial gaps. Font metrics, control appearance and several layout behaviors differ from Apple's implementation.
+The inventory against the macOS 27.2 SDK found 1,436 shared declaration paths out of 7,627 and 925 identical declaration spellings out of 8,735. The examples exercise a smaller set at runtime. Navigation, multiwindow scenes, broader animation support, text shaping parity, gestures and platform integration remain substantial gaps. Font metrics, control appearance and several layout behaviors differ from Apple's implementation.
 
 After capturing the Linux examples, run `./Scripts/compare-artwork.sh ../serein` on macOS to render both illustrations with Apple's `ImageRenderer`. At a threshold of 8/255 in any RGB channel, 101 of 119,680 account artwork pixels (0.084%) and 91 of 49,928 key transparency pixels (0.182%) differed. The mean absolute channel differences were 0.104/255 and 0.095/255 respectively. Both reference images are saved in `.build/artwork/`.
 

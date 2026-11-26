@@ -12,10 +12,12 @@ public struct AccessibilityActionKind: Equatable, Sendable {
 @MainActor final class AccessibleAdjustment {
     let perform: ((AccessibilityAdjustmentDirection) -> Void)?
     let actions: [String: () -> Void]
+    let names: [String]
     var attached = false
-    init(_ perform: ((AccessibilityAdjustmentDirection) -> Void)?, actions: [String: () -> Void]) {
+    init(_ perform: ((AccessibilityAdjustmentDirection) -> Void)?, actions: [String: () -> Void], names: [String]) {
         self.perform = perform
         self.actions = actions
+        self.names = names
     }
 }
 
@@ -23,6 +25,7 @@ nonisolated public struct AccessibilityAttachmentModifier: PrimitiveModifier {
     public typealias Body = Never
     fileprivate var adjustment: ((AccessibilityAdjustmentDirection) -> Void)?
     fileprivate var actions: [String: () -> Void] = [:]
+    fileprivate var actionContent: (@MainActor (Context) -> MenuEntries)?
     fileprivate var hint: String?
     fileprivate var addedTraits: AccessibilityTraits = []
     fileprivate var removedTraits: AccessibilityTraits = []
@@ -37,14 +40,24 @@ nonisolated public struct AccessibilityAttachmentModifier: PrimitiveModifier {
             let added = addedTraits.subtracting(decided)
             context.environment.accessibilityTraits.formUnion(added)
             context.environment.removedAccessibilityTraits.formUnion(removedTraits.subtracting(decided))
-            if adjustment == nil && actions.isEmpty {
+            var callbacks = actions
+            var names = Array(actions.keys)
+            if let entries = actionContent?(context) {
+                for row in entries.rows where row.enabled && !row.title.isEmpty {
+                    if let action = row.action, callbacks[row.title] == nil {
+                        names.append(row.title)
+                        callbacks[row.title] = action
+                    }
+                }
+            }
+            if adjustment == nil && callbacks.isEmpty {
                 guard !added.intersection([.isHeader, .isModal]).isEmpty else { return view.resolve(context) }
                 let group = context.widget(QSGroup)
                 qs_group_semantics(group, added.contains(.isHeader) ? 1 : 0, added.contains(.isModal) ? 1 : 0)
                 return context.children(of: view, inside: group)
             }
-            let target = AccessibleAdjustment(adjustment, actions: actions)
-            let group = context.widget(QSGroup, adjustment: adjustment, accessibilityAction: { actions[$0]?() })
+            let target = AccessibleAdjustment(adjustment, actions: callbacks, names: names)
+            let group = context.widget(QSGroup, adjustment: adjustment, accessibilityAction: { target.actions[$0]?() })
             qs_group_semantics(group, added.contains(.isHeader) ? 1 : 0, added.contains(.isModal) ? 1 : 0)
             let children = context.with(\.adjustment, target).children(of: view, inside: group)
             // Explicit accessibility elements preserve their own names, values and children.
@@ -52,13 +65,18 @@ nonisolated public struct AccessibilityAttachmentModifier: PrimitiveModifier {
             qs_group(group, target.attached ? 1 : 2, 0, 0, context.environment.accessibleValue)
             qs_adjustable(group, !target.attached && adjustment != nil ? 1 : 0)
             qs_group_actions_clear(group)
-            if !target.attached { for action in actions.keys { qs_group_action(group, action) } }
+            if !target.attached { for action in names { qs_group_action(group, action) } }
             return children
         }
     }
 }
 
 extension View {
+    nonisolated public func accessibilityActions<Content: View>(@ContentBuilder _ content: () -> Content) -> some View {
+        let commands = content()
+        return ModifiedContent(content: self, modifier: AccessibilityAttachmentModifier(actionContent: { MenuEntries.commands(commands, in: $0) }))
+    }
+
     nonisolated public func accessibilityAddTraits(_ traits: AccessibilityTraits) -> ModifiedContent<Self, AccessibilityAttachmentModifier> {
         .init(content: self, modifier: .init(addedTraits: traits))
     }

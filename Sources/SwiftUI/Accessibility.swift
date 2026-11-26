@@ -35,7 +35,7 @@ extension View {
             let adjustment = ctx.environment.adjustment
             let widget = ctx.widget(QSGroup, adjustment: adjustment?.perform, accessibilityAction: { adjustment?.actions[$0]?() })
             qs_group_actions_clear(widget)
-            if let adjustment { for name in adjustment.actions.keys { qs_group_action(widget, name) } }
+            if let adjustment { for name in adjustment.names { qs_group_action(widget, name) } }
             adjustment?.attached = true
             qs_adjustable(widget, adjustment?.perform == nil ? 0 : 1)
             let traits = ctx.environment.accessibilityTraits

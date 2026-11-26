@@ -179,7 +179,8 @@ public struct CSSText: View {
         self.init(value, type: style.type, wrap: wrap, alignment: alignment, color: color)
         self.tabular = style.tabular
     }
-    init(runs: [CSSTextRun], style: CSSTextStyle, wrap: CSSTextWrap = .wrap, alignment: TextAlignment = .leading, color: AxoColor? = nil) {
+    init(runs: [CSSTextRun], style: CSSTextStyle, wrap: CSSTextWrap = .wrap, alignment: TextAlignment = .leading, color: AxoColor? = nil,
+         onTap: ((String) -> Void)? = nil) {
         let displayed = runs.map { run -> CSSTextRun in
             guard run.breakAll else { return run }
             var copy = run
@@ -189,9 +190,6 @@ public struct CSSText: View {
         self.init(displayed.map(\.text).joined(), type: style.type, wrap: wrap, alignment: alignment, color: color)
         self.tabular = style.tabular
         if runs.contains(where: { $0.action != nil || $0.color != nil || $0.background != nil || $0.fontName != nil || $0.underline || ($0.emojify && $0.text.contains(where: CSSTextLayout.isEmoji)) }) { self.runs = displayed }
-    }
-    init(runs: [CSSTextRun], style: CSSTextStyle, color: AxoColor? = nil, alignment: TextAlignment = .leading, onTap: ((String) -> Void)?) {
-        self.init(runs: runs, style: style, wrap: .wrap, alignment: alignment, color: color)
         self.onTap = onTap
     }
     private var content: Text {

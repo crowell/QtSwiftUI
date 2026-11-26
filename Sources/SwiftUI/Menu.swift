@@ -24,6 +24,17 @@ import QtBridge
         return result
     }
 
+    static func commands(_ content: some View, in context: Context) -> MenuEntries {
+        var items = context.descending(.property("command content"))
+        // Keep command labels outside the visible view's layout and hit testing.
+        let container = items.widget(QSGroup)
+        qs_drawing_only(container)
+        items.parent = container
+        items.environment.label = ""
+        items.environment.focus = nil
+        return read(content, in: items)
+    }
+
     static func title(_ label: some View, in context: Context) -> String {
         if !context.environment.label.isEmpty { return context.environment.label }
         if let text = label as? Text { return text.string }
@@ -58,14 +69,7 @@ import QtBridge
     }
 
     func configure<Items: View>(_ content: Items?, in context: Context, on popup: UnsafeMutableRawPointer) {
-        var items = context.descending(.property("menu content"))
-        // Resolve composite labels offscreen so their widgets do not participate in layout or hit testing.
-        let container = items.widget(QSGroup)
-        qs_drawing_only(container)
-        items.parent = container
-        items.environment.label = ""
-        items.environment.focus = nil
-        let entries = content.map { MenuEntries.read($0, in: items) } ?? MenuEntries()
+        let entries = content.map { MenuEntries.commands($0, in: context) } ?? MenuEntries()
         install(entries, on: popup)
     }
 }
