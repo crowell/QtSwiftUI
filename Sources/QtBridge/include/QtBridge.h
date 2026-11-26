@@ -67,6 +67,7 @@ int qs_enter(QSWindow *, const char *identifier, const char *value);
 int qs_read_text(QSWindow *, const char *identifier, const char *expected);
 int qs_key_return(QSWindow *, const char *identifier);
 int qs_key_escape(QSWindow *);
+int qs_scroll_to_end(QSWindow *);
 int qs_select_text(QSWindow *, const char *identifier, int start, int length, const char *expected);
 int qs_fixed_font(QSWindow *, const char *identifier);
 int qs_has_focus(QSWindow *, const char *identifier);

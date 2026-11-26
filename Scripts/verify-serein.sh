@@ -25,3 +25,13 @@ binary=$(swift build --package-path "$preview" --show-bin-path)/DevicePreview
 if [ -n "${QTSWIFTUI_SCREENSHOT:-}" ]; then
     QTSWIFTUI_SCREENSHOT="$(dirname "$QTSWIFTUI_SCREENSHOT")/account-artwork.png" "$binary" --artwork
 fi
+
+diagnostics="$preview/diagnostics"
+sh /src/Scripts/prepare-diagnostics.sh "$checkout" "$diagnostics"
+swift test --package-path "$diagnostics"
+binary=$(swift build --package-path "$diagnostics" --show-bin-path)/CallDiagnostics
+if [ -n "${QTSWIFTUI_SCREENSHOT:-}" ]; then
+    QTSWIFTUI_SCREENSHOT="$(dirname "$QTSWIFTUI_SCREENSHOT")/call-diagnostics.png" "$binary"
+else
+    "$binary"
+fi

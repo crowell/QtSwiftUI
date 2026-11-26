@@ -14,6 +14,7 @@
 #include <QPushButton>
 #include <QResizeEvent>
 #include <QScrollArea>
+#include <QScrollBar>
 #include <QSignalBlocker>
 #include <QSlider>
 #include <QTimer>
@@ -498,7 +499,21 @@ int qs_mouse_button(QSWindow *window, const char *id, int down) {
 int qs_mouse_click(QSWindow *window, const char *id) {
     return qs_mouse_button(window, id, 1) && qs_mouse_button(window, id, 0);
 }
+int qs_scroll_to_end(QSWindow *window) {
+    auto *area = window->findChild<QScrollArea *>();
+    if (!area) return 0;
+    auto *bar = area->verticalScrollBar();
+    bar->setValue(bar->maximum());
+    qs_flush();
+    return bar->value() > 0 && bar->value() == bar->maximum();
+}
 int qs_read_text(QSWindow *window, const char *id, const char *expected) {
+    if (!id) {
+        for (const auto *label : window->findChildren<QLabel *>()) {
+            if (label->text() == QString::fromUtf8(expected)) return 1;
+        }
+        return 0;
+    }
     auto *label = window->findChild<QLabel *>(QString::fromUtf8(id));
     return label && label->text() == QString::fromUtf8(expected);
 }

@@ -10,4 +10,8 @@ if [ "$#" -gt 0 ]; then
         "$d/Theme/CSSGrid.swift" "$d/Theme/CSSFlex.swift" "$d/Theme/AxoColor.swift" "$d/Theme/AxoTheme.swift" \
         "$d/Theme/CSSShapes.swift" "$d/Components/QRCode/QRCodeGenerator.swift" "$d/Components/QRCode/QrCode.swift" \
         "$d/Axo/SVGPathData.swift" "$d/Components/Preferences/SignalLoginIllustration.swift"
+    preview=$(mktemp -d)
+    trap 'rm -rf "$preview"' EXIT
+    sh Scripts/prepare-diagnostics.sh "$(cd "$1" && pwd)" "$preview"
+    swift test --package-path "$preview"
 fi

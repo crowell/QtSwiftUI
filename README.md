@@ -12,13 +12,17 @@ From a checkout with Docker running, this command builds the Ubuntu 24.04 image,
 ./Scripts/verify-linux.sh
 ```
 
-Pass a Serein checkout to also render its device card and account artwork.
+Pass a Serein checkout to render its call diagnostics window, device card and account artwork.
 
 ```sh
 ./Scripts/verify-linux.sh ../serein
 ```
 
 The script writes PNGs to `Screenshots/`. It compiles ten unchanged Serein source files in a temporary Swift package. The device card uses `AxoContainer`, `CSSFlex`, `CSSGrid`, `AxoTheme`, `AxoColor`, `SuperellipseRect`, `QrCode` and `QRCodeGenerator`. The sample QR encodes `qtswiftui:device-preview`. The account artwork uses `SVGPathData` and `SignalLoginIllustration`. Both fixtures were exercised with Serein revision `ae84e2b`.
+
+The call diagnostics fixture compiles Serein’s original `CallDiagnosticWindow`, localization environment and `SignalI18n` package. A sample WebRTC report exercises the production JSON formatter. The fixture supplies portable versions of the CoreText title and Axo button using the original color tokens. Its Ubuntu integration test scrolls the report, reads the German title, clicks Close and sends Escape.
+
+![Serein call diagnostics running on Ubuntu](Screenshots/call-diagnostics.png)
 
 ![Serein device card running on Ubuntu](Screenshots/serein-components.png)
 
@@ -45,7 +49,7 @@ The target is source compatibility with Apple's public SwiftUI APIs. The impleme
 | Layout | Stacks, frames, padding, scrolling, geometry, size proposals, placement and custom layout values used by Serein |
 | Controls and rendering | Buttons and custom pressed-state styles, check boxes, text fields, sliders, text, colored surfaces and paths painted by Qt |
 | Graphics | Canvas fills and strokes, even-odd paths, gradient stops, affine transforms and path hit testing. The Linux CoreGraphics module supplies geometry for these APIs. |
-| Keyboard input | Programmatic composer focus, native focus changes and sending with Return. Tests also switch rooms and save a name in the preferences window. |
+| Keyboard input | Programmatic composer focus, native focus changes, sending with Return, Escape commands and selectable monospaced diagnostic text. |
 | Lifecycle | An async view task updates an observable model while the Qt event loop runs. An on-change handler observes the result. |
 
 `./Scripts/check-apple.sh ../serein` type-checks the example source with Apple's SwiftUI module on a Mac with Xcode. `./Scripts/check-api.sh` extracts public symbol graphs from Xcode and the Linux image. Pass `--missing` to list missing declaration paths. The inventory groups declarations by symbol kind and path, counts overload spellings separately, and excludes underscored and synthesized members. A shared name alone cannot establish matching signatures, constraints, availability or behavior.
