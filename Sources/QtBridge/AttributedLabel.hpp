@@ -62,7 +62,8 @@ public:
         cursor.movePosition(QTextCursor::End);
         cursor.insertText(text, format);
     }
-    void finish(bool selectable) {
+    void finish(bool selectable, double requestedSpacing) {
+        const qreal spacing = std::isfinite(requestedSpacing) ? qMax(0.0, requestedSpacing) : 0;
         // Qt 6.4's FreeType backend can report the height of an unscaled sbix
         // strike even though it draws the glyph at the requested pixel size.
         // Keep the original graphemes and anchors selectable in the text document.
@@ -80,10 +81,13 @@ public:
                     lineHeight = qMax(lineHeight, height);
                 }
             }
-            if (oversizedStrike) {
+            if (oversizedStrike || spacing > 0) {
                 QTextCursor cursor(block);
                 auto format = block.blockFormat();
-                format.setLineHeight(std::ceil(lineHeight), QTextBlockFormat::FixedHeight);
+                if (oversizedStrike)
+                    format.setLineHeight(std::ceil(lineHeight) + spacing, QTextBlockFormat::FixedHeight);
+                else
+                    format.setLineHeight(spacing, QTextBlockFormat::LineDistanceHeight);
                 cursor.setBlockFormat(format);
             }
         }
@@ -91,7 +95,8 @@ public:
         if (selectable) flags |= Qt::TextSelectableByMouse | Qt::TextSelectableByKeyboard;
         if (flags != textInteractionFlags()) setTextInteractionFlags(flags);
         const auto alignment = option.alignment();
-        if (pending == displayed && font() == displayedFont && displayedAlignment == alignment && displayedWrap == wraps) return;
+        if (pending == displayed && font() == displayedFont && displayedAlignment == alignment && displayedWrap == wraps && lineSpacing == spacing) return;
+        lineSpacing = spacing;
         displayed = pending;
         displayedFont = font();
         displayedAlignment = alignment;
@@ -147,7 +152,7 @@ public:
         const auto ideal = std::ceil(content.idealWidth());
         const auto available = std::isfinite(width) && width >= 0 ? qMin(ideal, width) : ideal;
         content.setTextWidth(available);
-        return {available, std::ceil(content.size().height())};
+        return {available, std::ceil(content.size().height() - lineSpacing)};
     }
 
     QSBaselines baselines(double width, double height) {
@@ -170,7 +175,7 @@ private:
 
     void alignDocument() {
         document()->setTextWidth(viewport()->width());
-        const int top = qMax(0, int((height() - document()->size().height()) / 2));
+        const int top = qMax(0, int((height() - (document()->size().height() - lineSpacing)) / 2));
         if (viewportMargins().top() != top) setViewportMargins(0, top, 0, 0);
         verticalScrollBar()->setValue(0);
     }
@@ -181,6 +186,7 @@ private:
     QTextOption option;
     Qt::Alignment displayedAlignment;
     bool wraps = true, displayedWrap = true;
+    qreal lineSpacing = 0;
     bool hasLinks = false;
     bool truncated = false;
     int displayWidth = -1, displayLimit = 0;

@@ -71,6 +71,10 @@ extension View {
         Transform(content: self) { view, ctx in view.resolve(ctx.with(\.foregroundPaint, style.paint(in: ctx.environment))) }
     }
     public func multilineTextAlignment(_ alignment: TextAlignment) -> some View { environment(\.multilineTextAlignment, alignment) }
+    nonisolated public func lineSpacing(_ lineSpacing: CGFloat) -> some View {
+        let apply: @MainActor (Context) -> Context = { $0.with(\.lineSpacing, lineSpacing) }
+        return Transform(content: self, readingContext: apply) { $0.resolve(apply($1)) }
+    }
     nonisolated public func lineLimit(_ number: Int?) -> some View { limits(minimum: 1, maximum: number) }
     nonisolated public func lineLimit(_ limit: ClosedRange<Int>) -> some View { limits(minimum: limit.lowerBound, maximum: limit.upperBound) }
     nonisolated public func lineLimit(_ limit: PartialRangeFrom<Int>) -> some View { limits(minimum: limit.lowerBound, maximum: nil) }

@@ -178,11 +178,20 @@ awk '/^import AppKit$/ { print "#if os(Linux)\nimport QtBridge\n#else\nimport Ap
      /NSPasteboard.general.clearContents/ { print "#if os(Linux)\n        qs_clipboard_text(Self.link(packId: pack.id, packKey: pack.key))\n#else" }
      { print } /NSPasteboard.general.setString/ { print "#endif"; count++ }
      END { if (count != 1) exit 1 }' "$source_dir/Components/Stickers/StickerPreviewModal.swift" > "$target_dir/StickerPreviewModal.swift"
+if [ -f "$source_dir/Linux/LineClampText+Qt.swift" ]; then
+    cp "$source_dir/Axo/AxoStackedButton.swift" "$target_dir/"
+    if [ "$(uname -s)" = Linux ]; then
+        cp "$source_dir/Linux/LineClampText+Qt.swift" "$target_dir/"
+    else
+        cp "$source_dir/Axo/LineClampText+CoreText.swift" "$target_dir/"
+    fi
+else
 # The shared CSSText adapter shapes the two-line caption. Keep the actual stacked button and its two Layout types.
 awk '/^struct LineClampText:/ { found=1; exit }
      /^import CoreText$/ {next}
      /LineClampText\(label,/ {print "                    CSSText(label, style: CSSTextStyle(AxoType.caption.weight(500)), alignment: .center).lineLimit(2)"; count++; next}
      {print} END {if (!found || count != 1) exit 1}' "$source_dir/Axo/AxoStackedButton.swift" > "$target_dir/AxoStackedButton.swift"
+fi
 {
     echo 'import SwiftUI'
     declarations '^public struct OfficialChatInlineBadge:' 1 "$source_dir/Components/ConversationList/BaseConversationListItem.swift"
@@ -226,12 +235,35 @@ cp "$source_dir/Axo/AxoBrand.swift" "$source_dir/Axo/AxoDragRegion.swift" \
    "$source_dir/Components/LegacyType.swift" "$source_dir/Components/LegacyIcon.swift" "$target_dir/"
 awk 'BEGIN { print "import SwiftUI" } /^public struct TitlebarDragArea:/{ found=1 }
      found { print } END { if (!found) exit 1 }' "$source_dir/Components/App.swift" > "$target_dir/TitlebarDragArea.swift"
-# Dispatch the two AppKit URL calls through the desktop environment on Linux.
-awk '/^import AppKit/ { print "#if canImport(AppKit)"; print; print "#endif"; next }
-     /^public struct InstallScreenErrorStep:/ { print; print "#if os(Linux)\n    @Environment(\\.openURL) var openURL\n#endif"; next }
-     /NSWorkspace.shared.open/ { print "#if os(Linux)"; line=$0; gsub(/NSWorkspace.shared.open/, "openURL", line)
-         print line; print "#else"; print; print "#endif"; next }
-     { print }' "$source_dir/Components/InstallScreen/InstallScreen.swift" > "$target_dir/InstallScreen.swift"
+# The Linux port uses the SwiftUI URL environment for these three screens.
+# Older Serein checkouts still call NSWorkspace directly.
+install="$source_dir/Components/InstallScreen"
+for file in InstallScreen InstallScreenQrCodeNotScannedStep InstallScreenUpdateDialog; do
+    if grep -q 'NSWorkspace.shared.open' "$install/$file.swift"; then
+        awk '/^import AppKit$/ {next}
+             /static let downloadURL/ || (FILENAME !~ /\/InstallScreen.swift$/ && /@Environment\(.*i18n/) {
+                 print "    @Environment(\\.openURL) var openURL" }
+             {gsub(/NSWorkspace.shared.open/, "openURL"); gsub(/static func open\(/, "func open("); gsub(/onTap: Self.open/, "onTap: open"); print}' \
+             "$install/$file.swift" > "$target_dir/$file.swift"
+    else
+        cp "$install/$file.swift" "$target_dir/"
+    fi
+done
+{
+    echo 'import SwiftUI'
+    declarations '^public enum UpdateDialogType:' 1 "$source_dir/Components/DialogUpdate.swift"
+    echo 'enum DialogUpdate {'
+    awk '/static let (productionDownloadURL|betaDownloadURL)|static func isBeta\(/ {print; count++}
+         END {if (count!=3) exit 1}' "$source_dir/Components/DialogUpdate.swift"
+    echo '}'
+    echo 'enum UnsupportedOSDialog {'
+    awk '/static let unsupportedOSURL/ {print; count++} END {if (count!=1) exit 1}' "$source_dir/Components/UnsupportedOSDialog.swift"
+    echo '}'
+    echo 'extension DeviceLinkQRPreview {'
+    awk '/static let loadedURL = / {print; count++} END {if (count!=1) exit 1}' \
+        "$checkout/Packages/SignalUI/Tests/SignalUITests/Components/InstallScreen/InstallScreenTests.swift"
+    echo '}'
+} > "$target_dir/InstallScreenDependencies.swift"
 { echo '#if canImport(AppKit)'; cat "$source_dir/Theme/CASpin.swift"; echo '#endif'; } > "$target_dir/CASpin.swift"
 # Exercise the exact hidden keyboard controls from the Serein call lobby.
 awk 'BEGIN { print "import SwiftUI\nstruct LobbyKeyboardControls: View {"
@@ -406,10 +438,7 @@ awk '!/^import CoreText$/ {
 awk 'BEGIN { print "extension ChatColorPickerPreview {" } /^    static let customColors:/ { inside=1; count++ }
      inside { print } /^    ]$/ { inside=0 } END { print "}"; if (count!=1 || inside) exit 1 }' \
     "$checkout/Packages/SignalUI/Tests/SignalUITests/Components/ChatColorPickerTests.swift" > "$target_dir/PickerColors.swift"
-# AxoButton uses the type scale. The rest of AxoType.swift defines a CoreText modifier.
-awk '/^public struct AxoType: / { print "import SwiftUI"; inside = 1 }
-     inside { print } inside && /^}$/ { complete = 1; exit } END { if (!complete) exit 1 }' \
-    "$source_dir/Theme/AxoType.swift" > "$target_dir/AxoType.swift"
+sed '/^import CoreText$/d' "$source_dir/Theme/AxoType.swift" > "$target_dir/AxoType.swift"
 mkdir -p "$target_dir/Fonts"
 cp "$source_dir"/Resources/Fonts/Inter-*.ttf "$source_dir/Resources/Fonts/SignalSymbolsVariable.ttf" "$source_dir"/Resources/Fonts/SignalEmoji*.ttf "$target_dir/Fonts/"
 if [ "$(uname -s)" = Linux ]; then cp "$root/Package.resolved" "$target/Package.resolved"; fi

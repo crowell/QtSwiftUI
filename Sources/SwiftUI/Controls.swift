@@ -55,7 +55,9 @@ public struct Text: Primitive {
         }
         let ctx = styled(context)
         let widget: UnsafeMutableRawPointer
-        if let attributed = attributed ?? ((underlineOverride ?? ctx.environment.textUnderline) != nil ? AttributedString(string) : nil) {
+        let spacing = ctx.environment.lineSpacing.isFinite ? max(0, ctx.environment.lineSpacing) : 0
+        let richLayout = (underlineOverride ?? ctx.environment.textUnderline) != nil || spacing > 0
+        if let attributed = attributed ?? (richLayout ? AttributedString(string) : nil) {
             widget = ctx.widget(QSAttributedLabel, action: { value in
                 if let link = URL(string: value) { ctx.environment.openURL(link) }
             })
@@ -73,7 +75,10 @@ public struct Text: Primitive {
             let hint = qs_measure_text(widget, p.width ?? -1, limit, mode)
             let line = qs_line_height(widget)
             let minimum = ctx.environment.minimumLines
-            let capped = ctx.environment.lineLimit.map { min(hint.height, CGFloat(max(1, $0)) * line) } ?? hint.height
+            func heightForLines(_ count: Int) -> CGFloat {
+                CGFloat(max(1, count)) * line + CGFloat(max(0, count - 1)) * spacing
+            }
+            let capped = ctx.environment.lineLimit.map { min(hint.height, heightForLines($0)) } ?? hint.height
             let height = minimum > 1 ? max(capped, CGFloat(minimum) * line) : capped
             return CGSize(width: hint.width, height: height)
         } place: { rect, _ in

@@ -36,6 +36,12 @@ Serein’s leave-call fixture runs its unchanged `ConfirmLeaveCallModal`, `AxoCo
 
 ![Serein leave-call confirmation running on Ubuntu](Screenshots/confirm-leave-call.png)
 
+The `--link-qr` example runs Serein’s production device-link QR screen with the sample provisioning URL from its UI tests. The original QR generator and Canvas draw the code. Scanning the 256-pixel symbol in the Ubuntu capture reproduced the sample URL. Apple and Ubuntu tests activate the support link and retry after a provisioning timeout.
+
+![Serein device-link QR screen on Ubuntu](Screenshots/link-qr.png)
+
+[Provisioning timeout and retry in the same screen](Screenshots/link-qr-retry.png)
+
 The device-link fixture runs Serein’s `InstallScreenLinkInProgressStep` and `InstallScreenErrorStep` with the production Signal logo, localized text, masks, buttons and title-bar drag region. The Linux fixture routes two AppKit URL calls through `openURL` and uses a repeating Qt rotation in place of Core Animation. A test checks that the spinner advances while the Swift view graph is idle. Ubuntu tests click through all four error variants and read the combined sync announcement through Qt accessibility. Shared pixel checks cover the logo, button and progress arc. Set `QTSWIFTUI_LINK_REFERENCE` to an existing directory to capture the Apple references. Desktop window movement requires a compositor and is outside the offscreen test.
 
 ![Serein device-link error on Ubuntu](Screenshots/link-error.png)
@@ -238,6 +244,7 @@ The target is source compatibility with Apple's public SwiftUI APIs. The impleme
 | Model data | State survives row reordering, bindings edit text, observable models invalidate the view, typed environment injection |
 | Layout | Stacks, frames, padding, scrolling, geometry, size proposals, placement and custom layout values used by Serein. Preferences reduce in view-tree order after layout. Anchors position Serein’s floating content in a geometry reader. |
 | Controls and rendering | Buttons and custom pressed-state styles, check boxes, text fields, sliders, text, colored surfaces and paths painted by Qt |
+| Text line spacing | `lineSpacing(_:)` propagates through the environment to plain and attributed text. Shared tests measure explicit and wrapped lines, a single line and reserved space. |
 | Text truncation | `Text.TruncationMode`, `View.truncationMode(_:)` and the environment setting control head, middle and tail truncation with an explicit line limit. Tests cover hard paragraph breaks, formatting on the final visible line and links in one-line labels. An AppKit test click on the second line of head- or middle-truncated attributed text reached the original prefix link. Qt follows the link attached to the displayed letters. Height-only truncation is unverified. |
 | Image export | `ImageRenderer` renders content to an offscreen sRGB `CGImage` with natural or proposed sizing, fractional output scales and transparent or opaque backgrounds. Shared tests examine RGBA pixels and render again after a model update. Extended color modes, the Core Graphics drawing callback and Combine observation remain open. |
 | Bitmap images | CGImage-backed SwiftUI images with scale, eight orientations, padded RGB/RGBA rows, cap insets, tiling, aspect fit and aspect fill. Shared SDK tests exercise nearest-neighbor sampling. Qt uses bilinear filtering for the other interpolation levels. |
@@ -255,7 +262,7 @@ The target is source compatibility with Apple's public SwiftUI APIs. The impleme
 
 `./Scripts/check-apple.sh ../serein` type-checks the example source with Apple's SwiftUI module on a Mac with Xcode. `./Scripts/check-api.sh` extracts public symbol graphs from Xcode and the Linux image. Pass `--missing` to list missing declaration paths. The inventory groups declarations by symbol kind and path, counts overload spellings separately, and excludes underscored and synthesized members. A shared name alone cannot establish matching signatures, constraints, availability or behavior.
 
-The inventory against the macOS 27.2 SDK found 1,426 shared declaration paths out of 7,627 and 916 identical declaration spellings out of 8,735. The examples exercise a smaller set at runtime. Navigation, multiwindow scenes, broader animation support, text shaping parity, gestures and platform integration remain substantial gaps. Font metrics, control appearance and several layout behaviors differ from Apple's implementation.
+The inventory against the macOS 27.2 SDK found 1,428 shared declaration paths out of 7,627 and 917 identical declaration spellings out of 8,735. The examples exercise a smaller set at runtime. Navigation, multiwindow scenes, broader animation support, text shaping parity, gestures and platform integration remain substantial gaps. Font metrics, control appearance and several layout behaviors differ from Apple's implementation.
 
 After capturing the Linux examples, run `./Scripts/compare-artwork.sh ../serein` on macOS to render both illustrations with Apple's `ImageRenderer`. At a threshold of 8/255 in any RGB channel, 101 of 119,680 account artwork pixels (0.084%) and 91 of 49,928 key transparency pixels (0.182%) differed. The mean absolute channel differences were 0.104/255 and 0.095/255 respectively. Both reference images are saved in `.build/artwork/`.
 

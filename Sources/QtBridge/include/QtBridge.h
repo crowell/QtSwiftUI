@@ -69,7 +69,7 @@ void qs_text_display(QSWidget, int limit, enum QSTextTruncation mode, int automa
 void qs_attributed_begin(QSWidget);
 void qs_attributed_append(QSWidget, const char *utf8, size_t count, const char *link, const char *foreground, const char *background,
                           const char *family, double size, int weight, int italic, int underline, const char *underlineColor);
-void qs_attributed_finish(QSWidget, int selectable);
+void qs_attributed_finish(QSWidget, int selectable, double lineSpacing);
 void qs_editor_text(QSWidget, const char *utf8, size_t count);
 const unsigned char *qs_editor_value(QSWidget, size_t *count);
 void qs_scroll_background(QSWidget, int visible, int dark);

@@ -1275,7 +1275,7 @@ void qs_attributed_append(QSWidget w, const char *text, size_t count, const char
                           const char *family, double size, int weight, int italic, int underline, const char *underlineColor) {
     static_cast<AttributedLabel *>(w)->append(QString::fromUtf8(text, qsizetype(count)), link, foreground, background, family, size, weight, italic, underline, underlineColor);
 }
-void qs_attributed_finish(QSWidget w, int selectable) { static_cast<AttributedLabel *>(w)->finish(selectable); }
+void qs_attributed_finish(QSWidget w, int selectable, double lineSpacing) { static_cast<AttributedLabel *>(w)->finish(selectable, lineSpacing); }
 void qs_control_scale(QSWidget w, double scale) {
     auto *item = widget(w);
     if (item->property("qsControlScale").toDouble() == scale) return;

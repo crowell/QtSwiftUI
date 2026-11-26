@@ -78,8 +78,12 @@ public struct CSSTextRun: Hashable, Sendable {
     public var emojiSize: CGFloat?
     public var emojiTopMargin: CGFloat?
     public var breakAll = false
-    public init(_ text: String, color: AxoColor? = nil) { self.text = text; self.color = color }
-    public init(_ text: String, fontName: String) { self.text = text; self.fontName = fontName }
+    public init(_ text: String, fontName: String? = nil, color: AxoColor? = nil, action: String? = nil) {
+        self.text = text
+        self.fontName = fontName
+        self.color = color
+        self.action = action
+    }
 }
 public struct CSSTextStyle {
     var fontName: String
@@ -104,6 +108,12 @@ public struct CSSTextStyle {
         self.lineHeight = lineHeight
         self.letterSpacing = letterSpacing
     }
+    #if canImport(CoreText)
+    var ctFont: CTFont {
+        AxoFonts.register()
+        return CTFontCreateWithName(fontName as CFString, size, nil)
+    }
+    #endif
     var fontMetrics: (ascent: CGFloat, descent: CGFloat, xHeight: CGFloat) { AxoFonts.metrics(family: fontName, size: size) }
     var weight: Int {
         if fontName.hasSuffix("SemiBold") { return 600 }
@@ -169,7 +179,7 @@ public struct CSSText: View {
         self.init(value, type: style.type, wrap: wrap, alignment: alignment, color: color)
         self.tabular = style.tabular
     }
-    init(runs: [CSSTextRun], style: CSSTextStyle, wrap: CSSTextWrap = .wrap, color: AxoColor? = nil, alignment: TextAlignment = .leading) {
+    init(runs: [CSSTextRun], style: CSSTextStyle, wrap: CSSTextWrap = .wrap, alignment: TextAlignment = .leading, color: AxoColor? = nil) {
         let displayed = runs.map { run -> CSSTextRun in
             guard run.breakAll else { return run }
             var copy = run
@@ -181,7 +191,7 @@ public struct CSSText: View {
         if runs.contains(where: { $0.action != nil || $0.color != nil || $0.background != nil || $0.fontName != nil || $0.underline || ($0.emojify && $0.text.contains(where: CSSTextLayout.isEmoji)) }) { self.runs = displayed }
     }
     init(runs: [CSSTextRun], style: CSSTextStyle, color: AxoColor? = nil, alignment: TextAlignment = .leading, onTap: ((String) -> Void)?) {
-        self.init(runs: runs, style: style, wrap: .wrap, color: color, alignment: alignment)
+        self.init(runs: runs, style: style, wrap: .wrap, alignment: alignment, color: color)
         self.onTap = onTap
     }
     private var content: Text {

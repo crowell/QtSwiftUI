@@ -53,6 +53,6 @@ extension Text {
                                      underline?.pattern.qt ?? 0, underline?.color?.hex(environment.colorScheme) ?? "")
             }
         }
-        qs_attributed_finish(widget, environment.selectableText ? 1 : 0)
+        qs_attributed_finish(widget, environment.selectableText ? 1 : 0, environment.lineSpacing)
     }
 }
