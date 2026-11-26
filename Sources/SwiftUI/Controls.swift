@@ -156,6 +156,8 @@ public struct ScrollView<Content: View>: Primitive {
     }
     func elements(in context: Context) -> [Element] {
         let widget = context.widget(QSScroll)
+        qs_scroll_background(widget, context.environment.scrollBackground == .visible ? 1 : 0,
+                             context.environment.colorScheme == .dark ? 1 : 0)
         var inner = context.descending(.position(0))
         inner.parent = qs_scroll_content(widget)
         let origin = NamedOrigin()

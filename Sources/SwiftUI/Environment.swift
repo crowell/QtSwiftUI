@@ -63,6 +63,7 @@ public struct EnvironmentValues {
     public var timeZone: TimeZone = .autoupdatingCurrent
     var accessibilityTraits: AccessibilityTraits = []
     var accessibleValue = ""
+    var scrollBackground = Visibility.automatic
     var stackAxis = Axis.vertical
     var label = "", identifier = "", helpText = ""
 }

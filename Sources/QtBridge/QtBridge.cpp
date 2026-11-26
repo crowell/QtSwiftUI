@@ -1,6 +1,7 @@
 #include "QtBridge.h"
 #include "CanvasBlur.hpp"
 #include "PointerDrag.hpp"
+#include "PlainTextEditor.hpp"
 #include "WindowShortcuts.hpp"
 #include "PathTrim.hpp"
 #include "RasterWidget.hpp"
@@ -21,6 +22,7 @@
 #include <QEnterEvent>
 #include <QElapsedTimer>
 #include <QLineEdit>
+#include <QInputMethodEvent>
 #include <QKeyEvent>
 #include <QMouseEvent>
 #include <QPainter>
@@ -721,6 +723,14 @@ QSWidget qs_create(QSWindow *window, QSWidget parent, QSKind kind, int id) {
         QObject::connect(toggle, &QCheckBox::toggled, window, [=](bool on) { window->event(window->context, id, QSActivate, on ? "1" : "0"); });
         return toggle;
     }
+    case QSTextEditor: {
+        auto *edit = new PlainTextEditor(container);
+        window->observeFocus(edit, id);
+        QObject::connect(edit, &QPlainTextEdit::textChanged, window, [=] {
+            window->event(window->context, id, QSActivate, "");
+        });
+        return edit;
+    }
     case QSEdit: case QSSecureEdit: {
         auto *edit = new QLineEdit(container);
         if (kind == QSSecureEdit) edit->setEchoMode(QLineEdit::Password);
@@ -798,6 +808,28 @@ void qs_text(QSWidget w, const char *s) {
     else if (auto *button = qobject_cast<QAbstractButton *>(widget(w))) button->setText(QString(text).replace('&', "&&"));
     else if (auto *edit = qobject_cast<QLineEdit *>(widget(w)); edit && edit->text() != text) edit->setText(text);
 }
+void qs_editor_text(QSWidget w, const char *utf8, size_t count) {
+    static_cast<PlainTextEditor *>(w)->applyText(QString::fromUtf8(utf8, qsizetype(count)));
+}
+const unsigned char *qs_editor_value(QSWidget w, size_t *count) {
+    auto *editor = static_cast<PlainTextEditor *>(w);
+    editor->utf8 = editor->value().toUtf8();
+    *count = size_t(editor->utf8.size());
+    return reinterpret_cast<const unsigned char *>(editor->utf8.constData());
+}
+void qs_scroll_background(QSWidget w, int visible, int dark) {
+    auto *area = static_cast<QAbstractScrollArea *>(w);
+    auto *viewport = area->viewport();
+    QPalette palette = area->palette();
+    palette.setColor(QPalette::Base, dark ? QColor(30, 30, 30) : QColor(Qt::white));
+    viewport->setPalette(palette);
+    viewport->setBackgroundRole(QPalette::Base);
+    viewport->setAutoFillBackground(visible);
+    viewport->setAttribute(Qt::WA_OpaquePaintEvent, false);
+}
+void qs_editor_indicators(QSWidget w, int vertical) {
+    static_cast<PlainTextEditor *>(w)->setVerticalScrollBarPolicy(vertical ? Qt::ScrollBarAsNeeded : Qt::ScrollBarAlwaysOff);
+}
 void qs_hint(QSWidget w, const char *s) { static_cast<QLineEdit *>(w)->setPlaceholderText(QString::fromUtf8(s)); }
 void qs_checked(QSWidget w, int on) {
     const QSignalBlocker block(widget(w));
@@ -853,6 +885,14 @@ void qs_style(QSWidget w, const char *family, double points, int weight, int ita
         }
     }
     item->setPalette(palette);
+    if (auto *editor = qobject_cast<QPlainTextEdit *>(item)) {
+        auto option = editor->document()->defaultTextOption();
+        const auto desired = Qt::AlignAbsolute | (alignment < 0 ? Qt::AlignLeft : alignment > 0 ? Qt::AlignRight : Qt::AlignHCenter);
+        if (option.alignment() != desired) {
+            option.setAlignment(desired);
+            editor->document()->setDefaultTextOption(option);
+        }
+    }
     if (auto *label = qobject_cast<QLabel *>(item)) {
         label->setWordWrap(wrap);
         label->setAlignment(Qt::AlignAbsolute | Qt::AlignVCenter | (alignment < 0 ? Qt::AlignLeft : alignment > 0 ? Qt::AlignRight : Qt::AlignHCenter));
@@ -1117,6 +1157,9 @@ QSSize qs_measure(QSWidget w, double width) {
         auto box = metrics.boundingRect(QRect(0, 0, available, 1000000), flags, label->text());
         return {double(available), double(qMax(metrics.height(), box.height()))};
     }
+    if (auto *editor = qobject_cast<QPlainTextEdit *>(item)) {
+        return {0, double(editor->fontMetrics().height() * editor->blockCount())};
+    }
     auto size = item->sizeHint();
     return {double(size.width()), double(size.height())};
 }
@@ -1264,6 +1307,15 @@ int qs_enter(QSWindow *window, const char *id, const char *value) {
     edit->insert(QString::fromUtf8(value));
     qs_flush();
     return 1;
+}
+int qs_commit_text(QSWindow *window, const char *utf8, size_t count) {
+    auto *target = window->focusWidget();
+    if (!target || !target->isEnabled() || !target->testAttribute(Qt::WA_InputMethodEnabled)) return 0;
+    QInputMethodEvent input;
+    input.setCommitString(QString::fromUtf8(utf8, qsizetype(count)));
+    QApplication::sendEvent(target, &input);
+    qs_flush();
+    return input.isAccepted();
 }
 int qs_send_key_sequence(QSWindow *window, const char *keys) { return qs_send_repeated_key(window, keys, 0); }
 int qs_send_repeated_key(QSWindow *window, const char *keys, int repeats) {
