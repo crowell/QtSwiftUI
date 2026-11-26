@@ -15,6 +15,7 @@ cp "$source_dir/Calling/CallDiagnosticWindow.swift" "$source_dir/Theme/I18nEnvir
     "$source_dir/Axo/AxoButton.swift" "$source_dir/Tokens/AxoSymbolDefs.generated.swift" \
     "$root"/Scripts/CallDiagnostics/*.swift "$target/Sources/CallDiagnostics/"
 target_dir="$target/Sources/CallDiagnostics"
+cp "$source_dir/Axo/Chat/AxoChatDateSection.swift" "$target_dir/"
 cp "$source_dir/Calling/CallingAudioIndicator.swift" "$source_dir/Theme/SignalIcon.swift" \
    "$source_dir/Axo/SVGPathData.swift" "$source_dir/Tokens/SignalIcons.generated.swift" \
    "$source_dir/Tokens/LegacyColors.generated.swift" "$target_dir/"

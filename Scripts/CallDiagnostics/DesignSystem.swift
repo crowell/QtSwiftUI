@@ -53,13 +53,15 @@ struct CSSText: View {
     let value: String
     let type: AxoType
     let wrap: PreviewWrap
+    let alignment: TextAlignment
     let color: AxoColor?
     @Environment(\.cssTextWrapWidth) private var wrapWidth
 
-    init(_ value: String, type: AxoType, wrap: PreviewWrap = .wrap, color: AxoColor? = nil) {
+    init(_ value: String, type: AxoType, wrap: PreviewWrap = .wrap, alignment: TextAlignment = .leading, color: AxoColor? = nil) {
         self.value = value
         self.type = type
         self.wrap = wrap
+        self.alignment = alignment
         self.color = color
     }
     init(runs: [CSSTextRun], style: CSSTextStyle, wrap: PreviewWrap) {
@@ -80,7 +82,9 @@ struct CSSText: View {
         }
     }
     var body: some View {
-        if let color { label.foregroundStyle(color) } else { label }
+        Group {
+            if let color { label.foregroundStyle(color) } else { label }
+        }.multilineTextAlignment(alignment)
     }
 }
 public enum AxoSymbol {

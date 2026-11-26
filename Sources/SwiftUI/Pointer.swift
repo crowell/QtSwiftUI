@@ -6,14 +6,12 @@ extension Context {
         var inner = descending(.position(0))
         inner.parent = group
         let child = stacked(view.resolve(inner), axis: .vertical, alignment: .center, spacing: 8)
-        let wrapper = Element(size: child.measure) { bounds, proposal in
+        let wrapper = child.wrapping(size: child.measure) { bounds, proposal in
             prepare?(bounds.size)
             qs_place(group, bounds.minX, bounds.minY, bounds.width, bounds.height)
             child.place(CGRect(origin: .zero, size: bounds.size), proposal)
             qs_group_finish_layout(group)
         }
-        wrapper.values = child.values
-        wrapper.priority = child.priority
         return [wrapper]
     }
 }

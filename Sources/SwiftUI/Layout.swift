@@ -61,11 +61,35 @@ public enum Axis: Int8, CaseIterable, Sendable {
     init(size: @escaping (ProposedViewSize) -> CGSize, place: @escaping (CGRect, ProposedViewSize) -> Void) {
         self.sizing = size; self.place = place
     }
+    func wrapping(size: @escaping (ProposedViewSize) -> CGSize, place: @escaping (CGRect, ProposedViewSize) -> Void) -> Element {
+        let wrapper = Element(size: size, place: place)
+        wrapper.values = values
+        wrapper.priority = priority
+        return wrapper
+    }
     func measure(_ proposal: ProposedViewSize) -> CGSize {
         if let known = measured[proposal] { return known }
         let size = sizing(proposal)
         measured[proposal] = size
         return size
+    }
+}
+
+private enum ZIndexKey: LayoutValueKey { static let defaultValue = 0.0 }
+
+extension View {
+    public func zIndex(_ value: Double) -> some View { layoutValue(key: ZIndexKey.self, value: value) }
+}
+
+@MainActor private struct Placement {
+    let child: Element
+    let rect: CGRect
+    let proposal: ProposedViewSize
+    var depth: Double { child.values[ObjectIdentifier(ZIndexKey.self)] as? Double ?? 0 }
+
+    static func draw(_ placements: [Self]) {
+        let ordered = placements.contains { $0.depth != 0 } ? placements.sorted { $0.depth < $1.depth } : placements
+        for item in ordered { item.child.place(item.rect, item.proposal) }
     }
 }
 
@@ -109,12 +133,14 @@ public enum Axis: Int8, CaseIterable, Sendable {
         return size
     } place: { bounds, p in
         var cursor = axis == .horizontal ? bounds.minX : bounds.minY
+        var placements: [Placement] = []
         for (child, (size, offer)) in zip(children, arrange(p)) {
             var rect = alignment.rect(size, in: bounds)
             if axis == .horizontal { rect.origin.x = cursor } else { rect.origin.y = cursor }
-            child.place(rect, offer)
+            placements.append(Placement(child: child, rect: rect, proposal: offer))
             cursor += size[keyPath: axis.main] + spacing
         }
+        Placement.draw(placements)
     }
 }
 
@@ -124,6 +150,7 @@ public protocol LayoutValueKey {
 }
 @MainActor public struct LayoutSubview {
     let element: Element
+    let placeElement: (CGRect, ProposedViewSize) -> Void
     public func sizeThatFits(_ proposal: ProposedViewSize) -> CGSize { element.measure(proposal) }
     public subscript<K: LayoutValueKey>(_ key: K.Type) -> K.Value {
         element.values[ObjectIdentifier(key)] as? K.Value ?? K.defaultValue
@@ -131,7 +158,7 @@ public protocol LayoutValueKey {
     public var priority: Double { element.priority }
     public func place(at position: CGPoint, anchor: UnitPoint = .topLeading, proposal: ProposedViewSize) {
         let size = sizeThatFits(proposal)
-        element.place(CGRect(x: position.x - size.width * anchor.x, y: position.y - size.height * anchor.y,
+        placeElement(CGRect(x: position.x - size.width * anchor.x, y: position.y - size.height * anchor.y,
                              width: size.width, height: size.height), proposal)
     }
 }
@@ -161,10 +188,20 @@ private struct LayoutContainer<L: Layout, Content: View>: Primitive {
     let layout: L
     let content: Content
     func elements(in context: Context) -> [Element] {
-        let subviews = LayoutSubviews(items: content.resolve(context).map(LayoutSubview.init))
+        let children = content.resolve(context)
+        var placements = [Placement?](repeating: nil, count: children.count)
+        let subviews = LayoutSubviews(items: children.enumerated().map { index, child in
+            LayoutSubview(element: child) { rect, proposal in
+                placements[index] = Placement(child: child, rect: rect, proposal: proposal)
+            }
+        })
         var cache = layout.makeCache(subviews: subviews)
         return [Element { layout.sizeThatFits(proposal: $0, subviews: subviews, cache: &cache) }
-                place: { layout.placeSubviews(in: $0, proposal: $1, subviews: subviews, cache: &cache) }]
+                place: { bounds, proposal in
+                    for index in placements.indices { placements[index] = nil }
+                    layout.placeSubviews(in: bounds, proposal: proposal, subviews: subviews, cache: &cache)
+                    Placement.draw(placements.compactMap { $0 })
+                }]
     }
 }
 public struct HStack<Content: View>: Primitive {
@@ -195,7 +232,7 @@ public struct ZStack<Content: View>: Primitive {
         return [Element { p in
             children.map { $0.measure(p) }.reduce(.zero) { CGSize(width: max($0.width, $1.width), height: max($0.height, $1.height)) }
         } place: { bounds, p in
-            for child in children { child.place(alignment.rect(child.measure(p), in: bounds), p) }
+            Placement.draw(children.map { Placement(child: $0, rect: alignment.rect($0.measure(p), in: bounds), proposal: p) })
         }]
     }
 }

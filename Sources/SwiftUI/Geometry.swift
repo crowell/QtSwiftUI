@@ -58,7 +58,7 @@ private struct GeometryObserver<Content: View, Value: Equatable & Sendable>: Pri
             let sample = context.host.storage[path] as? GeometrySample<Value> ?? GeometrySample<Value>()
             context.host.storage[path] = sample
             context.host.liveStorage.insert(path)
-            let element = Element(size: child.measure) { bounds, proposal in
+            let element = child.wrapping(size: child.measure) { bounds, proposal in
                 child.place(bounds, proposal)
                 let value = project(context.geometry(in: bounds))
                 let previous = sample.value
@@ -67,8 +67,6 @@ private struct GeometryObserver<Content: View, Value: Equatable & Sendable>: Pri
                     context.host.afterLayout { change(previous ?? value, value) }
                 }
             }
-            element.priority = child.priority
-            element.values = child.values
             return element
         }
     }
@@ -89,7 +87,7 @@ extension View {
             var inner = context
             inner.spaces[AnyHashable(name)] = origin
             return view.resolve(inner).map { child in
-                Element(size: child.measure) { bounds, proposal in
+                child.wrapping(size: child.measure) { bounds, proposal in
                     let offset = context.windowOffset
                     origin.point = CGPoint(x: bounds.minX + offset.x, y: bounds.minY + offset.y)
                     child.place(bounds, proposal)
@@ -117,7 +115,7 @@ extension View {
             var inner = context.descending(.position(0))
             inner.parent = container
             let child = stacked(view.resolve(inner), axis: .vertical, alignment: .center, spacing: 8)
-            return [Element(size: child.measure) { bounds, proposal in
+            return [child.wrapping(size: child.measure) { bounds, proposal in
                 qs_place(container, bounds.minX, bounds.minY, bounds.width, bounds.height)
                 child.place(CGRect(origin: .zero, size: bounds.size), proposal)
             }]
@@ -133,7 +131,7 @@ extension View {
     public func offset(x: CGFloat = 0, y: CGFloat = 0) -> some View {
         Transform(content: self) { view, ctx in
             let dx = ctx.interpolated(x, key: "offset x"), dy = ctx.interpolated(y, key: "offset y")
-            return view.resolve(ctx).map { child in Element(size: child.measure) { child.place($0.offsetBy(dx: dx, dy: dy), $1) } }
+            return view.resolve(ctx).map { child in child.wrapping(size: child.measure) { child.place($0.offsetBy(dx: dx, dy: dy), $1) } }
         }
     }
     public func offset(_ offset: CGSize) -> some View { self.offset(x: offset.width, y: offset.height) }

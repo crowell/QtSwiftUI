@@ -67,13 +67,11 @@ private struct PlacedAnchor<Content: View, A, Output: View>: Primitive {
         var global = CGRect.zero
         let elements = output(content) { Anchor(global: source.value(global), translate: source.translate) }.resolve(context)
         return elements.map { child in
-            let placed = Element(size: child.measure) { bounds, proposal in
+            let placed = child.wrapping(size: child.measure) { bounds, proposal in
                 let offset = context.windowOffset
                 global = bounds.offsetBy(dx: offset.x, dy: offset.y)
                 child.place(bounds, proposal)
             }
-            placed.values = child.values
-            placed.priority = child.priority
             return placed
         }
     }

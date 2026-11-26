@@ -113,7 +113,7 @@ extension View {
             let base = stacked(view.resolve(inner), axis: .vertical, alignment: .center, spacing: 8)
             let decoration = context.descending(.position(1))
             let background = above ? nil : decoration.widget(QSGroup)
-            let result = Element(size: base.measure) { bounds, proposal in
+            let result = base.wrapping(size: base.measure) { bounds, proposal in
                 var target = decoration
                 var area = bounds
                 if let background {
@@ -128,8 +128,6 @@ extension View {
                     child.place(alignment.rect(child.measure(offer), in: area), offer)
                 }
             }
-            result.values = base.values
-            result.priority = base.priority
             return [result]
         }
     }

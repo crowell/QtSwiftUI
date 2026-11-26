@@ -21,7 +21,7 @@ extension View {
             var inner = ctx.descending(.position(0))
             inner.parent = widget
             let child = stacked(view.resolve(inner), axis: .vertical, alignment: .center, spacing: 8)
-            return [Element(size: child.measure) { bounds, proposal in
+            return [child.wrapping(size: child.measure) { bounds, proposal in
                 qs_place(widget, bounds.minX, bounds.minY, bounds.width, bounds.height)
                 child.place(CGRect(origin: .zero, size: bounds.size), proposal)
             }]
@@ -49,7 +49,7 @@ extension View {
             inner.environment.accessibilityTraits = []
             inner.environment.accessibleValue = ""
             let child = stacked(view.resolve(inner), axis: .vertical, alignment: .center, spacing: 8)
-            return [Element(size: child.measure) { bounds, p in
+            return [child.wrapping(size: child.measure) { bounds, p in
                 qs_place(widget, bounds.minX, bounds.minY, bounds.width, bounds.height)
                 child.place(CGRect(origin: .zero, size: bounds.size), p)
             }]
