@@ -2,7 +2,9 @@
 
 QtSwiftUI is a Linux implementation of part of SwiftUI for the Serein port. Applications import `SwiftUI`. Swift evaluates view bodies, tracks state and computes layout. Qt 6 Widgets supplies the window, native controls, input handling, text measurement and shape painting.
 
-![Conversation example running on Ubuntu](Screenshots/conversation.png)
+Serein’s production `SignalSafe` executable builds on Ubuntu ARM64 and opens its device-linking window with the Qt backend. Its Linux supervisor supplies seven service routes. The capture used an unprivileged Docker desktop, an empty GNOME Keyring and a fresh SQLCipher database. Networking was disabled, so the QR panel is waiting for a provisioning URL.
+
+![Serein’s production device-link window on Ubuntu ARM64](Screenshots/serein-linux.png)
 
 ## Run the examples
 
