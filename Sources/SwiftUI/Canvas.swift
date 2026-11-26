@@ -83,7 +83,8 @@ public struct GraphicsContext {
         }
     }
     fileprivate struct Draw {
-        let path: Path, shading: Shading, fill: FillStyle, transform: CGAffineTransform
+        enum Source { case shading(Shading), image(ResolvedImage) }
+        let path: Path, source: Source, fill: FillStyle, transform: CGAffineTransform
         let opacity: Double, lineWidth: CGFloat?
         let environment: EnvironmentValues
         let clip: ClipRegion
@@ -119,13 +120,49 @@ public struct GraphicsContext {
         fill(path.strokedPath(style), with: shading)
     }
     public func fill(_ path: Path, with shading: Shading, style: FillStyle = FillStyle()) {
-        list.drawings.append(Draw(path: path, shading: shading, fill: style, transform: transform, opacity: opacity, lineWidth: nil, environment: environment, clip: region, filters: filters))
+        record(.shading(shading), path: path, style: style)
     }
     public func stroke(_ path: Path, with shading: Shading, lineWidth: CGFloat = 1) {
         if lineWidth > 0 {
-            list.drawings.append(Draw(path: path, shading: shading, fill: FillStyle(), transform: transform, opacity: opacity, lineWidth: lineWidth, environment: environment, clip: region, filters: filters))
+            record(.shading(shading), path: path, style: FillStyle(), lineWidth: lineWidth)
         }
     }
+    public struct ResolvedImage {
+        fileprivate let image: Image
+        fileprivate let environment: EnvironmentValues
+        public var size: CGSize { image.naturalSize }
+        public let baseline: CGFloat
+        public var shading: Shading?
+    }
+
+    public func resolve(_ image: Image) -> ResolvedImage {
+        ResolvedImage(image: image, environment: environment, baseline: image.naturalSize.height)
+    }
+
+    public func draw(_ image: Image, in rect: CGRect, style: FillStyle = FillStyle()) {
+        draw(resolve(image), in: rect, style: style)
+    }
+
+    public func draw(_ image: Image, at point: CGPoint, anchor: UnitPoint = .center) {
+        draw(resolve(image), at: point, anchor: anchor)
+    }
+
+    public func draw(_ image: ResolvedImage, in rect: CGRect, style: FillStyle = FillStyle()) {
+        guard !rect.isEmpty else { return }
+        record(.image(image), path: Path(rect), style: style)
+    }
+
+    public func draw(_ image: ResolvedImage, at point: CGPoint, anchor: UnitPoint = .center) {
+        let size = image.size
+        let origin = CGPoint(x: point.x - size.width * anchor.x, y: point.y - size.height * anchor.y)
+        draw(image, in: CGRect(origin: origin, size: size))
+    }
+
+    private func record(_ source: Draw.Source, path: Path, style: FillStyle, lineWidth: CGFloat? = nil) {
+        list.drawings.append(Draw(path: path, source: source, fill: style, transform: transform, opacity: opacity,
+                                  lineWidth: lineWidth, environment: environment, clip: region, filters: filters))
+    }
+
     @MainActor fileprivate func replay(on widget: UnsafeMutableRawPointer) {
         qs_canvas_clear(widget)
         for drawing in list.drawings {
@@ -138,7 +175,16 @@ public struct GraphicsContext {
                 qs_canvas_blur(widget, filter.radius, filter.options.rawValue, options.rawValue)
             }
             let environment = drawing.environment
-            switch drawing.shading.paint {
+            let shading: Shading
+            switch drawing.source {
+            case .image(let resolved):
+                resolved.image.withRaster(in: resolved.environment) { qs_canvas_image(widget, $0, resolved.shading == nil ? 0 : 1) }
+                guard let tint = resolved.shading else { continue }
+                shading = tint
+            case .shading(let value):
+                shading = value
+            }
+            switch shading.paint {
             case .style(let style):
                 switch style.paint(in: environment) {
                 case .color(let color): qs_canvas_color(widget, color.hex(environment.colorScheme))

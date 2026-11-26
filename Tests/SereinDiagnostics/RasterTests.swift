@@ -8,6 +8,12 @@ import QtBridge
 import AppKit
 #endif
 
+// Supply the decoded bitmap to Serein's drawBackground method without its Core Image loader.
+struct EditorBackgroundFixture {
+    let background: (image: CGImage, cgImage: CGImage?)
+    init(_ image: CGImage) { background = (image, image) }
+}
+
 private struct SizeProbe: Layout {
     let check: (LayoutSubview) -> Void
     func sizeThatFits(proposal: ProposedViewSize, subviews: Subviews, cache: inout ()) -> CGSize {
@@ -22,14 +28,18 @@ private struct SizeProbe: Layout {
 @MainActor final class RasterTests: XCTestCase {
     private let colors: [UInt32] = [0xff0000, 0x00ff00, 0x0000ff, 0xffff00, 0xff00ff, 0x00ffff]
 
-    private func image() throws -> CGImage {
+    private func image(cell: Int = 1) throws -> CGImage {
+        let width = 3 * cell, height = 2 * cell, stride = width * 4 + 4
         var bytes: [UInt8] = []
-        for row in [colors.prefix(3), colors.suffix(3)] {
-            for pixel in row { bytes += [UInt8(pixel >> 16), UInt8((pixel >> 8) & 255), UInt8(pixel & 255), 255] }
-            bytes += [77, 88, 99, 111] // Padding is outside the three visible pixels.
+        for y in 0..<height {
+            for x in 0..<width {
+                let pixel = colors[(y / cell) * 3 + x / cell]
+                bytes += [UInt8(pixel >> 16), UInt8((pixel >> 8) & 255), UInt8(pixel & 255), 255]
+            }
+            bytes += [77, 88, 99, 111] // Stride includes a pixel of padding after each row.
         }
         let data = try XCTUnwrap(CFDataCreate(nil, bytes, bytes.count))
-        return try XCTUnwrap(CGImage(width: 3, height: 2, bitsPerComponent: 8, bitsPerPixel: 32, bytesPerRow: 16,
+        return try XCTUnwrap(CGImage(width: width, height: height, bitsPerComponent: 8, bitsPerPixel: 32, bytesPerRow: stride,
                                      space: try XCTUnwrap(CGColorSpace(name: CGColorSpace.sRGB)), bitmapInfo: CGBitmapInfo(rawValue: CGImageAlphaInfo.last.rawValue),
                                      provider: try XCTUnwrap(CGDataProvider(data: data)), decode: nil, shouldInterpolate: false, intent: .defaultIntent))
     }
@@ -55,6 +65,71 @@ private struct SizeProbe: Layout {
             return UInt32(bytes[i]) << 16 | UInt32(bytes[i+1]) << 8 | UInt32(bytes[i+2])
         }
         #endif
+    }
+
+    func testMediaEditorCropsFlipsAndRotatesTheBackground() throws {
+        let cell = 8
+        let renderer = EditorBackgroundFixture(try image(cell: cell))
+        func draw(_ state: MediaEditorImageState) throws -> [UInt32] {
+            let view = Canvas { ctx, _ in
+                ctx.fill(Path(CGRect(x: 0, y: 0, width: 32, height: 32)), with: .color(.black))
+                ctx.translateBy(x: 1, y: 1)
+                renderer.drawBackground(state, in: ctx)
+            }
+            let points = (0..<Int(state.height) / cell).flatMap { y in
+                (0..<Int(state.width) / cell).map { ($0 * cell + 5, y * cell + 5) }
+            }
+            return try sample(view, width: 32, height: 32, points: points + [(0, 5), (1 + Int(state.width), 5)])
+        }
+        var crop = MediaEditorImageState(width: 16, height: 16)
+        crop.cropX = 8
+        crop.flipX = true
+        XCTAssertEqual(try draw(crop), [colors[2], colors[1], colors[5], colors[4], 0, 0])
+        var turned = MediaEditorImageState(width: 16, height: 24)
+        turned.angle = 90
+        XCTAssertEqual(try draw(turned), [colors[3], colors[0], colors[4], colors[1], colors[5], colors[2], 0, 0])
+    }
+
+    func testResolvedCanvasImageMetricsAndShadingUseItsAlpha() throws {
+        let bytes: [UInt8] = (0..<96).flatMap { index -> [UInt8] in
+            [0, 0, 255, index % 12 < 6 ? 255 : 0]
+        }
+        let data = try XCTUnwrap(CFDataCreate(nil, bytes, bytes.count))
+        let cg = try XCTUnwrap(CGImage(width: 12, height: 8, bitsPerComponent: 8, bitsPerPixel: 32, bytesPerRow: 48,
+            space: try XCTUnwrap(CGColorSpace(name: CGColorSpace.sRGB)), bitmapInfo: CGBitmapInfo(rawValue: CGImageAlphaInfo.last.rawValue),
+            provider: try XCTUnwrap(CGDataProvider(data: data)), decode: nil, shouldInterpolate: false, intent: .defaultIntent))
+        let image = Image(decorative: cg, scale: 2, orientation: .right)
+        let red = Color(red: 1, green: 0, blue: 0), green = Color(red: 0, green: 1, blue: 0)
+        let view = Canvas { ctx, _ in
+            ctx.fill(Path(CGRect(x: 0, y: 0, width: 24, height: 12)), with: .color(.white))
+            var resolved = ctx.resolve(image)
+            XCTAssertEqual(resolved.size, CGSize(width: 4, height: 6))
+            XCTAssertEqual(resolved.baseline, 6)
+            XCTAssertNil(resolved.shading)
+            ctx.draw(resolved, at: CGPoint(x: 0, y: 0), anchor: .topLeading)
+            resolved.shading = .color(red)
+            ctx.draw(resolved, in: CGRect(x: 6, y: 0, width: 6, height: 12))
+            resolved.shading = .linearGradient(Gradient(colors: [red, green]), startPoint: CGPoint(x: 16, y: 0),
+                                               endPoint: CGPoint(x: 20, y: 0))
+            ctx.draw(resolved, in: CGRect(x: 14, y: 0, width: 10, height: 12))
+        }
+        let pixels = try sample(view, width: 24, height: 12, points: [(1, 1), (1, 5), (8, 2), (8, 9), (14, 2), (22, 2), (22, 9)])
+        let expected: [UInt32] = [0x0000ff, 0xffffff, 0xff0000, 0xffffff, 0xff0000, 0x00ff00, 0xffffff]
+        for (pixel, target) in zip(pixels, expected) {
+            for shift in [0, 8, 16] {
+                XCTAssertEqual(Double(pixel >> shift & 255), Double(target >> shift & 255), accuracy: 1)
+            }
+        }
+    }
+
+    func testCanvasPositionsAnOrientedImageByItsAnchor() throws {
+        let photo = Image(decorative: try image(), scale: 0.5, orientation: .right).interpolation(.none)
+        let view = Canvas { ctx, _ in
+            ctx.fill(Path(CGRect(x: 0, y: 0, width: 8, height: 8)), with: .color(.black))
+            ctx.draw(photo, at: CGPoint(x: 6, y: 7), anchor: .bottomTrailing)
+        }
+        let pixels = try sample(view, width: 8, height: 8, points: [(1, 1), (2, 1), (5, 1), (2, 6), (5, 6), (6, 6)])
+        XCTAssertEqual(pixels, [0, colors[3], colors[0], colors[5], colors[2], 0])
     }
 
     func testMagnificationResolvesOriginalImagePixels() throws {

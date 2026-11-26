@@ -57,6 +57,16 @@ declarations() {
     awk -v pattern="$1" -v expected="$2" '$0 ~ pattern { inside=1; count++ }
         inside { print } /^}$/ { inside=0 } END { if (count != expected || inside) exit 1 }' "$3"
 }
+# Use the editor’s original crop transform and Canvas background renderer in the cross-platform raster tests.
+editor="$source_dir/Components/MediaEditor"
+{
+    echo 'import SwiftUI'
+    declarations '^public struct MediaEditorImageState:' 1 "$editor/MediaEditorModel.swift"
+    echo 'extension EditorBackgroundFixture {'
+    awk '/^    func drawBackground\(/ {inside=1; count++} inside {print} /^    }$/ {inside=0}
+         END {if (count!=1 || inside) exit 1}' "$editor/MediaEditorCanvas.swift"
+    echo '}'
+} > "$target/Tests/ScreenTests/EditorBackground.swift"
 {
     echo 'import SwiftUI'
     echo 'import CodecCore'

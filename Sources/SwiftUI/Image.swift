@@ -58,25 +58,36 @@ public nonisolated struct Image: View, Equatable, Sendable {
     }
 }
 
+extension Image {
+    var naturalSize: CGSize {
+        let rotated = orientation.rawValue >= Orientation.left.rawValue
+        return CGSize(width: CGFloat(rotated ? source.height : source.width) / scale,
+                      height: CGFloat(rotated ? source.width : source.height) / scale)
+    }
+
+    func withRaster(in environment: EnvironmentValues, _ draw: (QSRasterImage) -> Void) {
+        guard let data = source.dataProvider?.data else { return }
+        let rtl = environment.layoutDirection == .rightToLeft
+        let smooth = interpolation.map { $0 != .none } ?? source.shouldInterpolate
+        withExtendedLifetime(data) {
+            draw(QSRasterImage(bytes: CFDataGetBytePtr(data), width: Int32(source.width), height: Int32(source.height),
+                               stride: source.bytesPerRow, alpha: Int32(source.alphaInfo.rawValue),
+                               little: source.bitmapInfo.contains(.byteOrder32Little) ? 1 : 0,
+                               orientation: Int32(orientation.rawValue), scale: scale, smooth: smooth ? 1 : 0,
+                               left: max(0, rtl ? caps.trailing : caps.leading), top: max(0, caps.top),
+                               right: max(0, rtl ? caps.leading : caps.trailing), bottom: max(0, caps.bottom),
+                               tile: resizing == .tile ? 1 : 0))
+        }
+    }
+}
+
 private struct Raster: Primitive {
     let image: Image
 
     func elements(in context: Context) -> [Element] {
         let widget = context.widget(QSRaster)
-        let source = image.source
-        let rotated = image.orientation.rawValue >= Image.Orientation.left.rawValue
-        let ideal = CGSize(width: CGFloat(rotated ? source.height : source.width) / image.scale,
-                           height: CGFloat(rotated ? source.width : source.height) / image.scale)
-        if let data = source.dataProvider?.data {
-            let smooth = image.interpolation.map { $0 != .none } ?? source.shouldInterpolate
-            qs_raster_image(widget, CFDataGetBytePtr(data), Int32(source.width), Int32(source.height), source.bytesPerRow,
-                            Int32(source.alphaInfo.rawValue), source.bitmapInfo.contains(.byteOrder32Little) ? 1 : 0,
-                            Int32(image.orientation.rawValue), image.scale, smooth ? 1 : 0)
-        }
-        let rtl = context.environment.layoutDirection == .rightToLeft
-        let caps = image.caps
-        qs_raster_resize(widget, max(0, rtl ? caps.trailing : caps.leading), max(0, caps.top),
-                         max(0, rtl ? caps.leading : caps.trailing), max(0, caps.bottom), image.resizing == .tile ? 1 : 0)
+        let ideal = image.naturalSize
+        image.withRaster(in: context.environment) { qs_raster_image(widget, $0) }
         return [Element { image.resizing == nil ? ideal : $0.replacingUnspecifiedDimensions(by: ideal) } place: { rect, _ in
             qs_place(widget, rect.minX, rect.minY, rect.width, rect.height)
         }]

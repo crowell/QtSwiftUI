@@ -38,12 +38,12 @@ QImage readPixels(const unsigned char *bytes, int width, int height, qsizetype s
 }
 }
 
-void qs_raster_image(QSWidget w, const unsigned char *bytes, int width, int height, size_t stride,
-                     int alpha, int little, int orientation, double scale, int smooth) {
-    auto *view = static_cast<RasterWidget *>(w);
-    auto image = readPixels(bytes, width, height, stride, alpha, little);
+RasterContent::RasterContent(QSRasterImage source)
+    : image(readPixels(source.bytes, source.width, source.height, source.stride, source.alpha, source.little)),
+      caps(source.left, source.top, source.right, source.bottom), scale(source.scale),
+      tile(source.tile), smooth(source.smooth) {
     // SwiftUI.Image.Orientation raw values, including the two transposed orientations.
-    switch (orientation) {
+    switch (source.orientation) {
     case 1: image = image.mirrored(true, false); break;
     case 2: image = image.mirrored(true, true); break;
     case 3: image = image.mirrored(false, true); break;
@@ -52,15 +52,12 @@ void qs_raster_image(QSWidget w, const unsigned char *bytes, int width, int heig
     case 6: image = image.transformed(QTransform().rotate(90)); break;
     case 7: image = image.transformed(QTransform().rotate(-90)).mirrored(true, false); break;
     }
-    view->image = std::move(image);
-    view->scale = scale;
-    view->smooth = smooth;
-    view->update();
 }
-void qs_raster_resize(QSWidget w, double left, double top, double right, double bottom, int tile) {
+
+void qs_raster_image(QSWidget w, QSRasterImage source) {
     auto *view = static_cast<RasterWidget *>(w);
-    view->caps = QMarginsF(left, top, right, bottom);
-    view->tile = tile;
+    view->content = RasterContent(source);
+    view->update();
 }
 
 void RasterWidget::paintEvent(QPaintEvent *) {
@@ -69,10 +66,13 @@ void RasterWidget::paintEvent(QPaintEvent *) {
 }
 
 void RasterWidget::draw(QPainter &painter) const {
-    if (image.isNull()) return;
     painter.translate(property("qsFraction").toPointF());
+    content.draw(painter, property("qsSize").toSizeF());
+}
+
+void RasterContent::draw(QPainter &painter, QSizeF size) const {
+    if (image.isNull() || size.isEmpty()) return;
     painter.setRenderHint(QPainter::SmoothPixmapTransform, smooth);
-    const auto size = property("qsSize").toSizeF();
     if (caps.isNull() && !tile) {
         painter.drawImage(QRectF(QPointF(), size), image);
         return;

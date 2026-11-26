@@ -71,9 +71,18 @@ void qs_shortcut_begin(QSWindow *);
 void qs_shortcut_finish(QSWindow *);
 void qs_button_shortcut(QSWindow *, QSWidget, const char *key, int flags, int automatic);
 int qs_open_url(const char *url);
-void qs_raster_image(QSWidget, const unsigned char *bytes, int width, int height, size_t stride,
-                     int alpha, int little, int orientation, double scale, int smooth);
-void qs_raster_resize(QSWidget, double left, double top, double right, double bottom, int tile);
+typedef struct {
+    const unsigned char *bytes;
+    int width, height;
+    size_t stride;
+    int alpha, little, orientation;
+    double scale;
+    int smooth;
+    double left, top, right, bottom;
+    int tile;
+} QSRasterImage;
+void qs_raster_image(QSWidget, QSRasterImage);
+void qs_canvas_image(QSWidget, QSRasterImage, int shaded);
 void qs_surface(QSWidget, const char *color, double radius);
 QSPath *qs_path_new(void);
 void qs_path_delete(QSPath *);

@@ -432,6 +432,8 @@ struct Drawing {
     std::optional<QLinearGradient> gradient;
     std::optional<QPainterPath> clip;
     std::vector<CanvasBlur> filters;
+    std::optional<RasterContent> image;
+    bool shadeImage = false;
 };
 class CanvasWidget final : public QWidget {
 public:
@@ -444,8 +446,8 @@ public:
             painter.save();
             if (drawing.clip) painter.setClipPath(*drawing.clip);
             painter.setOpacity(drawing.opacity);
-            if (drawing.filters.empty()) paintSource(painter, drawing);
-            else paintFiltered(painter, drawing);
+            if (drawing.filters.empty() && !drawing.shadeImage) paintSource(painter, drawing);
+            else paintLayer(painter, drawing);
             painter.restore();
         }
     }
@@ -454,13 +456,26 @@ private:
         painter.setRenderHint(QPainter::Antialiasing, drawing.antialias);
         painter.setTransform(drawing.matrix, true);
         const QBrush brush = drawing.gradient ? QBrush(*drawing.gradient) : QBrush(drawing.color);
+        if (drawing.image) {
+            const auto rect = drawing.path.boundingRect();
+            painter.save();
+            painter.translate(rect.topLeft());
+            drawing.image->draw(painter, rect.size());
+            painter.restore();
+            if (drawing.shadeImage) {
+                // The isolated layer contains only the image. Its alpha masks the color or gradient.
+                painter.setCompositionMode(QPainter::CompositionMode_SourceIn);
+                painter.fillRect(rect, brush);
+            }
+            return;
+        }
         if (drawing.lineWidth >= 0) {
             painter.strokePath(drawing.path, QPen(brush, drawing.lineWidth, Qt::SolidLine, Qt::FlatCap, Qt::MiterJoin));
         } else {
             painter.fillPath(drawing.path, brush);
         }
     }
-    void paintFiltered(QPainter &painter, const Drawing &drawing) {
+    void paintLayer(QPainter &painter, const Drawing &drawing) {
         // Keep enough offscreen source pixels for edges that blur into the window.
         double pad = 1;
         for (const auto &filter : drawing.filters) pad += 3.5 * filter.radius;
@@ -1258,6 +1273,11 @@ void qs_canvas_path(QSWidget w, const QSPath *path, QSAffine t, double opacity, 
     auto *canvas = static_cast<CanvasWidget *>(w);
     auto &drawing = canvas->drawings.emplace_back(Drawing{*path, transform(t), opacity, lineWidth, bool(antialias), Qt::black, {}});
     drawing.path.setFillRule(evenOdd ? Qt::OddEvenFill : Qt::WindingFill);
+}
+void qs_canvas_image(QSWidget w, QSRasterImage source, int shaded) {
+    auto &drawing = static_cast<CanvasWidget *>(w)->drawings.back();
+    drawing.image.emplace(source);
+    drawing.shadeImage = shaded;
 }
 void qs_canvas_blur(QSWidget w, double radius, unsigned blurOptions, unsigned filterOptions) {
     if (std::isfinite(radius) && radius > 0)
