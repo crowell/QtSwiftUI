@@ -160,27 +160,66 @@ public protocol LayoutValueKey {
     associatedtype Value
     static var defaultValue: Value { get }
 }
-@MainActor public struct LayoutSubview {
-    let element: Element
-    let placeElement: (CGRect, ProposedViewSize) -> Void
-    public func sizeThatFits(_ proposal: ProposedViewSize) -> CGSize { element.measure(proposal) }
-    public subscript<K: LayoutValueKey>(_ key: K.Type) -> K.Value {
-        element.values[ObjectIdentifier(key)] as? K.Value ?? K.defaultValue
+public struct LayoutSubview: Equatable {
+    fileprivate struct Entry: Sendable {
+        let element: Element
+        let place: @MainActor (CGRect, ProposedViewSize) -> Void
     }
-    public var priority: Double { element.priority }
-    public func place(at position: CGPoint, anchor: UnitPoint = .topLeading, proposal: ProposedViewSize) {
+
+    fileprivate let source: LayoutSubviews.Source
+    fileprivate let index: Int
+    fileprivate let direction: LayoutDirection
+    private var entry: Entry { source.entries[index] }
+    public static func == (lhs: Self, rhs: Self) -> Bool {
+        lhs.source === rhs.source && lhs.index == rhs.index && lhs.direction == rhs.direction
+    }
+    @MainActor public func sizeThatFits(_ proposal: ProposedViewSize) -> CGSize { entry.element.measure(proposal) }
+    @MainActor public subscript<K: LayoutValueKey>(_ key: K.Type) -> K.Value {
+        entry.element.values[ObjectIdentifier(key)] as? K.Value ?? K.defaultValue
+    }
+    @MainActor public var priority: Double { entry.element.priority }
+    @MainActor public func place(at position: CGPoint, anchor: UnitPoint = .topLeading, proposal: ProposedViewSize) {
         let size = sizeThatFits(proposal)
-        placeElement(CGRect(x: position.x - size.width * anchor.x, y: position.y - size.height * anchor.y,
+        entry.place(CGRect(x: position.x - size.width * anchor.x, y: position.y - size.height * anchor.y,
                              width: size.width, height: size.height), proposal)
     }
 }
-public struct LayoutSubviews: RandomAccessCollection {
+public struct LayoutSubviews: Equatable, RandomAccessCollection, Sendable {
     public typealias Index = Int
+    public typealias SubSequence = LayoutSubviews
+    fileprivate final class Source: Sendable {
+        let entries: [LayoutSubview.Entry]
+        init(_ entries: [LayoutSubview.Entry]) { self.entries = entries }
+    }
+
     public var layoutDirection: LayoutDirection
-    let items: [LayoutSubview]
-    public var startIndex: Int { items.startIndex }
-    public var endIndex: Int { items.endIndex }
-    public subscript(position: Int) -> LayoutSubview { items[position] }
+    fileprivate let source: Source
+    fileprivate var selection: [Int]?
+    public var startIndex: Int { 0 }
+    public var endIndex: Int { selection?.count ?? source.entries.count }
+
+    private func sourceIndex(_ index: Int) -> Int { selection?[index] ?? index }
+
+    public subscript(index: Int) -> LayoutSubview {
+        LayoutSubview(source: source, index: sourceIndex(index), direction: layoutDirection)
+    }
+    public subscript(bounds: Range<Int>) -> LayoutSubviews {
+        precondition(bounds.lowerBound >= 0 && bounds.upperBound <= endIndex)
+        return selecting(bounds)
+    }
+    public subscript<S>(_ indices: S) -> LayoutSubviews where S: Sequence, S.Element == Int {
+        selecting(indices)
+    }
+    private func selecting<S>(_ indices: S) -> LayoutSubviews where S: Sequence, S.Element == Int {
+        let selection = indices.map { index in
+            precondition(index >= 0 && index < endIndex)
+            return sourceIndex(index)
+        }
+        return LayoutSubviews(layoutDirection: layoutDirection, source: source, selection: selection)
+    }
+    public static func == (lhs: Self, rhs: Self) -> Bool {
+        lhs.source === rhs.source && lhs.layoutDirection == rhs.layoutDirection && lhs.selection == rhs.selection
+    }
 }
 @MainActor public protocol Layout {
     typealias Subviews = LayoutSubviews
@@ -205,17 +244,21 @@ private struct LayoutContainer<L: Layout, Content: View>: Primitive {
         var placements = [Placement?](repeating: nil, count: children.count)
         var layoutBounds = CGRect.zero
         let direction = context.environment.layoutDirection
-        let subviews = LayoutSubviews(layoutDirection: direction, items: children.enumerated().map { index, child in
-            LayoutSubview(element: child) { rect, proposal in
+        let entries = children.enumerated().map { index, child in
+            LayoutSubview.Entry(element: child) { rect, proposal in
                 placements[index] = Placement(child: child, rect: direction.position(rect, in: layoutBounds), proposal: proposal)
             }
-        })
+        }
+        let subviews = LayoutSubviews(layoutDirection: direction, source: .init(entries))
         var cache = layout.makeCache(subviews: subviews)
         return [Element { layout.sizeThatFits(proposal: $0, subviews: subviews, cache: &cache) }
                 place: { bounds, proposal in
                     for index in placements.indices { placements[index] = nil }
                     layoutBounds = bounds
                     layout.placeSubviews(in: bounds, proposal: proposal, subviews: subviews, cache: &cache)
+                    for i in subviews.indices where placements[i] == nil {
+                        subviews[i].place(at: CGPoint(x: bounds.midX, y: bounds.midY), anchor: .center, proposal: proposal)
+                    }
                     Placement.draw(placements.compactMap { $0 })
                 }]
     }
