@@ -10,6 +10,19 @@ public struct AccessibilityChildBehavior: Equatable, Sendable {
     public static let ignore = Self(exposesChildren: false), contain = Self(exposesChildren: true)
 }
 extension View {
+    public func accessibilityHidden(_ hidden: Bool) -> some View {
+        Transform(content: self) { view, ctx in
+            let widget = ctx.widget(QSGroup)
+            qs_group_hidden(widget, hidden ? 1 : 0)
+            var inner = ctx.descending(.position(0))
+            inner.parent = widget
+            let child = stacked(view.resolve(inner), axis: .vertical, alignment: .center, spacing: 8)
+            return [Element(size: child.measure) { bounds, proposal in
+                qs_place(widget, bounds.minX, bounds.minY, bounds.width, bounds.height)
+                child.place(CGRect(origin: .zero, size: bounds.size), proposal)
+            }]
+        }
+    }
     public func accessibilityAddTraits(_ traits: AccessibilityTraits) -> some View {
         Transform(content: self) { view, ctx in
             view.resolve(ctx.with(\.accessibilityTraits, ctx.environment.accessibilityTraits.union(traits)))

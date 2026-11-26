@@ -42,5 +42,11 @@ private struct DeviceCard: View {
     }
 }
 @main struct DevicePreview: App {
-    var body: some Scene { WindowGroup("Serein components") { DeviceCard() }.defaultSize(width: 600, height: 274) }
+    private var artwork: Bool { CommandLine.arguments.contains("--artwork") }
+    var body: some Scene {
+        WindowGroup("Serein components") {
+            if artwork { AccountArtwork() } else { DeviceCard() }
+        }
+        .defaultSize(width: artwork ? 440 : 600, height: artwork ? 272 : 274)
+    }
 }

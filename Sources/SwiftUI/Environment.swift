@@ -14,6 +14,7 @@ public struct EnvironmentValues {
     }
     public var colorScheme: ColorScheme = .light
     public var isEnabled = true
+    var allowsHits = true
     public var font: Font?
     public var multilineTextAlignment: TextAlignment = .leading
     public var lineLimit: Int?

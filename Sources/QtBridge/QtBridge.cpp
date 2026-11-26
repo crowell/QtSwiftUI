@@ -17,8 +17,13 @@
 #include <QSlider>
 #include <QTimer>
 #include <cmath>
+#include <optional>
+#include <vector>
+
+struct QSPath : QPainterPath {};
 
 namespace {
+QTransform transform(QSAffine t) { return QTransform(t.a, t.b, t.c, t.d, t.tx, t.ty); }
 QApplication *ownedApplication = nullptr;
 int liveWindows = 0;
 QApplication &application() {
@@ -33,13 +38,19 @@ public:
     using QWidget::QWidget;
     bool exposeChildren = true;
     bool isImage = false;
+    bool accessibilityHidden = false;
 };
 class AccessibleGroup final : public QAccessibleWidget {
 public:
     explicit AccessibleGroup(GroupWidget *group) : QAccessibleWidget(group), group(group) {}
     QAccessible::Role role() const override { return group->isImage ? QAccessible::Graphic : QAccessible::Grouping; }
-    int childCount() const override { return group->exposeChildren ? QAccessibleWidget::childCount() : 0; }
-    QAccessibleInterface *child(int index) const override { return group->exposeChildren ? QAccessibleWidget::child(index) : nullptr; }
+    QAccessible::State state() const override {
+        auto result = QAccessibleWidget::state();
+        if (group->accessibilityHidden) result.invisible = true;
+        return result;
+    }
+    int childCount() const override { return group->exposeChildren && !group->accessibilityHidden ? QAccessibleWidget::childCount() : 0; }
+    QAccessibleInterface *child(int index) const override { return group->exposeChildren && !group->accessibilityHidden ? QAccessibleWidget::child(index) : nullptr; }
 private:
     GroupWidget *group;
 };
@@ -48,16 +59,44 @@ public:
     using QWidget::QWidget;
     QColor fill;
     QPainterPath path;
-    bool customPath = false;
+    bool customPath = false, antialias = true;
     double radius = 0;
     void paintEvent(QPaintEvent *) override {
         QPainter painter(this);
-        painter.setRenderHint(QPainter::Antialiasing);
+        painter.setRenderHint(QPainter::Antialiasing, antialias);
         painter.setPen(Qt::NoPen);
         painter.setBrush(fill);
         const double r = std::min(radius, std::min(width(), height()) / 2.0);
         if (customPath) painter.drawPath(path);
         else painter.drawRoundedRect(QRectF(rect()), r, r);
+    }
+};
+struct Drawing {
+    QPainterPath path;
+    QTransform matrix;
+    double opacity;
+    double lineWidth;
+    bool antialias;
+    QColor color;
+    std::optional<QLinearGradient> gradient;
+};
+class CanvasWidget final : public QWidget {
+public:
+    using QWidget::QWidget;
+    std::vector<Drawing> drawings;
+    void paintEvent(QPaintEvent *) override {
+        QPainter painter(this);
+        for (const auto &drawing : drawings) {
+            painter.setRenderHint(QPainter::Antialiasing, drawing.antialias);
+            painter.setTransform(drawing.matrix);
+            painter.setOpacity(drawing.opacity);
+            QBrush brush = drawing.gradient ? QBrush(*drawing.gradient) : QBrush(drawing.color);
+            if (drawing.lineWidth >= 0) {
+                painter.strokePath(drawing.path, QPen(brush, drawing.lineWidth, Qt::SolidLine, Qt::FlatCap, Qt::MiterJoin));
+            } else {
+                painter.fillPath(drawing.path, brush);
+            }
+        }
     }
 };
 QWidget *widget(QSWidget w) { return static_cast<QWidget *>(w); }
@@ -161,6 +200,11 @@ QSWidget qs_create(QSWindow *window, QSWidget parent, QSKind kind, int id) {
         QObject::connect(edit, &QLineEdit::returnPressed, window, [=] { window->event(window->context, id, QSSubmit, ""); });
         return edit;
     }
+    case QSCanvas: {
+        auto *canvas = new CanvasWidget(container);
+        canvas->setAttribute(Qt::WA_TransparentForMouseEvents);
+        return canvas;
+    }
     case QSGroup: {
         auto *group = new GroupWidget(container);
         QAccessible::registerAccessibleInterface(new AccessibleGroup(group));
@@ -249,14 +293,52 @@ void qs_surface(QSWidget w, const char *color, double radius) {
     surface->radius = radius;
     surface->update();
 }
-void qs_path_reset(QSWidget w) {
+QSPath *qs_path_new() { return new QSPath(); }
+void qs_path_delete(QSPath *path) { delete path; }
+QSRect qs_path_bounds(const QSPath *path) {
+    auto rect = path->boundingRect();
+    return {rect.x(), rect.y(), rect.width(), rect.height()};
+}
+QSSize qs_path_position(const QSPath *path) {
+    auto point = path->currentPosition();
+    return {point.x(), point.y()};
+}
+int qs_path_contains(const QSPath *path, double x, double y, int evenOdd) {
+    auto copy = *path;
+    copy.setFillRule(evenOdd ? Qt::OddEvenFill : Qt::WindingFill);
+    return copy.contains(QPointF(x, y));
+}
+void qs_path_append(QSPath *path, const QSPath *other, QSAffine t) { path->addPath(transform(t).map(*other)); }
+void qs_surface_path(QSWidget w, const QSPath *path, int evenOdd, int antialias) {
     auto *surface = static_cast<Surface *>(w);
     surface->customPath = true;
-    surface->path = QPainterPath();
-    surface->path.setFillRule(Qt::WindingFill);
+    surface->path = *path;
+    surface->path.setFillRule(evenOdd ? Qt::OddEvenFill : Qt::WindingFill);
+    surface->antialias = antialias;
+    surface->update();
 }
-void qs_path_step(QSWidget w, int op, double x, double y, double a, double b, double c, double d) {
-    auto &path = static_cast<Surface *>(w)->path;
+void qs_canvas_clear(QSWidget w) {
+    auto *canvas = static_cast<CanvasWidget *>(w);
+    canvas->drawings.clear();
+    canvas->update();
+}
+void qs_canvas_path(QSWidget w, const QSPath *path, QSAffine t, double opacity, double lineWidth, int evenOdd, int antialias) {
+    auto *canvas = static_cast<CanvasWidget *>(w);
+    auto &drawing = canvas->drawings.emplace_back(Drawing{*path, transform(t), opacity, lineWidth, bool(antialias), Qt::black, {}});
+    drawing.path.setFillRule(evenOdd ? Qt::OddEvenFill : Qt::WindingFill);
+}
+void qs_canvas_color(QSWidget w, const char *color) {
+    static_cast<CanvasWidget *>(w)->drawings.back().color = QColor(QString::fromUtf8(color));
+}
+void qs_canvas_gradient(QSWidget w, double x1, double y1, double x2, double y2) {
+    static_cast<CanvasWidget *>(w)->drawings.back().gradient.emplace(x1, y1, x2, y2);
+}
+void qs_canvas_stop(QSWidget w, double location, const char *color) {
+    static_cast<CanvasWidget *>(w)->drawings.back().gradient->setColorAt(location, QColor(QString::fromUtf8(color)));
+}
+void qs_hit_testing(QSWidget w, int enabled) { widget(w)->setAttribute(Qt::WA_TransparentForMouseEvents, !enabled); }
+void qs_path_step(QSPath *target, int op, double x, double y, double a, double b, double c, double d) {
+    auto &path = *target;
     switch (op) {
     case 0: path.moveTo(x, y); break;
     case 1: path.lineTo(x, y); break;
@@ -272,6 +354,10 @@ void qs_group(QSWidget w, int exposeChildren, int isImage) {
     auto *group = static_cast<GroupWidget *>(w);
     group->exposeChildren = exposeChildren;
     group->isImage = isImage;
+}
+void qs_group_hidden(QSWidget w, int hidden) { static_cast<GroupWidget *>(w)->accessibilityHidden = hidden; }
+unsigned qs_pixel(QSWindow *window, int x, int y) {
+    return window->grab().toImage().pixelColor(x, y).rgba();
 }
 void qs_plain_button(QSWidget w, int plain) {
     auto *button = static_cast<QPushButton *>(w);

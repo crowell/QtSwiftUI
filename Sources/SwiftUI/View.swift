@@ -1,4 +1,4 @@
-@_exported import Foundation
+@_exported import CoreGraphics
 import QtBridge
 
 @MainActor public protocol View {

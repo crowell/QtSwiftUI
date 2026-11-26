@@ -90,16 +90,51 @@ extension ShapeStyle where Self == Color {
     public static var brown: Color { Color.brown }
     public static var clear: Color { Color.clear }
 }
-public struct Path: Sendable {
-    enum Command: Sendable {
+public struct Path: Equatable, Sendable {
+    enum Command: Equatable, Sendable {
         case move(CGPoint), line(CGPoint), quad(CGPoint, CGPoint), cubic(CGPoint, CGPoint, CGPoint)
         case close, rect(CGRect), ellipse(CGRect), rounded(CGRect, CGSize)
+        indirect case transformed(Path, CGAffineTransform)
     }
     var commands: [Command] = []
     public init() {}
     public init(_ callback: (inout Path) -> Void) { callback(&self) }
     public init(_ rect: CGRect) { commands = [.rect(rect)] }
     public init(ellipseIn rect: CGRect) { commands = [.ellipse(rect)] }
+    public init(roundedRect rect: CGRect, cornerRadius: CGFloat, style: RoundedCornerStyle = .continuous) {
+        commands = [.rounded(rect, CGSize(width: cornerRadius, height: cornerRadius))]
+    }
+    public init(roundedRect rect: CGRect, cornerSize: CGSize, style: RoundedCornerStyle = .continuous) {
+        commands = [.rounded(rect, cornerSize)]
+    }
+    public func applying(_ transform: CGAffineTransform) -> Path {
+        if isEmpty || transform.isIdentity { return self }
+        var path = Path(); path.commands = [.transformed(self, transform)]; return path
+    }
+    public mutating func addPath(_ path: Path, transform: CGAffineTransform = .identity) {
+        if !path.isEmpty { commands.append(.transformed(path, transform)) }
+    }
+    public var isEmpty: Bool { commands.isEmpty }
+    public var boundingRect: CGRect {
+        guard !isEmpty else { return .null }
+        let r = withNativePath(qs_path_bounds)
+        return CGRect(x: r.x, y: r.y, width: r.width, height: r.height)
+    }
+    public var currentPoint: CGPoint? {
+        guard !isEmpty else { return nil }
+        let p = withNativePath(qs_path_position)
+        return CGPoint(x: p.width, y: p.height)
+    }
+    public func contains(_ p: CGPoint, eoFill: Bool = false) -> Bool {
+        withNativePath { qs_path_contains($0, p.x, p.y, eoFill ? 1 : 0) != 0 }
+    }
+    public func offsetBy(dx: CGFloat, dy: CGFloat) -> Path { applying(.init(translationX: dx, y: dy)) }
+    public mutating func addRects(_ rects: [CGRect]) { for rect in rects { addRect(rect) } }
+    public mutating func addLines(_ lines: [CGPoint]) {
+        guard let first = lines.first else { return }
+        move(to: first)
+        for point in lines.dropFirst() { addLine(to: point) }
+    }
     public mutating func addRect(_ rect: CGRect) { commands.append(.rect(rect)) }
     public mutating func addEllipse(in rect: CGRect) { commands.append(.ellipse(rect)) }
     public mutating func move(to point: CGPoint) { commands.append(.move(point)) }
@@ -107,21 +142,32 @@ public struct Path: Sendable {
     public mutating func addQuadCurve(to p: CGPoint, control: CGPoint) { commands.append(.quad(control, p)) }
     public mutating func addCurve(to p: CGPoint, control1: CGPoint, control2: CGPoint) { commands.append(.cubic(control1, control2, p)) }
     public mutating func closeSubpath() { commands.append(.close) }
-    func draw(on w: UnsafeMutableRawPointer) {
-        qs_path_reset(w)
+    func withNativePath<R>(_ body: (OpaquePointer) -> R) -> R {
+        let w = qs_path_new()!
+        defer { qs_path_delete(w) }
         for command in commands {
             switch command {
             case .move(let p): qs_path_step(w, 0, p.x, p.y, 0, 0, 0, 0)
             case .line(let p): qs_path_step(w, 1, p.x, p.y, 0, 0, 0, 0)
             case .quad(let a, let p): qs_path_step(w, 2, a.x, a.y, p.x, p.y, 0, 0)
             case .cubic(let a, let b, let p): qs_path_step(w, 3, a.x, a.y, b.x, b.y, p.x, p.y)
+            case .transformed(let path, let transform):
+                path.withNativePath { qs_path_append(w, $0, transform.native) }
             case .close: qs_path_step(w, 4, 0, 0, 0, 0, 0, 0)
             case .rect(let r): qs_path_step(w, 5, r.minX, r.minY, r.width, r.height, 0, 0)
             case .ellipse(let r): qs_path_step(w, 6, r.minX, r.minY, r.width, r.height, 0, 0)
             case .rounded(let r, let s): qs_path_step(w, 7, r.minX, r.minY, r.width, r.height, s.width, s.height)
             }
         }
+        return body(w)
     }
+}
+extension CGAffineTransform {
+    var native: QSAffine { QSAffine(a: a, b: b, c: c, d: d, tx: tx, ty: ty) }
+}
+public struct FillStyle: Equatable, Sendable {
+    public var isEOFilled, isAntialiased: Bool
+    public init(eoFill: Bool = false, antialiased: Bool = true) { isEOFilled = eoFill; isAntialiased = antialiased }
 }
 public protocol InsettableShape: Shape {
     associatedtype InsetShape: InsettableShape
@@ -132,10 +178,13 @@ public protocol Shape: View, Sendable {
 }
 extension Shape {
     public var body: some View { FilledShape(shape: self, style: nil as Color?) }
-    public func fill<S: ShapeStyle>(_ content: S) -> some View { FilledShape(shape: self, style: content) }
+    public func fill<S: ShapeStyle>(_ content: S, style: FillStyle = FillStyle()) -> some View {
+        FilledShape(shape: self, style: content, fill: style)
+    }
 }
 private struct FilledShape<S: Shape, Style: ShapeStyle>: Primitive {
     let shape: S, style: Style?
+    var fill = FillStyle()
     func elements(in context: Context) -> [Element] {
         let widget = context.widget(QSSurface)
         qs_surface(widget, (style?.color(in: context.environment) ?? context.environment.foreground).hex(context.environment.colorScheme), 0)
@@ -144,7 +193,9 @@ private struct FilledShape<S: Shape, Style: ShapeStyle>: Primitive {
             if shape is Circle { let side = min(size.width, size.height); return CGSize(width: side, height: side) }
             return size
         } place: { rect, _ in
-            shape.path(in: CGRect(origin: .zero, size: rect.size)).draw(on: widget)
+            shape.path(in: CGRect(origin: .zero, size: rect.size)).withNativePath {
+                qs_surface_path(widget, $0, fill.isEOFilled ? 1 : 0, fill.isAntialiased ? 1 : 0)
+            }
             qs_place(widget, rect.minX, rect.minY, rect.width, rect.height)
         }]
     }

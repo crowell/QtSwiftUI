@@ -56,6 +56,11 @@ extension View {
     }
     public func multilineTextAlignment(_ alignment: TextAlignment) -> some View { environment(\.multilineTextAlignment, alignment) }
     public func lineLimit(_ number: Int?) -> some View { environment(\.lineLimit, number) }
+    public func allowsHitTesting(_ enabled: Bool) -> some View {
+        Transform(content: self) { view, ctx in
+            view.resolve(ctx.with(\.allowsHits, ctx.environment.allowsHits && enabled))
+        }
+    }
     public func disabled(_ disabled: Bool) -> some View {
         Transform(content: self) { view, ctx in view.resolve(ctx.with(\.isEnabled, ctx.environment.isEnabled && !disabled)) }
     }
