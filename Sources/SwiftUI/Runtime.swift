@@ -1,4 +1,5 @@
 import QtBridge
+@_spi(Reflection) import Swift
 @_exported import Observation
 
 enum Part: Hashable {
@@ -21,12 +22,37 @@ enum Part: Hashable {
         result.path.append(part)
         return result
     }
-    func install(_ view: Any) {
-        for (name, value) in Mirror(reflecting: view).children {
-            if let property = value as? any MountedProperty, let name {
-                property.install(in: descending(.property(name)))
+    func preparing<Owner>(_ original: Owner) -> Owner {
+        var owner = original
+        func update<P: DynamicProperty>(_ property: P, at name: String) -> P {
+            let child = descending(.property(name))
+            var result = property
+            if let builtIn = result as? any MountedProperty {
+                builtIn.install(in: child)
+            } else {
+                result = child.preparing(result)
+            }
+            result.update()
+            return result
+        }
+        // Stored-property key paths preserve value semantics when a custom
+        // DynamicProperty's mutating update() changes its own fields.
+        let enumerated = _forEachFieldWithKeyPath(of: Owner.self) { name, key in
+            if let property = owner[keyPath: key] as? any DynamicProperty {
+                @MainActor func assign<P: DynamicProperty>(_ property: P) {
+                    let updated = update(property, at: String(cString: name))
+                    if let writable = key as? WritableKeyPath<Owner, P> { owner[keyPath: writable] = updated }
+                }
+                assign(property)
+            }
+            return true
+        }
+        if !enumerated {
+            for (name, value) in Mirror(reflecting: owner).children {
+                if let name, let property = value as? any DynamicProperty { _ = update(property, at: name) }
             }
         }
+        return owner
     }
     func widget(_ kind: QSKind, pressed: ((Bool) -> Void)? = nil, exitCommand: (() -> Void)? = nil, action: ((String) -> Void)? = nil) -> UnsafeMutableRawPointer {
         let entry = host.mount(path: path + [.widget(kind.rawValue)], kind: kind, parent: parent)
@@ -149,11 +175,18 @@ enum Part: Hashable {
     }
 }
 
-@MainActor protocol MountedProperty {
-    func install(in context: Context)
+public protocol DynamicProperty {
+    mutating func update()
+}
+extension DynamicProperty {
+    public mutating func update() {}
 }
 
-@propertyWrapper @dynamicMemberLookup public struct Binding<Value> {
+protocol MountedProperty: DynamicProperty {
+    @MainActor func install(in context: Context)
+}
+
+@propertyWrapper @dynamicMemberLookup public struct Binding<Value>: DynamicProperty {
     private let get: () -> Value
     private let set: (Value) -> Void
     public init(get: @escaping () -> Value, set: @escaping (Value) -> Void) { self.get = get; self.set = set }
@@ -167,15 +200,37 @@ enum Part: Hashable {
         Binding<T>(get: { wrappedValue[keyPath: path] }, set: { wrappedValue[keyPath: path] = $0 })
     }
 }
-@propertyWrapper @MainActor public struct State<Value>: MountedProperty {
+@propertyWrapper public struct State<Value>: MountedProperty {
     private final class Cell {
-        var value: Value
-        weak var host: Host?
-        init(_ value: Value) { self.value = value }
+        private let lock = NSLock()
+        private var stored: Value
+        private weak var host: Host?
+        init(_ value: Value) { stored = value }
+        var value: Value {
+            get { lock.withLock { stored } }
+            set {
+                let target = lock.withLock {
+                    stored = newValue
+                    return host
+                }
+                guard let target else { return }
+                if Thread.isMainThread {
+                    MainActor.assumeIsolated { target.update() }
+                } else {
+                    Task { @MainActor [weak target] in target?.update() }
+                }
+            }
+        }
+        func attach(to host: Host) { lock.withLock { self.host = host } }
     }
     private final class Link {
-        var cell: Cell
-        init(_ cell: Cell) { self.cell = cell }
+        private let lock = NSLock()
+        private var target: Cell
+        init(_ cell: Cell) { target = cell }
+        var cell: Cell {
+            get { lock.withLock { target } }
+            set { lock.withLock { target = newValue } }
+        }
     }
     private let link: Link
     public init(wrappedValue: Value) { link = Link(Cell(wrappedValue)) }
@@ -183,7 +238,7 @@ enum Part: Hashable {
     public init() where Value: ExpressibleByNilLiteral { self.init(wrappedValue: nil) }
     public var wrappedValue: Value {
         get { link.cell.value }
-        nonmutating set { link.cell.value = newValue; link.cell.host?.update() }
+        nonmutating set { link.cell.value = newValue }
     }
     public var projectedValue: Binding<Value> { Binding(get: { wrappedValue }, set: { wrappedValue = $0 }) }
     func install(in context: Context) {
@@ -191,6 +246,6 @@ enum Part: Hashable {
         host.liveStorage.insert(context.path)
         if let existing = host.storage[context.path] as? Cell { link.cell = existing }
         else { host.storage[context.path] = link.cell }
-        link.cell.host = host
+        link.cell.attach(to: host)
     }
 }

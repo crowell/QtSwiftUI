@@ -6,10 +6,11 @@ target=${2:?pass the temporary package directory}
 source_dir="$checkout/Packages/SignalUI/Sources/SignalUI"
 root=$(cd "$(dirname "$0")/.." && pwd)
 mkdir -p "$target/Sources/CallDiagnostics" "$target/Tests/ScreenTests"
-cp "$root/Tests/SereinDiagnostics/ScreenTests.swift" "$target/Tests/ScreenTests/"
+cp "$root"/Tests/SereinDiagnostics/*.swift "$target/Tests/ScreenTests/"
 ln -s "$checkout/Packages/SignalI18n" "$target/SignalI18n"
 cp "$source_dir/Calling/CallDiagnosticWindow.swift" "$source_dir/Theme/I18nEnvironment.swift" \
-    "$source_dir/Theme/AxoColor.swift" "$root"/Scripts/CallDiagnostics/*.swift "$target/Sources/CallDiagnostics/"
+    "$source_dir/Theme/AxoColor.swift" "$source_dir/Theme/AxoFocusRing.swift" \
+    "$root"/Scripts/CallDiagnostics/*.swift "$target/Sources/CallDiagnostics/"
 # Only the generated color extension is used by this screen.
 sed -n '/^extension AxoColor {$/,/^}$/p' "$source_dir/Tokens/AxoTokens.generated.swift" > "$target/Sources/CallDiagnostics/Colors.swift"
 test -s "$target/Sources/CallDiagnostics/Colors.swift"

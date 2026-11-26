@@ -28,6 +28,7 @@ enum AxoButton {
     struct Root: View {
         let label: String
         let action: () -> Void
+        private var focus = AxoFocusState()
 
         init(_ label: String, variant: Variant, size: Size, action: @escaping () -> Void) {
             self.label = label
@@ -37,6 +38,8 @@ enum AxoButton {
         var body: some View {
             Button(action: action) { Text(verbatim: label) }
                 .buttonStyle(StrongPrimaryStyle())
+                .axoFocusRing(focus.visible(autoFocus: false), in: Capsule())
+                .focused(focus.$focused)
                 .accessibilityIdentifier("diagnostic-close")
         }
     }

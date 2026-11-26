@@ -22,8 +22,7 @@ extension View {
     func resolve(_ incoming: Context) -> [Element] {
         let context = incoming.descending(.type(ObjectIdentifier(Self.self)))
         if let primitive = self as? any Primitive { return primitive.elements(in: context) }
-        context.install(self)
-        return body.resolve(context)
+        return context.preparing(self).body.resolve(context)
     }
 }
 

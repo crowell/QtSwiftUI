@@ -48,8 +48,7 @@ extension App {
         let app = Self()
         let scene = app.body.windowScene
         let host = Host(title: scene.title) { context in
-            context.install(app)
-            return app.body.windowScene.content(in: context)
+            context.preparing(app).body.windowScene.content(in: context)
         }
         let size = scene.size ?? CGSize(width: 640, height: 480)
         host.open(width: Int(size.width), height: Int(size.height))

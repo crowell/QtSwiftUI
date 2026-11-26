@@ -35,8 +35,7 @@ public struct ModifiedContent<Content, Modifier> {
 }
 extension ModifiedContent: Primitive, View where Content: View, Modifier: ViewModifier {
     func elements(in context: Context) -> [Element] {
-        context.install(modifier)
-        return modifier.body(content: .init(view: AnyView(content))).resolve(context)
+        context.preparing(modifier).body(content: .init(view: AnyView(content))).resolve(context)
     }
 }
 extension View {

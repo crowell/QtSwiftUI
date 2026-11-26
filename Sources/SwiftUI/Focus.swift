@@ -2,8 +2,8 @@ struct FocusLink {
     var active: () -> Bool
     var change: (Bool) -> Void
 }
-@propertyWrapper @MainActor public struct FocusState<Value: Hashable>: MountedProperty {
-    @propertyWrapper @MainActor public struct Binding {
+@propertyWrapper public struct FocusState<Value: Hashable>: MountedProperty {
+    @propertyWrapper public struct Binding {
         fileprivate let state: State<Value>
         public var wrappedValue: Value {
             get { state.wrappedValue }
