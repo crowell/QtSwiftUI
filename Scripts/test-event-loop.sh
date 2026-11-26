@@ -13,3 +13,6 @@ test -s "$tmp/probe.png"
 timeout 10 "$probe" --windows > "$tmp/windows"
 test "$(grep -Fxc 'Second window opened with 1' "$tmp/windows")" -eq 1
 grep -Fx 'Second window observed shared state after first closed' "$tmp/windows"
+timeout 10 "$probe" --settings > "$tmp/settings"
+grep -Fx 'Opened settings from a presented scene' "$tmp/settings"
+if grep -Fq 'Unexpected initial window' "$tmp/settings"; then exit 1; fi

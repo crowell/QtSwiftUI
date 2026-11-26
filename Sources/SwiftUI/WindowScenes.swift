@@ -4,6 +4,8 @@ import QtBridge
     let title: String
     let id: String?
     let single: Bool
+    var isSettings = false
+    var launchBehavior = SceneLaunchBehavior.automatic
     var valueType: ObjectIdentifier?
     var initialValue: (() -> AnyHashable)?
     var size: CGSize?
@@ -222,7 +224,17 @@ extension EnvironmentValues {
         context.environment = environment
         return context.preparing(app).body.sceneWindows
     }
-    func openFirst() -> Host? { scenes().isEmpty ? nil : open(index: 0) }
+    /// A nil result means the app has no scenes. An empty array keeps the event loop
+    /// running for an app whose windows are all suppressed at launch.
+    func launchWindows() -> [Host]? {
+        let definitions = scenes()
+        guard !definitions.isEmpty else { return nil }
+        let presented = definitions.indices.filter { definitions[$0].launchBehavior.mode == .presented }
+        if !presented.isEmpty { return presented.compactMap { open(index: $0) } }
+        let first = definitions.firstIndex(where: { !$0.isSettings }) ?? definitions.startIndex
+        guard definitions[first].launchBehavior.mode == .automatic, let host = open(index: first) else { return [] }
+        return [host]
+    }
 
     private func open(index: Int, value: AnyHashable? = nil) -> Host? {
         let definitions = scenes()
@@ -234,6 +246,7 @@ extension EnvironmentValues {
             qs_window_raise(current.host.window)
             return current.host
         }
+        let settingsIndex = definitions.firstIndex(where: \.isSettings)
         let key = UUID()
         let presentation = WindowPresentation(value ?? definition.initialValue?())
         let host = Host(title: definition.title) { [weak self] source in
@@ -247,6 +260,9 @@ extension EnvironmentValues {
             context.windowValue = presentation.binding(in: context)
             context.environment.dismissScene = { [weak self] request in self?.dismiss(key, request: request) }
             context.environment.closePresentation = { [weak self] in self?.dismiss(key, request: nil) }
+            if let settingsIndex {
+                context.environment.presentSettings = { [weak self] in _ = self?.open(index: settingsIndex) }
+            }
             let current = self.scenes(context.environment)
             guard current.indices.contains(index) else { return [] }
             source.host.resizability = current[index].resizability

@@ -137,6 +137,11 @@ extension WindowScene {
     func windowContent(in context: Context) -> [Element] {
         let items = MenuEntries()
         let menuContext = context.descending(.property("window commands"))
+        if let open = context.environment.presentSettings {
+            let menu = MenuEntries()
+            menu.rows.append(.init(title: "Settings…", shortcut: KeyboardShortcut(",", modifiers: .control), action: open))
+            items.rows.append(.init(title: ProcessInfo.processInfo.processName, children: menu))
+        }
         commands(menuContext, items)
         let content = content(context)
         guard !items.rows.isEmpty else { return content }

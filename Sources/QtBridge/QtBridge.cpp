@@ -36,6 +36,7 @@
 #include <QUrl>
 #include <QWindow>
 #include <QScreen>
+#include <QScopeGuard>
 #include <QWheelEvent>
 #include <QVariantAnimation>
 #include <algorithm>
@@ -110,6 +111,13 @@ public:
 };
 QApplication *ownedApplication = nullptr;
 int liveWindows = 0;
+bool runningEventLoop = false;
+void releaseIdleApplication() {
+    if (liveWindows == 0 && !runningEventLoop) {
+        delete ownedApplication;
+        ownedApplication = nullptr;
+    }
+}
 
 // Registration lasts for the Swift process. The Qt font database is recreated
 // when an offscreen renderer releases the last window and another one opens.
@@ -1039,6 +1047,13 @@ int qs_capture(QSWindow *window, const char *path) {
     return pixels.save(QString::fromUtf8(path), "PNG");
 }
 int qs_run(QSWindow *window, const char *screenshot, QSPump pump) {
+    if (screenshot && !window) return 1;
+    auto &app = application();
+    runningEventLoop = true;
+    const auto cleanup = qScopeGuard([] {
+        runningEventLoop = false;
+        releaseIdleApplication();
+    });
     // Swift's main actor and Foundation timers share the GUI thread with Qt.
     QTimer swiftEvents;
     QObject::connect(&swiftEvents, &QTimer::timeout, &swiftEvents, [pump] { pump(); });
@@ -1049,7 +1064,7 @@ int qs_run(QSWindow *window, const char *screenshot, QSPump pump) {
         };
         QTimer::singleShot(qMax(0, qEnvironmentVariableIntValue("QTSWIFTUI_CAPTURE_DELAY_MS")), window, capture);
     }
-    return application().exec();
+    return app.exec();
 }
 int qs_application_active(void) {
     return QGuiApplication::applicationState() == Qt::ApplicationActive;
@@ -1182,11 +1197,8 @@ void qs_close(QSWindow *window) {
         if (auto *popup = dynamic_cast<NativePopover *>(child)) popup->disconnectDismissal();
     }
     delete window;
-    if (--liveWindows == 0) {
-        // Tear Qt down while the platform plugin and its font database are still alive.
-        delete ownedApplication;
-        ownedApplication = nullptr;
-    }
+    --liveWindows;
+    releaseIdleApplication();
 }
 
 QSWidget qs_create(QSWindow *window, QSWidget parent, QSKind kind, int id) {

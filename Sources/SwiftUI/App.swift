@@ -14,8 +14,8 @@ extension Never: Scene {}
 extension App {
     public static func main() {
         let windows = AppWindows(Self())
-        guard let host = windows.openFirst() else { windows.finish(); return }
-        let status = qs_run(host.window, getenv("QTSWIFTUI_SCREENSHOT")) {
+        guard let launched = windows.launchWindows() else { windows.finish(); return }
+        let status = qs_run(launched.first?.window, getenv("QTSWIFTUI_SCREENSHOT")) {
             _ = RunLoop.main.run(mode: .default, before: Date())
         }
         windows.finish()

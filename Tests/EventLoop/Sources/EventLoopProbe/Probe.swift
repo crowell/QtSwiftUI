@@ -69,7 +69,40 @@ private struct SecondWindow: View {
             }
     }
 }
-@main private struct Probe: App {
+private struct PreferencesWindow: View {
+    @Environment(\.dismissWindow) var dismiss
+    var body: some View {
+        Text("Preferences")
+            .task {
+                print("Opened settings from a presented scene")
+                dismiss(id: "welcome")
+                dismiss()
+            }
+    }
+}
+private struct Welcome: View {
+    @Environment(\.openSettings) var openSettings
+    var body: some View {
+        SettingsLink { Text("Open settings") }.task { openSettings() }
+    }
+}
+private struct PreferencesProbe: App {
+    var body: some Scene {
+        WindowGroup { Text("Suppressed").onAppear { print("Unexpected initial window") } }
+            .defaultLaunchBehavior(.suppressed)
+        Window("Welcome", id: "welcome") { Welcome() }
+            .defaultLaunchBehavior(.presented)
+        Settings { PreferencesWindow() }
+    }
+}
+
+@main private enum Driver {
+    @MainActor static func main() {
+        if CommandLine.arguments.contains("--settings") { PreferencesProbe.main() }
+        else { Probe.main() }
+    }
+}
+private struct Probe: App {
     @State private var count = 0
     @State private var model = Model()
     var body: some Scene {
@@ -81,10 +114,12 @@ private struct SecondWindow: View {
             }
         }
         .defaultSize(width: 260, height: 100)
+        .defaultLaunchBehavior(.automatic)
         Window("Second", id: "second") { SecondWindow(count: $count) }
         WindowGroup(Text("Item"), id: "item", for: Int.self) { item in
             Text(item.wrappedValue.map(String.init) ?? "New").frame(width: 120, height: 80)
         }
+        .defaultLaunchBehavior(.suppressed)
         .windowResizability(.contentSize)
         .defaultSize(CGSize(width: 120, height: 80))
         WindowGroup("Draft", for: String.self) { title in TextField("Title", text: title) }

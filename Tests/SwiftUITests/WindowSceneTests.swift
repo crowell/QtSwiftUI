@@ -66,7 +66,41 @@ private struct ResizableApp: App {
     }
 }
 
+private struct LaunchApp: App {
+    let probe = SceneProbe()
+    var first = SceneLaunchBehavior.automatic
+    var detail = SceneLaunchBehavior.automatic
+    var extra = SceneLaunchBehavior.automatic
+    var body: some Scene {
+        WindowGroup(id: "root") { ProbeContent(key: "root", probe: probe) }
+            .defaultLaunchBehavior(first)
+        Window("Inspector", id: "detail") { ProbeContent(key: "panel", probe: probe) }
+            .defaultLaunchBehavior(detail)
+        Window("Extra", id: "extra") { ProbeContent(key: "extra", probe: probe) }
+            .defaultLaunchBehavior(extra)
+    }
+}
+
 final class WindowSceneTests: XCTestCase {
+    @MainActor func testExplicitLaunchAndSuppressedWindows() async {
+        var app = LaunchApp()
+        app.detail = .presented
+        app.extra = .presented
+        let windows = AppWindows(app)
+        defer { windows.finish() }
+        XCTAssertEqual(windows.launchWindows()?.count, 2)
+        XCTAssertNil(app.probe.open)
+        XCTAssertEqual(app.probe.panels, 1)
+        XCTAssertEqual(app.probe.groups, 1)
+
+        var background = LaunchApp()
+        background.first = .suppressed
+        let suppressed = AppWindows(background)
+        defer { suppressed.finish() }
+        XCTAssertEqual(suppressed.launchWindows()?.count, 0)
+        XCTAssertNil(background.probe.open)
+    }
+
     @MainActor func testNativeWindowEnforcesContentSizeBounds() throws {
         func captureSize(_ host: SwiftUI.Host, width: Int, height: Int) throws -> CGSize {
             host.open(width: width, height: height)
@@ -86,7 +120,7 @@ final class WindowSceneTests: XCTestCase {
             app.sizing = restrictMaximum ? .contentSize : .contentMinSize
             let windows = AppWindows(app)
             defer { windows.finish() }
-            let host = try XCTUnwrap(windows.openFirst())
+            let host = try XCTUnwrap(windows.launchWindows()?.first)
             XCTAssertEqual(try captureSize(host, width: 40, height: 30), CGSize(width: 100, height: 60))
             XCTAssertEqual(try captureSize(host, width: 500, height: 400),
                            restrictMaximum ? CGSize(width: 250, height: 160) : CGSize(width: 500, height: 400))
@@ -97,7 +131,7 @@ final class WindowSceneTests: XCTestCase {
         let app = ProbeApp(), probe = app.probe
         let windows = AppWindows(app)
         defer { windows.finish() }
-        _ = windows.openFirst()
+        _ = windows.launchWindows()
         let open = try XCTUnwrap(probe.open)
         open(value: 7)
         open(id: "number", value: 7)
@@ -130,7 +164,7 @@ final class WindowSceneTests: XCTestCase {
         let app = ProbeApp(), probe = app.probe
         let windows = AppWindows(app)
         defer { windows.finish() }
-        XCTAssertNotNil(windows.openFirst())
+        XCTAssertNotNil(windows.launchWindows()?.first)
         let open = try XCTUnwrap(probe.open)
         XCTAssertTrue(probe.multiple)
         open(id: "panel")

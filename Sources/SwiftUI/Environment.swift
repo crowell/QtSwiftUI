@@ -85,6 +85,7 @@ public struct EnvironmentValues {
     var submit: (() -> Void)?
     public internal(set) var isPresented = false
     var canPresentWindow = false
+    var presentSettings: (@MainActor () -> Void)?
     var presentWindow: @MainActor (WindowRequest) -> Void = { _ in }
     var dismissScene: @MainActor (WindowRequest?) -> Void = { _ in }
     var closePresentation: @MainActor () -> Void = {}
