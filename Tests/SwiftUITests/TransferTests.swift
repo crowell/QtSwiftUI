@@ -29,6 +29,32 @@ final class TransferTests: XCTestCase {
         XCTAssertEqual(points.count, 2)
     }
 
+    @MainActor func testFileOnlyDestinationFiltersMixedURILists() async {
+        var contents = "# files from a desktop manager\r\nfile:///tmp/Blue%20sky.png\r\nhttps://example.org/ferry\r\nfile:///tmp/notes.txt"
+        var received: NSItemProvider?
+        let host = Host(title: "Drop files") { context in
+            HStack(spacing: 0) {
+                Color.blue.onDrag { NSItemProvider(item: contents as NSString, typeIdentifier: UTType.url.identifier) }
+                Color.green.onDrop(of: [.fileURL], isTargeted: nil) { items in received = items.first; return true }
+            }.resolve(context)
+        }
+        defer { host.close() }
+        host.open(width: 120, height: 40)
+        XCTAssertEqual(qs_transfer_between(host.window, 10, 10, 72, 13), 1)
+        XCTAssertTrue(received?.registeredTypeIdentifiers.contains(UTType.fileURL.identifier) == true)
+        received?.loadDataRepresentation(forTypeIdentifier: UTType.fileURL.identifier) { data, error in
+            XCTAssertNil(error)
+            XCTAssertEqual(data, Data("file:///tmp/Blue%20sky.png\r\nfile:///tmp/notes.txt\r\n".utf8))
+        }
+        received?.loadDataRepresentation(forTypeIdentifier: UTType.url.identifier) { data, _ in
+            let urls = String(decoding: data ?? Data(), as: UTF8.self).split(whereSeparator: \.isNewline)
+                .compactMap { URL(string: String($0)) }.filter { $0.scheme != nil }
+            XCTAssertEqual(urls.map(\.absoluteString), ["file:///tmp/Blue%20sky.png", "https://example.org/ferry", "file:///tmp/notes.txt"])
+        }
+        contents = "https://example.org/ferry"
+        XCTAssertEqual(qs_transfer_between(host.window, 10, 10, 72, 13), 0)
+    }
+
     @MainActor func testTypedDropUsesNativeMimeDataAndLocalCoordinates() async {
         var produced = 0, points: [CGPoint] = [], targeting: [Bool] = [], accepts = true
         let targeted = Binding(get: { targeting.last ?? false }, set: { targeting.append($0) })

@@ -18,6 +18,10 @@ Reopening the picker and pressing Space sends a heart. The test phone verified t
 
 ![Serein’s reaction viewer after the test phone received the heart](Screenshots/serein-linux-reaction-viewer.png)
 
+The composer also accepts file URLs for documents granted through the Linux desktop portal. In the Docker check, the X11 clipboard offered a file URL for a disposable document at the document portal mount point. Serein sent the file and its caption. The test phone downloaded the attachment, decrypted it and compared its bytes with the original.
+
+![File and caption sent from the production Serein composer](Screenshots/serein-linux-file-transfer.png)
+
 The entry point and all eight worker executables in this Docker package were built in release configuration. Choosing Help → About in the desktop app opens Serein’s own About view in a second Qt window. Escape closes About and leaves the installer running. `WindowGroup` also accepts typed presentation values. Opening an existing value activates its window, and changing the binding updates which value will find that window. `Settings`, `SettingsLink`, and the application menu’s Ctrl+, shortcut share a single settings window. Scenes can request or suppress presentation at launch. `@AppStorage` keeps controls in sync across windows and saves changes between launches. A view or scene can select its preferences suite with `defaultAppStorage(_:)`.
 
 ![Serein’s About window opened from the Linux desktop menu](Screenshots/serein-linux-about.png)

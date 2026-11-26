@@ -3,6 +3,27 @@ import XCTest
 @testable @_spi(Qt) import SwiftUI
 
 final class ClipboardCommandTests: XCTestCase {
+    @MainActor func testComposerAcceptsCopiedFileURLs() async {
+        let path = URL(fileURLWithPath: "/tmp/A picture.png")
+        var received: [NSItemProvider] = []
+        let host = Host(title: "Clipboard files") { context in
+            VStack {
+                Button("Copy file") {}.onCopyCommand { [NSItemProvider(object: path as NSURL)] }
+                Button("Paste attachment") {}.onPasteCommand(of: [.fileURL]) { received = $0 }
+            }.resolve(context)
+        }
+        defer { host.close() }
+        host.open(width: 180, height: 100)
+        _ = qs_click_point(host.window, 90, 34)
+        _ = qs_send_key_sequence(host.window, "Ctrl+C")
+        _ = qs_click_point(host.window, 90, 66)
+        _ = qs_send_key_sequence(host.window, "Ctrl+V")
+        XCTAssertEqual(received.count, 1)
+        received.first?.loadDataRepresentation(forTypeIdentifier: UTType.fileURL.identifier) { data, error in
+            XCTAssertNil(error)
+            XCTAssertEqual(data, Data((path.absoluteString + "\r\n").utf8))
+        }
+    }
     @MainActor func testFocusedCutCopyAndValidatedPaste() async {
         var copies = 0, cuts = 0, received: [NSItemProvider] = []
         var validate = true

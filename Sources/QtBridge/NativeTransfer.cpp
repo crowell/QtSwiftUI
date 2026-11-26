@@ -14,7 +14,10 @@ void qs_mime_read(void *value, int representations, void *context, QSMimeEntry e
     if (!value || !entry) return;
     const auto *mime = static_cast<const QMimeData *>(value);
     for (const auto &format : mime->formats()) {
-        const auto bytes = representations ? mime->data(format) : QByteArray();
+        // A URI list can offer web links, files, or both. Its schemes are
+        // needed when checking a public.file-url destination before a drop.
+        const auto bytes = (representations || format == QStringLiteral("text/uri-list"))
+            ? mime->data(format) : QByteArray();
         entry(context, format.toUtf8().constData(), reinterpret_cast<const unsigned char *>(bytes.constData()), size_t(bytes.size()));
     }
 }

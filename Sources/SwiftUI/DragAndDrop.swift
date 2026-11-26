@@ -9,7 +9,11 @@ public final class NSItemProvider: NSObject {
         let data: Data
     }
     fileprivate var representations: [Representation] = []
-    public var registeredTypeIdentifiers: [String] { representations.map(\.identifier) }
+    private var fileLinks: Representation?
+    public var registeredTypeIdentifiers: [String] {
+        let types = representations.map(\.identifier)
+        return fileLinks == nil || types.contains(UTType.fileURL.identifier) ? types : types + [UTType.fileURL.identifier]
+    }
 
     public override init() { super.init() }
     public init(object: NSString) {
@@ -37,7 +41,8 @@ public final class NSItemProvider: NSObject {
     }
 
     fileprivate func representation(for identifier: String) -> Representation? {
-        representations.first { item in
+        if identifier == UTType.fileURL.identifier, let fileLinks { return fileLinks }
+        return representations.first { item in
             if item.identifier == identifier { return true }
             guard let offered = UTType(item.identifier), let requested = UTType(identifier) else { return false }
             return offered.conforms(to: requested)
@@ -67,6 +72,15 @@ public final class NSItemProvider: NSObject {
             let data = bytes.map { Data(bytes: $0, count: count) } ?? Data()
             let identifier = type?.identifier ?? formatName
             provider.representations.append(.init(identifier: identifier, format: formatName, data: data))
+            if type == .url, let list = String(data: data, encoding: .utf8) {
+                let files = list.split(whereSeparator: \.isNewline).filter { line in
+                    !line.hasPrefix("#") && URL(string: String(line))?.isFileURL == true
+                }
+                if !files.isEmpty {
+                    let contents = files.joined(separator: "\r\n") + "\r\n"
+                    provider.fileLinks = .init(identifier: UTType.fileURL.identifier, format: formatName, data: Data(contents.utf8))
+                }
+            }
         }
         return provider
     }
