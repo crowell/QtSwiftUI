@@ -65,12 +65,14 @@ public:
     double radius = 0;
     void paintEvent(QPaintEvent *) override {
         QPainter painter(this);
+        painter.translate(property("qsFraction").toPointF());
         painter.setRenderHint(QPainter::Antialiasing, antialias);
         painter.setPen(Qt::NoPen);
         painter.setBrush(fill);
-        const double r = std::min(radius, std::min(width(), height()) / 2.0);
+        const auto logical = property("qsSize").toSizeF();
+        const double r = std::min(radius, std::min(logical.width(), logical.height()) / 2.0);
         if (customPath) painter.drawPath(path);
-        else painter.drawRoundedRect(QRectF(rect()), r, r);
+        else painter.drawRoundedRect(QRectF(QPointF(), logical), r, r);
     }
 };
 struct Drawing {
@@ -81,6 +83,7 @@ struct Drawing {
     bool antialias;
     QColor color;
     std::optional<QLinearGradient> gradient;
+    std::optional<QPainterPath> clip;
 };
 class CanvasWidget final : public QWidget {
 public:
@@ -88,9 +91,12 @@ public:
     std::vector<Drawing> drawings;
     void paintEvent(QPaintEvent *) override {
         QPainter painter(this);
+        painter.translate(property("qsFraction").toPointF());
         for (const auto &drawing : drawings) {
+            painter.save();
+            if (drawing.clip) painter.setClipPath(*drawing.clip);
             painter.setRenderHint(QPainter::Antialiasing, drawing.antialias);
-            painter.setTransform(drawing.matrix);
+            painter.setTransform(drawing.matrix, true);
             painter.setOpacity(drawing.opacity);
             QBrush brush = drawing.gradient ? QBrush(*drawing.gradient) : QBrush(drawing.color);
             if (drawing.lineWidth >= 0) {
@@ -98,6 +104,7 @@ public:
             } else {
                 painter.fillPath(drawing.path, brush);
             }
+            painter.restore();
         }
     }
 };
@@ -345,6 +352,38 @@ int qs_path_contains(const QSPath *path, double x, double y, int evenOdd) {
     return copy.contains(QPointF(x, y));
 }
 void qs_path_append(QSPath *path, const QSPath *other, QSAffine t) { path->addPath(transform(t).map(*other)); }
+void qs_path_stroke(QSPath *target, const QSPath *source, double width, int cap, int join, double miterLimit,
+                    const double *dash, size_t count, double phase) {
+    if (!(width > 0)) return;
+    QPainterPathStroker stroke;
+    stroke.setWidth(width);
+    stroke.setCapStyle(cap == 1 ? Qt::RoundCap : cap == 2 ? Qt::SquareCap : Qt::FlatCap);
+    stroke.setJoinStyle(join == 1 ? Qt::RoundJoin : join == 2 ? Qt::BevelJoin : Qt::SvgMiterJoin);
+    stroke.setMiterLimit(miterLimit);
+    if (count) {
+        QList<qreal> pattern;
+        double total = 0;
+        for (size_t i = 0; i < count; ++i) {
+            if (!std::isfinite(dash[i]) || dash[i] < 0) return;
+            pattern.append(dash[i] / width);
+            total += dash[i];
+        }
+        if (total > 0) {
+            if (count % 2) pattern += QList<qreal>(pattern);
+            stroke.setDashPattern(pattern);
+            stroke.setDashOffset(phase / width);
+        }
+    }
+    target->addPath(stroke.createStroke(*source));
+}
+void qs_path_clip(QSPath *target, const QSPath *source, int evenOdd, int inverse) {
+    QPainterPath shape = *source;
+    shape.setFillRule(evenOdd ? Qt::OddEvenFill : Qt::WindingFill);
+    static_cast<QPainterPath &>(*target) = inverse ? target->subtracted(shape) : target->intersected(shape);
+}
+void qs_canvas_clip(QSWidget w, const QSPath *path) {
+    static_cast<CanvasWidget *>(w)->drawings.back().clip = *path;
+}
 void qs_surface_path(QSWidget w, const QSPath *path, int evenOdd, int antialias) {
     auto *surface = static_cast<Surface *>(w);
     surface->customPath = true;
@@ -428,13 +467,27 @@ QSSize qs_measure(QSWidget w, double width) {
     return {double(size.width()), double(size.height())};
 }
 QSSize qs_origin(QSWidget w) {
-    auto point = widget(w)->mapTo(widget(w)->window(), QPoint(0, 0));
-    return {double(point.x()), double(point.y())};
+    auto *item = widget(w);
+    const auto point = QPointF(item->mapTo(item->window(), QPoint())) + item->property("qsFraction").toPointF();
+    return {point.x(), point.y()};
 }
 void qs_place(QSWidget w, double x, double y, double width, double height) {
-    widget(w)->setGeometry(qRound(x), qRound(y), qMax(0, qRound(x + width) - qRound(x)), qMax(0, qRound(y + height) - qRound(y)));
-    widget(w)->raise();
-    widget(w)->show();
+    auto *item = widget(w);
+    const auto parentFraction = item->parentWidget()->property("qsFraction").toPointF();
+    const QPointF origin(x + parentFraction.x(), y + parentFraction.y());
+    // Keep fractional placement through grouping widgets. QPainter can retain it
+    // when a SwiftUI drawing falls between Qt's integer widget coordinates.
+    const bool vector = dynamic_cast<Surface *>(item) || dynamic_cast<CanvasWidget *>(item);
+    const bool enclose = vector || dynamic_cast<GroupWidget *>(item);
+    const int left = enclose ? qFloor(origin.x()) : qRound(origin.x());
+    const int top = enclose ? qFloor(origin.y()) : qRound(origin.y());
+    const int right = enclose ? qCeil(origin.x() + width) : qRound(origin.x() + width);
+    const int bottom = enclose ? qCeil(origin.y() + height) : qRound(origin.y() + height);
+    item->setProperty("qsFraction", origin - QPointF(left, top));
+    if (vector) item->setProperty("qsSize", QSizeF(width, height));
+    item->setGeometry(left, top, width > 0 ? qMax(0, right - left) : 0, height > 0 ? qMax(0, bottom - top) : 0);
+    item->raise();
+    item->show();
 }
 
 int qs_click(QSWindow *window, const char *id) {

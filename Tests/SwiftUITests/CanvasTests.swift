@@ -28,6 +28,35 @@ final class CanvasTests: XCTestCase {
             XCTAssertGreaterThan(qs_pixel(host.window, 68, 16) & 255, 215)
         }
     }
+    func testCopiedClipsTransformsAndRoundDashedStrokes() async {
+        await MainActor.run {
+            let host = Host(title: "Clips") { context in
+                Canvas { graphics, size in
+                    let canvas = Path(CGRect(origin: .zero, size: size))
+                    graphics.fill(canvas, with: .color(.white))
+                    var copy = graphics
+                    copy.translateBy(x: 8, y: 0)
+                    copy.clip(to: Path(CGRect(x: 0, y: 4, width: 20, height: 16)))
+                    copy.clip(to: Path(CGRect(x: 4, y: 8, width: 6, height: 6)), options: .inverse)
+                    copy.translateBy(x: -8, y: 0)
+                    XCTAssertEqual(copy.clipBoundingRect, CGRect(x: 8, y: 4, width: 20, height: 16))
+                    copy.fill(canvas, with: .color(.black))
+
+                    var path = Path()
+                    path.addLines([CGPoint(x: 10, y: 28), CGPoint(x: 46, y: 28)])
+                    graphics.stroke(path, with: .color(.black), style: StrokeStyle(lineWidth: 4, lineCap: .round, dash: [8, 8]))
+                }.resolve(context)
+            }
+            defer { host.close() }
+            host.open(width: 60, height: 36)
+            XCTAssertEqual(qs_pixel(host.window, 9, 5), 0xff000000)
+            XCTAssertEqual(qs_pixel(host.window, 14, 10), 0xffffffff)
+            XCTAssertEqual(qs_pixel(host.window, 6, 7), 0xffffffff)
+            XCTAssertEqual(qs_pixel(host.window, 9, 28), 0xff000000)
+            XCTAssertEqual(qs_pixel(host.window, 22, 28), 0xffffffff)
+            XCTAssertEqual(qs_pixel(host.window, 29, 28), 0xff000000)
+        }
+    }
     func testPathBoundsAndHitTesting() {
         var p = Path()
         XCTAssertTrue(p.boundingRect.isNull)

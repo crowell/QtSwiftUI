@@ -21,10 +21,23 @@ private func pixels(_ image: CGImage) throws -> [UInt8] {
         }
     }
     @MainActor private static func compare() throws {
-        let renderer = ImageRenderer(content: AccountArtwork().environment(\.colorScheme, .light))
+        let artwork = CommandLine.arguments.contains("--keys") ? AnyView(KeyArtwork()) : AnyView(AccountArtwork())
+        let renderer = ImageRenderer(content: artwork.environment(\.colorScheme, .light))
         renderer.scale = 1
         let captured = try Data(contentsOf: URL(fileURLWithPath: CommandLine.arguments[1]))
-        guard let apple = renderer.cgImage,
+        // Draw into a specified sRGB bitmap so the reference is independent of
+        // the display's color profile and the host's GPU-backed image export.
+        var reference: CGImage?
+        renderer.render { size, draw in
+            let width = Int(size.width.rounded()), height = Int(size.height.rounded())
+            guard let space = CGColorSpace(name: CGColorSpace.sRGB),
+                  let bitmap = CGContext(data: nil, width: width, height: height, bitsPerComponent: 8,
+                                         bytesPerRow: width * 4, space: space,
+                                         bitmapInfo: CGImageAlphaInfo.premultipliedLast.rawValue) else { return }
+            draw(bitmap)
+            reference = bitmap.makeImage()
+        }
+        guard let apple = reference,
               let data = NSBitmapImageRep(cgImage: apple).representation(using: .png, properties: [:]),
               let linux = NSBitmapImageRep(data: captured)?.cgImage else { throw ComparisonError.image }
         try data.write(to: URL(fileURLWithPath: CommandLine.arguments[2]))

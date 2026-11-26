@@ -95,6 +95,7 @@ public struct Path: Equatable, Sendable {
         case move(CGPoint), line(CGPoint), quad(CGPoint, CGPoint), cubic(CGPoint, CGPoint, CGPoint)
         case close, rect(CGRect), ellipse(CGRect), rounded(CGRect, CGSize)
         indirect case transformed(Path, CGAffineTransform)
+        indirect case stroked(Path, StrokeStyle)
     }
     var commands: [Command] = []
     public init() {}
@@ -151,6 +152,8 @@ public struct Path: Equatable, Sendable {
             case .line(let p): qs_path_step(w, 1, p.x, p.y, 0, 0, 0, 0)
             case .quad(let a, let p): qs_path_step(w, 2, a.x, a.y, p.x, p.y, 0, 0)
             case .cubic(let a, let b, let p): qs_path_step(w, 3, a.x, a.y, b.x, b.y, p.x, p.y)
+            case .stroked(let path, let style):
+                path.withNativePath { style.appendOutline(of: $0, to: w) }
             case .transformed(let path, let transform):
                 path.withNativePath { qs_path_append(w, $0, transform.native) }
             case .close: qs_path_step(w, 4, 0, 0, 0, 0, 0, 0)

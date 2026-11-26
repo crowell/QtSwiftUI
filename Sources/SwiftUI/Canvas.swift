@@ -26,7 +26,7 @@ public struct Gradient: Hashable, Sendable {
     }
 }
 
-@MainActor public struct GraphicsContext {
+public struct GraphicsContext {
     public struct Shading {
         fileprivate enum Paint {
             case style(any ShapeStyle)
@@ -39,13 +39,33 @@ public struct Gradient: Hashable, Sendable {
             Self(paint: .linear(gradient, startPoint, endPoint))
         }
     }
+    public struct ClipOptions: OptionSet, Sendable {
+        public let rawValue: UInt32
+        public init(rawValue: UInt32) { self.rawValue = rawValue }
+        public static let inverse = Self(rawValue: 1)
+    }
+    fileprivate struct ClipRegion {
+        let bounds: CGRect
+        var steps: [(path: Path, evenOdd: Bool, inverse: Bool)] = []
+
+        func withPath<R>(_ body: (OpaquePointer) -> R) -> R {
+            Path(bounds).withNativePath { clip in
+                for step in steps {
+                    step.path.withNativePath { qs_path_clip(clip, $0, step.evenOdd ? 1 : 0, step.inverse ? 1 : 0) }
+                }
+                return body(clip)
+            }
+        }
+    }
     fileprivate struct Draw {
         let path: Path, shading: Shading, fill: FillStyle, transform: CGAffineTransform
         let opacity: Double, lineWidth: CGFloat?
         let environment: EnvironmentValues
+        let clip: ClipRegion
     }
     fileprivate final class DisplayList { var drawings: [Draw] = [] }
     fileprivate let list: DisplayList
+    fileprivate var region: ClipRegion
     public var environment: EnvironmentValues
     public var opacity: Double = 1
     public var transform = CGAffineTransform.identity
@@ -53,21 +73,37 @@ public struct Gradient: Hashable, Sendable {
     public mutating func translateBy(x: CGFloat, y: CGFloat) { transform = transform.translatedBy(x: x, y: y) }
     public mutating func rotate(by angle: Angle) { transform = transform.rotated(by: angle.radians) }
     public mutating func concatenate(_ matrix: CGAffineTransform) { transform = matrix.concatenating(transform) }
+    public var clipBoundingRect: CGRect {
+        region.withPath { clip in
+            let local = qs_path_new()!
+            defer { qs_path_delete(local) }
+            qs_path_append(local, clip, transform.inverted().native)
+            let r = qs_path_bounds(local)
+            return CGRect(x: r.x, y: r.y, width: r.width, height: r.height)
+        }
+    }
+    public mutating func clip(to path: Path, style: FillStyle = FillStyle(), options: ClipOptions = []) {
+        region.steps.append((path.applying(transform), style.isEOFilled, options.contains(.inverse)))
+    }
+    public func stroke(_ path: Path, with shading: Shading, style: StrokeStyle) {
+        fill(path.strokedPath(style), with: shading)
+    }
     public func fill(_ path: Path, with shading: Shading, style: FillStyle = FillStyle()) {
-        list.drawings.append(Draw(path: path, shading: shading, fill: style, transform: transform, opacity: opacity, lineWidth: nil, environment: environment))
+        list.drawings.append(Draw(path: path, shading: shading, fill: style, transform: transform, opacity: opacity, lineWidth: nil, environment: environment, clip: region))
     }
     public func stroke(_ path: Path, with shading: Shading, lineWidth: CGFloat = 1) {
         if lineWidth > 0 {
-            list.drawings.append(Draw(path: path, shading: shading, fill: FillStyle(), transform: transform, opacity: opacity, lineWidth: lineWidth, environment: environment))
+            list.drawings.append(Draw(path: path, shading: shading, fill: FillStyle(), transform: transform, opacity: opacity, lineWidth: lineWidth, environment: environment, clip: region))
         }
     }
-    fileprivate func replay(on widget: UnsafeMutableRawPointer) {
+    @MainActor fileprivate func replay(on widget: UnsafeMutableRawPointer) {
         qs_canvas_clear(widget)
         for drawing in list.drawings {
             drawing.path.withNativePath {
                 qs_canvas_path(widget, $0, drawing.transform.native, drawing.opacity, drawing.lineWidth ?? -1,
                                drawing.fill.isEOFilled ? 1 : 0, drawing.fill.isAntialiased ? 1 : 0)
             }
+            if !drawing.clip.steps.isEmpty { drawing.clip.withPath { qs_canvas_clip(widget, $0) } }
             let environment = drawing.environment
             switch drawing.shading.paint {
             case .style(let style): qs_canvas_color(widget, style.color(in: environment).hex(environment.colorScheme))
@@ -87,7 +123,7 @@ public struct Canvas<Symbols: View>: Primitive {
     func elements(in context: Context) -> [Element] {
         let widget = context.widget(QSCanvas)
         return [Element { $0.replacingUnspecifiedDimensions() } place: { bounds, _ in
-            var graphics = GraphicsContext(list: .init(), environment: context.environment)
+            var graphics = GraphicsContext(list: .init(), region: .init(bounds: CGRect(origin: .zero, size: bounds.size)), environment: context.environment)
             renderer(&graphics, bounds.size)
             graphics.replay(on: widget)
             qs_place(widget, bounds.minX, bounds.minY, bounds.width, bounds.height)
@@ -97,11 +133,6 @@ public struct Canvas<Symbols: View>: Primitive {
 extension Shape {
     public func stroke<S: ShapeStyle>(_ content: S, lineWidth: CGFloat = 1) -> some View {
         Canvas { context, size in context.stroke(path(in: CGRect(origin: .zero, size: size)), with: .style(content), lineWidth: lineWidth) }
-    }
-    public func stroke(lineWidth: CGFloat = 1) -> some View {
-        Canvas { context, size in
-            context.stroke(path(in: CGRect(origin: .zero, size: size)), with: .color(context.environment.foreground), lineWidth: lineWidth)
-        }
     }
 }
 extension InsettableShape {

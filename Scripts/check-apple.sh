@@ -6,12 +6,14 @@ for file in Examples/*/*.swift Tests/EventLoop/Sources/EventLoopProbe/Probe.swif
 done
 if [ "$#" -gt 0 ]; then
     d="$1/Packages/SignalUI/Sources/SignalUI"
-    xcrun swiftc -typecheck -swift-version 6 -parse-as-library Scripts/SereinExample.swift Scripts/AccountArtwork.swift "$d/Axo/AxoContainer.swift" \
+    preview=$(mktemp -d)
+    trap 'rm -rf "$preview"' EXIT
+    sh Scripts/extract-key-illustration.sh "$d/Components/KeyTransparencyIllustration.swift" "$preview/Keys.swift"
+    xcrun swiftc -typecheck -swift-version 6 -parse-as-library Scripts/SereinExample.swift Scripts/AccountArtwork.swift \
+        Scripts/KeyArtwork.swift "$preview/Keys.swift" "$d/Axo/AxoContainer.swift" \
         "$d/Theme/CSSGrid.swift" "$d/Theme/CSSFlex.swift" "$d/Theme/AxoColor.swift" "$d/Theme/AxoTheme.swift" \
         "$d/Theme/CSSShapes.swift" "$d/Components/QRCode/QRCodeGenerator.swift" "$d/Components/QRCode/QrCode.swift" \
         "$d/Axo/SVGPathData.swift" "$d/Components/Preferences/SignalLoginIllustration.swift"
-    preview=$(mktemp -d)
-    trap 'rm -rf "$preview"' EXIT
-    sh Scripts/prepare-diagnostics.sh "$(cd "$1" && pwd)" "$preview"
-    swift test --package-path "$preview"
+    sh Scripts/prepare-diagnostics.sh "$(cd "$1" && pwd)" "$preview/diagnostics"
+    swift test --package-path "$preview/diagnostics"
 fi

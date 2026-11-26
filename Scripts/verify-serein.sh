@@ -9,7 +9,9 @@ mkdir -p "$preview/Sources/DevicePreview"
 for source in Axo/AxoContainer Theme/CSSGrid Theme/CSSFlex Theme/AxoColor Theme/AxoTheme Theme/CSSShapes Components/QRCode/QRCodeGenerator Components/QRCode/QrCode Axo/SVGPathData Components/Preferences/SignalLoginIllustration; do
     cp "$source_dir/$source.swift" "$preview/Sources/DevicePreview/"
 done
-cp /src/Scripts/SereinExample.swift /src/Scripts/AccountArtwork.swift "$preview/Sources/DevicePreview/"
+cp /src/Scripts/SereinExample.swift /src/Scripts/AccountArtwork.swift /src/Scripts/KeyArtwork.swift "$preview/Sources/DevicePreview/"
+sh /src/Scripts/extract-key-illustration.sh "$source_dir/Components/KeyTransparencyIllustration.swift" \
+    "$preview/Sources/DevicePreview/KeyTransparencyIllustration.swift"
 cat > "$preview/Package.swift" <<'SWIFT'
 // swift-tools-version: 6.2
 import PackageDescription
@@ -24,6 +26,7 @@ binary=$(swift build --package-path "$preview" --show-bin-path)/DevicePreview
 "$binary"
 if [ -n "${QTSWIFTUI_SCREENSHOT:-}" ]; then
     QTSWIFTUI_SCREENSHOT="$(dirname "$QTSWIFTUI_SCREENSHOT")/account-artwork.png" "$binary" --artwork
+    QTSWIFTUI_SCREENSHOT="$(dirname "$QTSWIFTUI_SCREENSHOT")/key-transparency.png" "$binary" --keys
 fi
 
 diagnostics="$preview/diagnostics"

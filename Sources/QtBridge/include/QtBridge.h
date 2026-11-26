@@ -1,4 +1,5 @@
 #pragma once
+#include <stddef.h>
 #ifdef __cplusplus
 extern "C" {
 #endif
@@ -41,6 +42,10 @@ QSSize qs_path_position(const QSPath *);
 int qs_path_contains(const QSPath *, double x, double y, int evenOdd);
 void qs_path_step(QSPath *, int op, double x, double y, double a, double b, double c, double d);
 void qs_path_append(QSPath *, const QSPath *, QSAffine);
+void qs_path_stroke(QSPath *target, const QSPath *source, double width, int cap, int join, double miterLimit,
+                    const double *dash, size_t count, double phase);
+void qs_path_clip(QSPath *target, const QSPath *source, int evenOdd, int inverse);
+void qs_canvas_clip(QSWidget, const QSPath *);
 void qs_surface_path(QSWidget, const QSPath *, int evenOdd, int antialias);
 void qs_canvas_clear(QSWidget);
 void qs_canvas_path(QSWidget, const QSPath *, QSAffine, double opacity, double lineWidth, int evenOdd, int antialias);
