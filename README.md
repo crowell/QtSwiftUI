@@ -12,7 +12,7 @@ From a checkout with Docker running, this command builds the Ubuntu 24.04 image,
 ./Scripts/verify-linux.sh
 ```
 
-Pass a Serein checkout to render its inbox, Calls tab, New Call picker, call history, call-link details, participant approval, contact details and note, About window, nickname editor, call settings, data usage settings, call-quality survey, chat-color picker and custom editor, media gallery, photo lightbox, sticker manager and pack preview, disappearing-message timer, voice-note controls, data-clearing and device-link screens, leave-call dialog, call diagnostics window, device card and artwork.
+Pass a Serein checkout to render its inbox, Calls tab, New Call picker, call history, call-link details, participant approval, contact details and note, About window, nickname editor, call settings, data usage settings, call-quality survey, screen-sharing picker, chat-color picker and custom editor, media gallery, photo lightbox, sticker manager and pack preview, disappearing-message timer, voice-note controls, data-clearing and device-link screens, leave-call dialog, call diagnostics window, device card and artwork.
 
 ```sh
 ./Scripts/verify-linux.sh ../serein
@@ -63,6 +63,12 @@ The `--lightbox` example runs the photo mode of Serein’s `Lightbox` and its or
 ![Serein’s photo lightbox on Ubuntu](Screenshots/lightbox.png)
 
 [View the full-resolution zoom on Ubuntu](Screenshots/lightbox-zoomed.png). Tests send pinch events through Qt and AppKit, compare scale, recognition threshold, initial velocity and gesture coordinates, then exercise click-to-zoom, thumbnail selection, Save and Close. Qt tests also move the pointer across the enlarged image and check both zoom cursors. Set `QTSWIFTUI_LIGHTBOX_REFERENCE` to an existing directory when running `Scripts/check-apple.sh` to save the macOS captures.
+
+The `--share-picker` example runs Serein’s `CallingSelectPresentingSourcesModal` with the screen and four windows from its snapshot test. Its two grids use `LazyVGrid` and four flexible `GridItem` columns. The fixture reads the original PNG thumbnails when present. A missing thumbnail displays Serein’s warning icon. Selecting a source enables Start sharing and passes its ID to the local callback. Desktop capture is outside this example.
+
+Tests on Apple and Ubuntu choose a screen, switch to a window, submit a source with a missing thumbnail, and exercise both dismiss buttons. In the 840 × 620 selected-window capture, the mean absolute RGB difference from the Apple rendering was 1.85/255. Qt and Apple differ in thumbnail sampling, text truncation and card shadows. Set `QTSWIFTUI_SHARE_REFERENCE` to an existing directory to capture the picker during tests.
+
+![Serein screen-sharing picker with a window selected on Ubuntu](Screenshots/share-picker-selected.png)
 
 The `--stickers` example runs Serein’s `StickerManager`, `StickerPreviewModal`, and uninstall confirmation with its sticker-manager test packs. Right-click a pack to add or remove it, or click its row to open the preview. Changes last for the lifetime of the example. The preview uses three kitten images from the desktop fixtures and falls back to Serein’s bundled cat frame when those images are absent. Qt supplies the native context menu and clipboard. The shared text adapter draws the two-line caption on the preview’s stacked buttons.
 
@@ -173,6 +179,7 @@ The target is source compatibility with Apple's public SwiftUI APIs. The impleme
 | Animation | Cubic timing curves interpolate opacity, offsets, rotation angles and trimmed shapes. A shared fixture exercises Serein’s original Axo progress ring. Rotation currently affects painting, while native mouse hit regions retain the unrotated geometry. |
 | Links and pointer input | Link activation, accessible link labels, custom URL handling, Qt tooltips and continuous hover in local, global and named coordinate spaces. Ubuntu tests track the pointer over a native button, including fractional positions and exit. Both platforms verify the modified button’s geometry and click action. Hover event delivery on Apple remains unverified. Ubuntu uses the desktop URL handler for system actions. |
 | View visibility and masks | Hidden views keep their layout and preferences. Both mask overloads composite the mask view’s alpha with the content in Qt. Tests move a half-transparent mask between the two edges and check hidden hit targets on both platforms. |
+| Lazy grids | Fixed, flexible and adaptive columns, per-column and grid alignment, right-to-left layout, full-width section headers and footers, and on-demand rows in a scroll view. Tests compare track frames and check cell state after scrolling and changing the column count. |
 | Lazy stacks | `LazyVStack` measures visible rows, estimates the remaining height and preserves state by row identity. Apple and Ubuntu tests jump between the ends of 200 rows, check retained state, and pin section headers and footers. |
 | Scrolling | `scrollDisabled` controls Qt wheel, scrollbar and kinetic input while leaving child actions available. Scroll views and text editors apply per-axis bounce policies to the Qt kinetic scroller. Physical trackpad and touch bounce remain unverified. Native Qt scrolling updates scroll geometry observers. Apple and Ubuntu tests scroll 240 points of content through an 80-point viewport and check old and new values as the offset crosses a threshold. |
 | Keyboard input | Programmatic composer focus, native focus changes, sending with Return, Escape commands and selectable monospaced diagnostic text. |
@@ -180,7 +187,7 @@ The target is source compatibility with Apple's public SwiftUI APIs. The impleme
 
 `./Scripts/check-apple.sh ../serein` type-checks the example source with Apple's SwiftUI module on a Mac with Xcode. `./Scripts/check-api.sh` extracts public symbol graphs from Xcode and the Linux image. Pass `--missing` to list missing declaration paths. The inventory groups declarations by symbol kind and path, counts overload spellings separately, and excludes underscored and synthesized members. A shared name alone cannot establish matching signatures, constraints, availability or behavior.
 
-The inventory against the macOS 27.2 SDK found 1,286 shared declaration paths out of 7,627 and 811 identical declaration spellings out of 8,735. The examples exercise a smaller set at runtime. Navigation, multiwindow scenes, broader animation support, text shaping parity, gestures and platform integration remain substantial gaps. Font metrics, control appearance and several layout behaviors differ from Apple's implementation.
+The inventory against the macOS 27.2 SDK found 1,297 shared declaration paths out of 7,627 and 821 identical declaration spellings out of 8,735. The examples exercise a smaller set at runtime. Navigation, multiwindow scenes, broader animation support, text shaping parity, gestures and platform integration remain substantial gaps. Font metrics, control appearance and several layout behaviors differ from Apple's implementation.
 
 After capturing the Linux examples, run `./Scripts/compare-artwork.sh ../serein` on macOS to render both illustrations with Apple's `ImageRenderer`. At a threshold of 8/255 in any RGB channel, 101 of 119,680 account artwork pixels (0.084%) and 91 of 49,928 key transparency pixels (0.182%) differed. The mean absolute channel differences were 0.104/255 and 0.095/255 respectively. Both reference images are saved in `.build/artwork/`.
 

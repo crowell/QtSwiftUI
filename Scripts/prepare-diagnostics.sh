@@ -97,6 +97,35 @@ if [ ! -f "$photo" ]; then photo="$checkout/Packages/SignalUI/Tests/SignalUITest
 cp "$photo" "$target_dir/Media/cat-screenshot-3x4.png"
 lighthouse="$checkout/Signal-Desktop/fixtures/tina-rolf-269345-unsplash.jpg"
 if [ -f "$lighthouse" ]; then cp "$lighthouse" "$target_dir/Media/"; fi
+# Assemble Serein's source selector and its static snapshot inputs. Only the optional
+# bundle-icon lookup needs AppKit. The picker receives thumbnails from its caller.
+{
+    echo 'import SwiftUI'
+    echo 'import SignalI18n'
+    declarations '^public struct PresentableSource:' 1 "$source_dir/Calling/ScreenShare.swift"
+    declarations '^public struct CallingSelectPresentingSourcesModal:|^struct (SourceCard|SourceThumbnail|AspectBox):' 4 "$source_dir/Calling/ScreenShareViews.swift" |
+        awk '/if let icon = ScreenShareCapture.icon/ { print "#if canImport(AppKit)"; icon=1 }
+             {print} icon && /^                    }/ { print "#endif"; icon=0; count++ }
+             END { if (icon || count != 1) exit 1 }'
+    echo '#if canImport(AppKit)'
+    echo 'import AppKit'
+    echo 'enum ScreenShareCapture {'
+    awk '/^    @MainActor public static func icon\(bundleId:/ {inside=1; count++} inside {print}
+         /^    }/ {inside=0} END {if (count != 1 || inside) exit 1}' "$source_dir/Calling/ScreenShare.swift"
+    echo '}'
+    echo '#endif'
+} > "$target_dir/ScreenSharePicker.swift"
+{
+    echo 'import SwiftUI'
+    echo 'extension ScreenSharePreview { static let sources: [PresentableSource] = {'
+    awk '/^        let screen = pngFixture/ {inside=1; count++}
+         inside {print} /^        \]$/ && inside {inside=0}
+         END {if (count != 1 || inside) exit 1}' "$checkout/Packages/SignalUI/Tests/SignalUITests/Calling/ScreenShareSnapshotTests.swift"
+    echo 'return sources }() }'
+} > "$target_dir/ScreenShareSources.swift"
+for thumbnail in presenting-source-screen.png presenting-source-window.png; do
+    if [ -f "$checkout/Signal-Desktop/fixtures/$thumbnail" ]; then cp "$checkout/Signal-Desktop/fixtures/$thumbnail" "$target_dir/Media/"; fi
+done
 cp "$source_dir/Components/Stickers/StickerManager.swift" "$source_dir/Axo/AxoModalStack.swift" "$target_dir/"
 # Keep the pack preview's native clipboard operation on each desktop.
 awk '/^import AppKit$/ { print "#if os(Linux)\nimport QtBridge\n#else\nimport AppKit\n#endif"; next }

@@ -65,8 +65,8 @@ public struct _ConditionalContent<TrueContent: View, FalseContent: View>: Primit
         case .second(let view): view.collectSubviews(in: context.descending(.position(1)))
         }
     }
-    private enum Storage { case first(TrueContent), second(FalseContent) }
-    private let storage: Storage
+    enum Storage { case first(TrueContent), second(FalseContent) }
+    let storage: Storage
     init(first: TrueContent) { storage = .first(first) }
     init(second: FalseContent) { storage = .second(second) }
     func elements(in context: Context) -> [Element] {
@@ -81,7 +81,7 @@ extension Optional: View, Primitive where Wrapped: View {
 }
 public nonisolated struct AnyView: Primitive, SubviewSource {
     @MainActor func subviews(in context: Context) -> [Subview] { content.collectSubviews(in: context) }
-    private let content: any View
+    let content: any View
     public init<V: View>(_ view: V) { content = view }
     @MainActor func elements(in context: Context) -> [Element] { content.resolve(context) }
 }
