@@ -61,6 +61,7 @@ enum Part: Hashable {
         return owner
     }
     func widget(_ kind: QSKind, pressed: ((Bool) -> Void)? = nil, exitCommand: (() -> Void)? = nil,
+                tap: ((UnsafeMutableRawPointer) -> Void)? = nil,
                 adjustment: ((AccessibilityAdjustmentDirection) -> Void)? = nil,
                 drag: ((QSDragSample, UnsafeMutableRawPointer) -> Void)? = nil,
                 hover: ((Bool) -> Void)? = nil, action: ((String) -> Void)? = nil) -> UnsafeMutableRawPointer {
@@ -72,7 +73,9 @@ enum Part: Hashable {
         let submit = environment.submit
         host.events[entry.id] = { kind, value in
             switch kind {
-            case QSActivate: action?(value)
+            case QSActivate:
+                tap?(entry.widget)
+                action?(value)
             case QSIncrement: adjustment?(.increment)
             case QSDecrement: adjustment?(.decrement)
             case QSFocusChanged: focus?.change(value == "1")

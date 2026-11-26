@@ -9,11 +9,13 @@ struct DiagnosticPreview: App {
         let leaveCall = CommandLine.arguments.contains("--leave-call")
         let clearing = CommandLine.arguments.contains("--clearing-data")
         let gallery = CommandLine.arguments.contains("--gallery")
+        let draft = CommandLine.arguments.contains("--recording-draft")
         let recording = CommandLine.arguments.contains("--recording")
         let discard = CommandLine.arguments.contains("--discard-recording")
         let arabic = CommandLine.arguments.contains("--arabic")
-        WindowGroup(recording || discard ? "Voice message" : gallery ? "All media" : clearing ? "Clearing data" : linking ? "Link device" : leaveCall ? "Leave current call" : "Call diagnostics") {
-            if recording || discard { RecordingPreview(discard: discard) }
+        WindowGroup(recording || draft || discard ? "Voice message" : gallery ? "All media" : clearing ? "Clearing data" : linking ? "Link device" : leaveCall ? "Leave current call" : "Call diagnostics") {
+            if draft { RecordingDraftPreview() }
+            else if recording || discard { RecordingPreview(discard: discard) }
             else if gallery { GalleryPreview() }
             else if clearing {
                 ClearingData(step: .deletingData)
@@ -25,8 +27,35 @@ struct DiagnosticPreview: App {
             else if leaveCall { LeaveCallPreview() }
             else { DiagnosticContent() }
         }
-        .defaultSize(width: recording ? 640 : linking || clearing ? 680 : 520,
-                     height: recording ? 84 : discard ? 280 : linking || clearing ? 420 : 440)
+        .defaultSize(width: recording || draft ? 640 : linking || clearing ? 680 : 520,
+                     height: recording || draft ? 84 : discard ? 280 : linking || clearing ? 420 : 440)
+    }
+}
+
+struct RecordingDraftPreview: View {
+    @Environment(\.dismiss) private var dismiss
+    @State private var position = 32.0
+    @State private var playStart: Date?
+    private let duration = 83.0
+
+    private func time(at date: Date) -> Double {
+        min(duration, position + (playStart.map { max(0, date.timeIntervalSince($0)) } ?? 0))
+    }
+    var body: some View {
+        TimelineView(.animation(minimumInterval: 0.1, paused: playStart == nil)) { clock in
+            let playback = time(at: clock.date)
+            CompositionRecordingDraft(peaks: RecordingPreview.peaks.map { $0.value / 255 }, duration: duration,
+                active: .init(playing: playStart != nil && playback < duration, duration: duration, currentTime: playback),
+                onCancel: { dismiss() }, onSend: { dismiss() },
+                onPlay: { if position >= duration { position = 0 }; playStart = .now },
+                onPause: { position = time(at: .now); playStart = nil },
+                onScrub: { ratio in position = ratio * duration; if playStart != nil { playStart = .now } })
+                .onChange(of: playback >= duration) { _, ended in
+                    if ended { position = duration; playStart = nil }
+                }
+        }
+        .frame(maxWidth: .infinity, maxHeight: .infinity)
+        .background(AxoColor.surfacePrimary)
     }
 }
 

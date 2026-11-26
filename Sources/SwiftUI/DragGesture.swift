@@ -20,6 +20,7 @@ public struct DragGesture: Gesture, NativeGesture {
             CGSize(width: predictedEndLocation.x - startLocation.x, height: predictedEndLocation.y - startLocation.y)
         }
     }
+    private var inputs: GestureInputKinds = .all
     public var minimumDistance: CGFloat
     public var coordinateSpace: CoordinateSpace
     @_disfavoredOverload public init(minimumDistance: CGFloat = 10, coordinateSpace: CoordinateSpace = .local) {
@@ -29,16 +30,13 @@ public struct DragGesture: Gesture, NativeGesture {
     public init(minimumDistance: CGFloat = 10, coordinateSpace: some CoordinateSpaceProtocol = .local) {
         self.init(minimumDistance: minimumDistance, coordinateSpace: coordinateSpace.coordinateSpace)
     }
+    public init(minimumDistance: CGFloat = 10, coordinateSpace: some CoordinateSpaceProtocol = .local, inputKinds: GestureInputKinds = .all) {
+        self.init(minimumDistance: minimumDistance, coordinateSpace: coordinateSpace.coordinateSpace)
+        inputs = inputKinds
+    }
     func recognizer(changed: @escaping (Any) -> Void, ended: @escaping (Any) -> Void) -> Recognizer {
-        Recognizer(dragDistance: max(0, minimumDistance), drag: { sample, context, widget in
-            let origin: CGPoint
-            switch coordinateSpace {
-            case .global: origin = .zero
-            case .local:
-                let position = qs_origin(widget)
-                origin = CGPoint(x: position.width, y: position.height)
-            case .named(let name): origin = context.spaces[name]?.point ?? .zero
-            }
+        Recognizer(inputs: inputs, dragDistance: max(0, minimumDistance), drag: { sample, context, widget in
+            let origin = context.origin(of: coordinateSpace, widget: widget)
             let value = Value(sample: sample, origin: origin)
             if sample.ended != 0 { ended(value) } else { changed(value) }
         }, ended: {})

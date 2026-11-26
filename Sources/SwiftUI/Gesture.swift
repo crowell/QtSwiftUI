@@ -19,8 +19,18 @@ public struct GestureMask: OptionSet, Sendable {
     public static let all: Self = [.gesture, .subviews]
 }
 
+public struct GestureInputKinds: OptionSet, Sendable {
+    public let rawValue: Int8
+    public init(rawValue: Int8) { self.rawValue = rawValue }
+    public static let directTouch = Self(rawValue: 1), indirectTouch = Self(rawValue: 2)
+    public static let pencil = Self(rawValue: 4), pointer = Self(rawValue: 8)
+    public static let all = Self(rawValue: .max)
+}
+
 struct Recognizer {
+    var inputs: GestureInputKinds = .all
     var taps = 0
+    var spatialTap: ((Context, UnsafeMutableRawPointer) -> Void)?
     var movesWindow = false
     var dragDistance: CGFloat?
     var drag: ((QSDragSample, Context, UnsafeMutableRawPointer) -> Void)?
@@ -49,9 +59,14 @@ nonisolated public struct TapGesture: Gesture, NativeGesture {
     public typealias Value = Void
     public typealias Body = Never
     public var count: Int
+    private var inputs: GestureInputKinds = .all
     public init(count: Int = 1) { self.count = count }
+    public init(count: Int = 1, inputKinds: GestureInputKinds = .all) {
+        self.count = count
+        inputs = inputKinds
+    }
     func recognizer(changed: @escaping (Any) -> Void, ended: @escaping (Any) -> Void) -> Recognizer {
-        Recognizer(taps: count) { ended(()) }
+        Recognizer(inputs: inputs, taps: count) { ended(()) }
     }
 }
 
@@ -97,10 +112,11 @@ extension View {
             let inner = ctx.with(\.gesturesEnabled, ctx.environment.gesturesEnabled && mask.contains(.subviews))
             let enabled = ctx.environment.gesturesEnabled && mask.contains(.gesture)
             let recognizer = enabled ? gesture.resolve(changed: { _ in }, ended: { _ in }) : nil
-            let group = ctx.widget(QSGroup, drag: recognizer?.drag.map { callback in { sample, widget in callback(sample, ctx, widget) } },
+            let group = ctx.widget(QSGroup, tap: recognizer?.spatialTap.map { callback in { widget in callback(ctx, widget) } },
+                                   drag: recognizer?.drag.map { callback in { sample, widget in callback(sample, ctx, widget) } },
                                    action: { _ in recognizer?.ended() })
             qs_group_gesture(group, Int32(clamping: recognizer?.taps ?? 0), recognizer?.movesWindow == true ? 1 : 0,
-                             simultaneous ? 1 : 0, recognizer?.dragDistance ?? -1)
+                             simultaneous ? 1 : 0, recognizer?.dragDistance ?? -1, Int32(recognizer?.inputs.rawValue ?? 0))
             return inner.children(of: view, inside: group)
         }
     }

@@ -1,3 +1,5 @@
+import QtBridge
+
 public enum CoordinateSpace: Hashable {
     case local, global, named(AnyHashable)
     public var isLocal: Bool { self == .local }
@@ -30,6 +32,18 @@ extension CoordinateSpaceProtocol where Self == NamedCoordinateSpace {
     public static func named(_ name: some Hashable) -> NamedCoordinateSpace { .init(name: AnyHashable(name)) }
     public static var scrollView: NamedCoordinateSpace { .named(ScrollSpace.nearest) }
     public static func scrollView(axis: Axis) -> Self { .named(ScrollSpace.axis(axis)) }
+}
+
+extension Context {
+    func origin(of space: CoordinateSpace, widget: UnsafeMutableRawPointer) -> CGPoint {
+        switch space {
+        case .global: return .zero
+        case .local:
+            let position = qs_origin(widget)
+            return CGPoint(x: position.width, y: position.height)
+        case .named(let name): return spaces[name]?.point ?? .zero
+        }
+    }
 }
 
 enum ScrollSpace: Hashable {

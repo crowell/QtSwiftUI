@@ -36,7 +36,21 @@ cp "$source_dir/Calling/CallingAudioIndicator.swift" "$source_dir/Theme/SignalIc
 cp "$source_dir/Calling/ConfirmLeaveCallModal.swift" "$source_dir/Axo/AxoAlertDialog.swift" \
    "$source_dir/Axo/AxoConfirmDialog.swift" "$source_dir/Theme/CSSShapes.swift" \
    "$source_dir/Axo/AxoPopper.swift" "$target_dir/"
-cp "$source_dir/Components/Slider.swift" "$target_dir/"
+cp "$source_dir/Components/Slider.swift" "$source_dir/Components/CompositionRecordingDraft.swift" \
+   "$source_dir/Components/SpinnerV2.swift" "$source_dir/Components/Conversation/Message/WaveformScrubber.swift" "$target_dir/"
+# The draft reuses these declarations from the larger attachment and message views.
+declarations() {
+    awk -v pattern="$1" -v expected="$2" '$0 ~ pattern { inside=1; count++ }
+        inside { print } /^}$/ { inside=0 } END { if (count != expected || inside) exit 1 }' "$3"
+}
+{
+    echo 'import SwiftUI'
+    declarations '^struct (PlaybackButton|AudioWaveformBars):|^public struct AudioWaveform:' 3 "$source_dir/Components/Conversation/Message/MessageAudio.swift"
+    declarations '^public struct MessageAttachment:' 1 "$source_dir/Components/Conversation/Message/MessageAttachment.swift"
+    declarations '^enum QuoteMIME ' 1 "$source_dir/Components/Conversation/Quote.swift"
+    declarations '^public struct RGBAImage:|^public final class RGBAAnimation:' 2 "$source_dir/Theme/PixelImage.swift"
+    declarations '^public struct PixelBuffer:' 1 "$checkout/Packages/SignalCodecs/Sources/CodecCore/Image/PixelBuffer.swift"
+} > "$target_dir/DraftAudioSupport.swift"
 # Serein observes AppKit's app-deactivation notification to save the recording draft.
 # The Linux scene supplies the same transition from Qt window and application events.
 awk '/^public struct CompositionRecording: View/ { print; print "#if os(Linux)\n    @Environment(\\.scenePhase) var phase\n#endif"; next }

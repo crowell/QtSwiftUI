@@ -24,6 +24,7 @@
 #include <QPainter>
 #include <QPainterPath>
 #include <QProgressBar>
+#include <QPointingDevice>
 #include <QProxyStyle>
 #include <QStyleOptionFocusRect>
 #include <QPushButton>
@@ -69,6 +70,8 @@ public:
     bool windowDrag = false, trackingDrag = false, simultaneous = false;
     QPointF dragOrigin;
     PointerDrag pointerDrag;
+    int gestureInputs = 127;
+    qint64 gestureDevice = -1;
     bool isImage = false;
     bool heading = false, adjustable = false;
     bool modal = false;
@@ -77,9 +80,14 @@ public:
     std::optional<QPainterPath> contentShape;
     int tapCount = 0, consecutiveTaps = 0;
     bool trackingTap = false;
-    QPointF pressPosition;
+    QPointF pressPosition, tapLocation;
     QElapsedTimer lastTap;
     bool accessibilityHidden = false;
+    void cancelPointer() {
+        trackingTap = trackingDrag = pointerDrag.tracking = false;
+        consecutiveTaps = 0;
+        gestureDevice = -1;
+    }
     void paintEvent(QPaintEvent *event) override {
         QWidget::paintEvent(event);
         if (!hasFocus() || focusProxy() || !property("qsFocusable").toBool()) return;
@@ -425,6 +433,16 @@ struct QSWindow final : QWidget {
             event(context, source->property("swiftId").toInt(), QSHoverChanged, input->type() == QEvent::Enter ? "1" : "0");
         }
         auto *group = dynamic_cast<GroupWidget *>(source);
+        if (input->type() == QEvent::UngrabMouse || input->type() == QEvent::Hide ||
+            (input->type() == QEvent::EnabledChange && group && !group->isEnabled())) {
+            for (auto *parent = qobject_cast<QWidget *>(source); parent && parent != this; parent = parent->parentWidget()) {
+                auto *scope = dynamic_cast<GroupWidget *>(parent);
+                if (!scope) continue;
+                const bool tracking = scope->trackingTap || scope->trackingDrag || scope->pointerDrag.tracking;
+                if (input->type() == QEvent::UngrabMouse && !tracking) continue;
+                if (parent == source || (scope->simultaneous && tracking)) scope->cancelPointer();
+            }
+        }
         if (group && group->layoutRect != group->rect() &&
             (input->type() == QEvent::MouseButtonPress || input->type() == QEvent::MouseButtonRelease ||
              input->type() == QEvent::MouseButtonDblClick || input->type() == QEvent::MouseMove)) {
@@ -465,9 +483,21 @@ struct QSWindow final : QWidget {
         return false;
     }
     bool recognize(GroupWidget *group, QMouseEvent *mouse) {
+        if (!group->tapCount && !group->windowDrag && group->pointerDrag.threshold < 0) return false;
+        const auto device = mouse->pointingDevice();
+        const auto typeOfDevice = device ? device->type() : QInputDevice::DeviceType::Mouse;
+        const int kind = typeOfDevice == QInputDevice::DeviceType::TouchScreen ? 1 : typeOfDevice == QInputDevice::DeviceType::TouchPad ? 2 :
+                         typeOfDevice == QInputDevice::DeviceType::Stylus || typeOfDevice == QInputDevice::DeviceType::Airbrush ? 4 : 8;
+        if (!(group->gestureInputs & kind)) return false;
         const auto type = mouse->type();
         const auto point = group->mapFromGlobal(mouse->globalPosition());
         const bool press = type == QEvent::MouseButtonPress || type == QEvent::MouseButtonDblClick;
+        const auto deviceId = device ? device->systemId() : 0;
+        if (group->gestureDevice != deviceId) {
+            if (!press) return false;
+            group->cancelPointer();
+            group->gestureDevice = deviceId;
+        }
         if (group->pointerDrag.threshold >= 0) {
             const bool inside = group->layoutRect.contains(point.toPoint());
             const bool tracking = group->pointerDrag.tracking;
@@ -504,6 +534,7 @@ struct QSWindow final : QWidget {
                 group->lastTap.start();
                 if (++group->consecutiveTaps == group->tapCount) {
                     group->consecutiveTaps = 0;
+                    group->tapLocation = mapFromGlobal(mouse->globalPosition());
                     event(context, group->property("swiftId").toInt(), QSActivate, "");
                 }
             }
@@ -545,8 +576,9 @@ struct QSWindow final : QWidget {
 namespace {
 static void sendAccessibleEvent(GroupWidget *target, QSEventKind kind) {
     auto *window = dynamic_cast<QSWindow *>(target->window());
-    if (window && target->isEnabled())
-        window->event(window->context, target->property("swiftId").toInt(), kind, "");
+    if (!window || !target->isEnabled()) return;
+    if (kind == QSActivate) target->tapLocation = target->mapTo(window, QRectF(target->layoutRect).center());
+    window->event(window->context, target->property("swiftId").toInt(), kind, "");
 }
 static void activateAccessibleButton(QAbstractButton *button) {
     for (auto *parent = button->parentWidget(); parent; parent = parent->parentWidget()) {
@@ -628,11 +660,12 @@ void qs_minimize(QSWindow *window, int minimized) {
 double qs_window_scale(QSWindow *window) { return window->devicePixelRatioF(); }
 void qs_set_key_handler(QSWindow *window, QSKeyHandler handler) { window->keyHandler = handler; }
 void qs_set_drag_handler(QSWindow *window, QSDragHandler handler) { window->dragHandler = handler; }
-void qs_group_gesture(QSWidget w, int taps, int drag, int simultaneous, double dragDistance) {
+void qs_group_gesture(QSWidget w, int taps, int drag, int simultaneous, double dragDistance, int inputs) {
     auto *group = static_cast<GroupWidget *>(w);
     group->tapCount = taps;
     group->windowDrag = drag;
     group->simultaneous = simultaneous;
+    group->gestureInputs = inputs;
     group->pointerDrag.threshold = dragDistance;
     if (dragDistance < 0) group->pointerDrag.tracking = false;
 }
@@ -1057,6 +1090,10 @@ QSSize qs_measure(QSWidget w, double width) {
     auto size = item->sizeHint();
     return {double(size.width()), double(size.height())};
 }
+QSSize qs_tap_location(QSWidget w) {
+    const auto point = static_cast<GroupWidget *>(w)->tapLocation;
+    return {point.x(), point.y()};
+}
 QSSize qs_origin(QSWidget w) {
     auto *item = widget(w);
     const auto *group = dynamic_cast<GroupWidget *>(item);
@@ -1264,17 +1301,28 @@ int qs_drag_pointer(QSWindow *window, int x1, int y1, int x2, int y2, int steps)
     send(QEvent::MouseButtonRelease, end, steps + 1);
     return 1;
 }
-int qs_click_point(QSWindow *window, int x, int y) {
+static int clickPoint(QSWindow *window, int x, int y, const QPointingDevice *device) {
     const QPoint point(x, y);
     QWidget *target = window->childAt(point);
     if (!target) return 0;
     const auto local = target->mapFrom(window, point), global = window->mapToGlobal(point);
-    QMouseEvent press(QEvent::MouseButtonPress, local, global, Qt::LeftButton, Qt::LeftButton, Qt::NoModifier);
+    QMouseEvent press(QEvent::MouseButtonPress, local, global, Qt::LeftButton, Qt::LeftButton, Qt::NoModifier, device);
     QApplication::sendEvent(target, &press);
-    QMouseEvent release(QEvent::MouseButtonRelease, local, global, Qt::LeftButton, Qt::NoButton, Qt::NoModifier);
+    QMouseEvent release(QEvent::MouseButtonRelease, local, global, Qt::LeftButton, Qt::NoButton, Qt::NoModifier, device);
     QApplication::sendEvent(target, &release);
     qs_flush();
     return 1;
+}
+int qs_click_point(QSWindow *window, int x, int y) {
+    return clickPoint(window, x, y, QPointingDevice::primaryPointingDevice());
+}
+int qs_click_device(QSWindow *window, int x, int y, int kind) {
+    using Type = QInputDevice::DeviceType;
+    using Pointer = QPointingDevice::PointerType;
+    const Type type = kind == 1 ? Type::TouchScreen : kind == 2 ? Type::TouchPad : kind == 4 ? Type::Stylus : Type::Mouse;
+    const Pointer pointer = kind == 1 || kind == 2 ? Pointer::Finger : kind == 4 ? Pointer::Pen : Pointer::Generic;
+    QPointingDevice device("Test input", 40 + kind, type, pointer, QInputDevice::Capability::Position, 1, 1);
+    return clickPoint(window, x, y, &device);
 }
 int qs_click_named_button(QSWindow *window, const char *name) {
     for (auto *button : window->findChildren<QAbstractButton *>()) {

@@ -76,7 +76,7 @@ typedef void (*QSDragHandler)(void *context, int id, QSDragSample sample);
 void qs_set_drag_handler(QSWindow *, QSDragHandler);
 typedef int (*QSKeyHandler)(void *context, int id, int phase, const char *characters, int modifiers);
 void qs_set_key_handler(QSWindow *, QSKeyHandler);
-void qs_group_gesture(QSWidget, int taps, int windowDrag, int simultaneous, double dragDistance);
+void qs_group_gesture(QSWidget, int taps, int windowDrag, int simultaneous, double dragDistance, int inputs);
 void qs_group_spin(QSWidget, int milliseconds);
 void qs_group_opacity(QSWidget, double value);
 void qs_group_rotation(QSWidget, double degrees, double anchorX, double anchorY);
@@ -97,6 +97,7 @@ void qs_accessible_control(QSWidget, int selected, int button, int toggle);
 void qs_accessibility(QSWidget, const char *label, const char *identifier);
 QSSize qs_measure(QSWidget, double width);
 QSSize qs_origin(QSWidget);
+QSSize qs_tap_location(QSWidget);
 void qs_place(QSWidget, double x, double y, double width, double height);
 
 // Drive the native controls in the offscreen integration tests.
@@ -122,6 +123,7 @@ int qs_uses_family(QSWindow *, const char *text, const char *family);
 int qs_has_focus(QSWindow *, const char *identifier);
 int qs_mouse_click(QSWindow *, const char *identifier);
 int qs_click_point(QSWindow *, int x, int y);
+int qs_click_device(QSWindow *, int x, int y, int kind);
 int qs_drag_pointer(QSWindow *, int x1, int y1, int x2, int y2, int steps);
 int qs_click_named_button(QSWindow *, const char *label);
 int qs_tab(QSWindow *);
