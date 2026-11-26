@@ -200,9 +200,18 @@ public struct Toggle<Label: View>: Primitive {
             let configuration = ToggleStyleConfiguration(label: .init(content: AnyView(label), plainText: label as? Text), isOn: isOn)
             return style(configuration).resolve(context.with(\.toggleStyle, nil))
         }
+        var context = context
+        if context.environment.hidesControlLabels && context.environment.label.isEmpty {
+            let entries = MenuEntries.commands(label, in: context)
+            context.environment.label = entries.rows.map(\.title).joined(separator: " ")
+        }
         let widget = context.widget(QSToggle, action: { isOn.wrappedValue = $0 == "1" })
         context.installShortcut(on: widget)
         qs_checked(widget, isOn.wrappedValue ? 1 : 0)
+        if context.environment.hidesControlLabels {
+            qs_text(widget, "")
+            return [context.control(widget)]
+        }
         if let text = (label as? Text) ?? (label as? ToggleStyleConfiguration.Label)?.plainText, text.attributed == nil {
             qs_text(widget, text.resolvedString(context.environment.locale))
             return [text.styled(context).control(widget)]

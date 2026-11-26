@@ -93,7 +93,8 @@ extension Toggle: MenuEntrySource {
 }
 extension Text: MenuEntrySource {
     @MainActor func collect(in context: Context, into entries: MenuEntries) {
-        entries.rows.append(.init(title: resolvedString(context.environment.locale), enabled: false))
+        entries.rows.append(.init(title: resolvedString(context.environment.locale),
+                                  enabled: context.collectingPickerLabels && context.environment.isEnabled))
     }
 }
 extension Divider: MenuEntrySource {

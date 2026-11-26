@@ -38,7 +38,11 @@ private struct FirstWindow: View {
     @Binding var count: Int
 
     var body: some View {
-        Text("First window").task {
+        Picker("Window value", selection: $count) {
+            ForEach(0..<3) { value in Text(String(value)) }
+        }
+        .pickerStyle(.segmented)
+        .task {
             count = 1
             open(id: "second")
             open(id: "second")

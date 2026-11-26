@@ -58,6 +58,10 @@
 #include <QProxyStyle>
 #include <QStyleOptionFocusRect>
 #include <QPushButton>
+#include <QComboBox>
+#include "SymbolIcons.hpp"
+#include "PickerButtons.hpp"
+#include <QStandardItemModel>
 #include <QResizeEvent>
 #include <QScrollArea>
 #include <QScrollBar>
@@ -1218,6 +1222,24 @@ QSWidget qs_create(QSWindow *window, QSWidget parent, QSKind kind, int id) {
         QObject::connect(button, &QPushButton::released, window, [=] { window->event(window->context, id, QSPressedChanged, "0"); });
         return button;
     }
+    case QSSegmentedPicker: case QSRadioPicker: {
+        auto *options = new PickerButtons(container, kind == QSRadioPicker);
+        window->observeFocus(options, id);
+        QObject::connect(&options->group, &QButtonGroup::idToggled, window, [=](int index, bool checked) {
+            if (checked) window->event(window->context, id, QSActivate, QByteArray::number(index).constData());
+        });
+        return options;
+    }
+    case QSPicker: {
+        auto *picker = new QComboBox(container);
+        picker->setSizeAdjustPolicy(QComboBox::AdjustToContents);
+        QAccessible::registerAccessibleInterface(new AccessiblePicker(picker));
+        window->observeFocus(picker, id);
+        QObject::connect(picker, &QComboBox::activated, window, [=](int index) {
+            window->event(window->context, id, QSActivate, QByteArray::number(index).constData());
+        });
+        return picker;
+    }
     case QSToggle: {
         auto *toggle = new QCheckBox(container);
         window->observeFocus(toggle, id);
@@ -1590,6 +1612,30 @@ void qs_hint(QSWidget w, const char *s, const char *color) {
     }
     if (auto *editor = qobject_cast<QPlainTextEdit *>(widget(w))) editor->setPlaceholderText(QString::fromUtf8(s));
     else static_cast<QLineEdit *>(w)->setPlaceholderText(QString::fromUtf8(s));
+}
+void qs_picker_option(QSWidget w, int index, const char *title, const char *symbol, int enabled) {
+    if (auto *options = dynamic_cast<PickerButtons *>(widget(w))) {
+        options->option(index, QString::fromUtf8(title), QString::fromUtf8(symbol), enabled != 0);
+        return;
+    }
+    auto *picker = static_cast<QComboBox *>(w);
+    const QString text = QString::fromUtf8(title);
+    if (index == picker->count()) picker->addItem(text);
+    else if (picker->itemText(index) != text) picker->setItemText(index, text);
+    auto *model = qobject_cast<QStandardItemModel *>(picker->model());
+    if (model && model->item(index)) model->item(index)->setEnabled(enabled);
+    const QString symbolName = QString::fromUtf8(symbol);
+    if (!symbolName.isEmpty() || !picker->itemIcon(index).isNull())
+        picker->setItemIcon(index, systemSymbol(symbolName, 16, picker->palette().color(QPalette::Text)));
+}
+void qs_picker_selection(QSWidget w, int count, int selected) {
+    if (auto *options = dynamic_cast<PickerButtons *>(widget(w))) {
+        options->selection(count, selected);
+        return;
+    }
+    auto *picker = static_cast<QComboBox *>(w);
+    while (picker->count() > count) picker->removeItem(picker->count() - 1);
+    picker->setCurrentIndex(selected);
 }
 void qs_checked(QSWidget w, int on) {
     const QSignalBlocker block(widget(w));

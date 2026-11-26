@@ -42,6 +42,8 @@ public struct EnvironmentValues {
     public var isScrollEnabled = true
     public var controlSize: ControlSize = .regular
     var menuIndicator = Visibility.automatic
+    var pickerPresentation = PickerPresentation.automatic
+    var hidesControlLabels = false
     var menuStyle: (@MainActor (MenuStyleConfiguration) -> AnyView)?
     var fileDialogDirectory: URL?
     var plainField = false

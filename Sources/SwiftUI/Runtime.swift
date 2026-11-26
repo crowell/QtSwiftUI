@@ -16,6 +16,7 @@ enum Part: Hashable {
     var scrollTargets: ScrollAreaTargets?
     var isScrollTargetLayout = false
     var scrollConfiguration = ScrollConfiguration()
+    var collectingPickerLabels = false
     var menuEntries: MenuEntries?
     var windowValue: Binding<AnyHashable?>?
     var environment = EnvironmentValues()

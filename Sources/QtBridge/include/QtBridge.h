@@ -14,7 +14,7 @@ typedef struct QSPath QSPath;
 typedef void (*QSRender)(void *context, int width, int height);
 enum QSEventKind { QSActivate, QSFocusChanged, QSSubmit, QSPressedChanged, QSExitCommand, QSHoverChanged, QSContinuousHover, QSIncrement, QSDecrement, QSGestureCancelled, QSMagnified, QSAccessibilityAction, QSCursorChanged };
 typedef void (*QSEvent)(void *context, int id, enum QSEventKind kind, const char *value);
-enum QSKind { QSLabel, QSButton, QSToggle, QSEdit, QSSecureEdit, QSSurface, QSScroll, QSSlider, QSProgress, QSGroup, QSCanvas, QSLink, QSRaster, QSTextEditor, QSAttributedLabel, QSBusyIndicator, QSMultilineField, QSMenuButton, QSPopover, QSMenuBar, QSRichEditor };
+enum QSKind { QSLabel, QSButton, QSToggle, QSEdit, QSSecureEdit, QSSurface, QSScroll, QSSlider, QSProgress, QSGroup, QSCanvas, QSLink, QSRaster, QSTextEditor, QSAttributedLabel, QSBusyIndicator, QSMultilineField, QSMenuButton, QSPopover, QSMenuBar, QSRichEditor, QSPicker, QSSegmentedPicker, QSRadioPicker };
 
 QSWindow *qs_window(const char *title, void *context, QSRender render, QSEvent event);
 void qs_open(QSWindow *, int width, int height);
@@ -107,6 +107,8 @@ const unsigned char *qs_editor_value(QSWidget, size_t *count);
 void qs_scroll_background(QSWidget, int visible, int dark);
 void qs_editor_indicators(QSWidget, int vertical);
 void qs_checked(QSWidget, int);
+void qs_picker_option(QSWidget, int index, const char *title, const char *symbol, int enabled);
+void qs_picker_selection(QSWidget, int count, int selected);
 void qs_value(QSWidget, double);
 int qs_register_font(const char *path);
 typedef struct { double ascent, descent, xHeight, leading; } QSFontMetrics;

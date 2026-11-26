@@ -3,10 +3,26 @@ public protocol ContainerValueKey {
     static var defaultValue: Value { get }
 }
 
+private struct ViewTag<Value: Hashable>: ContainerValueKey {
+    static var defaultValue: Value? { nil }
+}
+
 public struct ContainerValues {
+    public func tag<V: Hashable>(for type: V.Type) -> V? { self[ViewTag<V>.self] }
+
+    public func hasTag<V: Hashable>(_ tag: V) -> Bool { self.tag(for: V.self) == .some(tag) }
+
+    mutating func setTag<V: Hashable>(_ value: V, includeOptional: Bool, implicit: Bool = false) {
+        if !implicit || tag(for: V.self) == nil { self[ViewTag<V>.self] = .some(value) }
+        if includeOptional, !implicit || tag(for: V?.self) == nil { self[ViewTag<V?>.self] = .some(.some(value)) }
+    }
+
     private var storage: [ObjectIdentifier: Any] = [:]
     public subscript<Key: ContainerValueKey>(key: Key.Type) -> Key.Value {
-        get { (storage[ObjectIdentifier(key)] as? Key.Value) ?? Key.defaultValue }
+        get {
+            guard let stored = storage[ObjectIdentifier(key)] else { return Key.defaultValue }
+            return (stored as? Key.Value) ?? Key.defaultValue
+        }
         set { storage[ObjectIdentifier(key)] = newValue as Any }
     }
 }
@@ -19,6 +35,12 @@ extension View {
     func collectSubviews(in incoming: Context) -> [Subview] {
         let context = incoming.descending(.type(ObjectIdentifier(Self.self)))
         if let source = self as? any SubviewSource { return source.subviews(in: context) }
+        if let entry = self as? any MenuEntrySource {
+            return [Subview(id: .init(path: context.path), render: { source in
+                if let entries = source.menuEntries { entry.collect(in: source, into: entries); return [] }
+                return self.resolve(source)
+            })]
+        }
         if let primitive = self as? any Primitive {
             return [Subview(id: .init(path: context.path), render: { primitive.elements(in: $0) })]
         }
@@ -91,11 +113,11 @@ extension Group {
     }
 }
 
-private struct ContainerValueWriter<Content: View>: Primitive, SubviewSource {
+private nonisolated struct ContainerValueWriter<Content: View>: Primitive, SubviewSource {
     let content: Content
     let write: (inout ContainerValues) -> Void
-    func elements(in context: Context) -> [Element] { content.resolve(context) }
-    func subviews(in context: Context) -> [Subview] {
+    @MainActor func elements(in context: Context) -> [Element] { content.resolve(context) }
+    @MainActor func subviews(in context: Context) -> [Subview] {
         content.collectSubviews(in: context).map { child in
             var result = child
             write(&result.containerValues)
@@ -105,6 +127,10 @@ private struct ContainerValueWriter<Content: View>: Primitive, SubviewSource {
 }
 
 extension View {
+    nonisolated public func tag<V: Hashable>(_ tag: V, includeOptional: Bool = true) -> some View {
+        ContainerValueWriter(content: self) { $0.setTag(tag, includeOptional: includeOptional) }
+    }
+
     public func containerValue<V>(_ keyPath: WritableKeyPath<ContainerValues, V>, _ value: V) -> some View {
         ContainerValueWriter(content: self) { $0[keyPath: keyPath] = value }
     }
@@ -128,6 +154,13 @@ extension Optional: SubviewSource where Wrapped: View {
 }
 extension ForEach: SubviewSource {
     func subviews(in context: Context) -> [Subview] {
-        data.flatMap { item in content(item).collectSubviews(in: context.descending(.id(AnyHashable(item[keyPath: key])))) }
+        data.flatMap { item in
+            let id = item[keyPath: key]
+            return content(item).collectSubviews(in: context.descending(.id(AnyHashable(id)))).map { child in
+                var result = child
+                result.containerValues.setTag(id, includeOptional: true, implicit: true)
+                return result
+            }
+        }
     }
 }
