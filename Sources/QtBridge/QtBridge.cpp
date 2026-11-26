@@ -12,6 +12,7 @@
 #include "PointerDrag.hpp"
 #include "Magnification.hpp"
 #include "NativeMenu.hpp"
+#include "NativeTransfer.hpp"
 #include "NativePopover.hpp"
 #include <QGestureEvent>
 #include <QNativeGestureEvent>
@@ -617,6 +618,7 @@ struct QSWindow final : QWidget {
     QSKeyHandler keyHandler = nullptr;
     bool pending = false, framePending = false, snapshot = false;
     WindowShortcuts shortcuts;
+    NativeTransfer transfers;
 
     void connectMenu(QMenu *menu, int id) {
         QObject::connect(menu, &QMenu::triggered, this, [this, id](QAction *item) {
@@ -634,6 +636,7 @@ struct QSWindow final : QWidget {
         });
     }
     bool eventFilter(QObject *source, QEvent *input) override {
+        if (transfers.filter(qobject_cast<QWidget *>(source), input, context)) return true;
         if (keyHandler && source == focusWidget() && (input->type() == QEvent::KeyPress || input->type() == QEvent::KeyRelease)) {
             const auto *key = static_cast<QKeyEvent *>(input);
             const bool release = input->type() == QEvent::KeyRelease;
@@ -1821,6 +1824,16 @@ void qs_plain_button(QSWidget w, int plain) {
     auto *button = static_cast<QPushButton *>(w);
     button->setFlat(plain);
 }
+void qs_transfer_handler(QSWindow *window, QSTransferHandler handler) { window->transfers.handler = handler; }
+void qs_transfer_scope(QSWidget item, int source, int destination) {
+    auto *group = widget(item);
+    group->setProperty("qsDragSource", bool(source));
+    group->setProperty("qsDropTarget", bool(destination));
+    if (group->acceptDrops() != bool(destination)) group->setAcceptDrops(destination);
+}
+int qs_transfer_between(QSWindow *window, int fromX, int fromY, int toX, int toY) {
+    return window->transfers.transferBetween(window, {fromX, fromY}, {toX, toY}, window->context);
+}
 void qs_context_request_scope(QSWidget w, int enabled) {
     auto *group = static_cast<GroupWidget *>(w);
     group->customContextRequest = enabled;
@@ -1986,7 +1999,7 @@ void qs_group_finish_layout(QSWidget w, int sizeToPositionedContent) {
     group->sizedToContent = sizeToPositionedContent && !group->graphicsEffect() && !group->contentShape;
     // A frame around paint-only descendants must leave the controls underneath reachable.
     const auto children = group->findChildren<QWidget *>(QString(), Qt::FindDirectChildrenOnly);
-    if (!group->hasContextMenu() && !group->tapCount && !group->windowDrag && group->pointerDrag.threshold < 0 && group->pinch.minimum < 0 && !group->property("qsHover").toBool() &&
+    if (!group->property("qsDragSource").toBool() && !group->acceptDrops() && !group->hasContextMenu() && !group->tapCount && !group->windowDrag && group->pointerDrag.threshold < 0 && group->pinch.minimum < 0 && !group->property("qsHover").toBool() &&
         !group->testAttribute(Qt::WA_SetCursor) && !group->testAttribute(Qt::WA_Hover) &&
         std::all_of(children.begin(), children.end(), [](QWidget *child) {
             return child->isHidden() || child->testAttribute(Qt::WA_TransparentForMouseEvents);

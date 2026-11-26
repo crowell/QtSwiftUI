@@ -7,6 +7,7 @@ struct DiagnosticPreview: App {
     var body: some Scene {
         let linkError = CommandLine.arguments.contains("--link-error")
         let linking = linkError || CommandLine.arguments.contains("--link-device")
+        let folders = CommandLine.arguments.contains("--chat-folders")
         let lobby = CommandLine.arguments.contains("--calling-lobby")
         let leaveCall = CommandLine.arguments.contains("--leave-call")
         let clearing = CommandLine.arguments.contains("--clearing-data")
@@ -41,8 +42,9 @@ struct DiagnosticPreview: App {
         let recording = CommandLine.arguments.contains("--recording")
         let discard = CommandLine.arguments.contains("--discard-recording")
         let arabic = CommandLine.arguments.contains("--arabic")
-        WindowGroup(lobby ? "Call lobby" : typing ? "Ferry crew" : conversation ? "Nyah Stroman" : timeline ? "Conversation timeline" : muteUntil ? "Mute until" : usernameEditor ? "Username link" : usernameCard ? "Username QR card" : screenShare ? "Share your screen" : stickers ? "Stickers" : timer ? "Disappearing messages" : photoViewer ? "Photo" : callsTab ? "Calls" : inbox ? "Inbox" : appAbout ? "About" : about ? "About contact" : note ? "Contact note" : request ? "Request to join" : linkDetails ? "Call link" : nickname ? "Edit nickname and note" : history ? "Call history" : settings ? (calls ? "Calls" : "Data usage") : survey ? "Call quality" : colorPicker ? "Chat color" : colorEditor ? "Custom chat color" : recording || draft || discard ? "Voice message" : gallery ? "All media" : clearing ? "Clearing data" : linking ? "Link device" : leaveCall ? "Leave current call" : "Call diagnostics") {
-            if lobby { LobbyPreview() }
+        WindowGroup(folders ? "Chat folders" : lobby ? "Call lobby" : typing ? "Ferry crew" : conversation ? "Nyah Stroman" : timeline ? "Conversation timeline" : muteUntil ? "Mute until" : usernameEditor ? "Username link" : usernameCard ? "Username QR card" : screenShare ? "Share your screen" : stickers ? "Stickers" : timer ? "Disappearing messages" : photoViewer ? "Photo" : callsTab ? "Calls" : inbox ? "Inbox" : appAbout ? "About" : about ? "About contact" : note ? "Contact note" : request ? "Request to join" : linkDetails ? "Call link" : nickname ? "Edit nickname and note" : history ? "Call history" : settings ? (calls ? "Calls" : "Data usage") : survey ? "Call quality" : colorPicker ? "Chat color" : colorEditor ? "Custom chat color" : recording || draft || discard ? "Voice message" : gallery ? "All media" : clearing ? "Clearing data" : linking ? "Link device" : leaveCall ? "Leave current call" : "Call diagnostics") {
+            if folders { ChatFoldersPreview() }
+            else if lobby { LobbyPreview() }
             else if conversation {
                 ConversationPreview(model: .init(groupTyping: typing))
                     .environment(\.axoAnimationsDisabled, CommandLine.arguments.contains("--still"))
@@ -93,8 +95,8 @@ struct DiagnosticPreview: App {
                 }
             }
         }
-        .defaultSize(width: lobby ? 900 : conversation || timeline ? 560 : muteUntil ? 640 : usernameCard ? 424 : screenShare ? 840 : stickers ? 600 : photoViewer ? 760 : callsTab ? 760 : inbox ? 840 : linkDetails ? 620 : nickname ? 520 : history ? 360 : settings ? 640 : colorPicker ? 780 : recording || draft ? 640 : linking || clearing ? 680 : 520,
-                     height: lobby ? 590 : desktopMenus ? 660 : conversation ? 502 : timeline ? 450 : muteUntil ? 600 : usernameEditor ? 540 : usernameCard ? 576 : screenShare ? 620 : stickers ? 460 : photoViewer ? 560 : callsTab || inbox ? 520 : about ? 620 : note ? 380 : request ? 510 : linkDetails ? 620 : nickname ? 560 : history ? 418 : settings ? 567 : survey ? 600 : colorPicker ? 720 : colorEditor ? 620 : recording || draft ? 84 : discard ? 280 : linking || clearing ? 420 : 440)
+        .defaultSize(width: folders ? 640 : lobby ? 900 : conversation || timeline ? 560 : muteUntil ? 640 : usernameCard ? 424 : screenShare ? 840 : stickers ? 600 : photoViewer ? 760 : callsTab ? 760 : inbox ? 840 : linkDetails ? 620 : nickname ? 520 : history ? 360 : settings ? 640 : colorPicker ? 780 : recording || draft ? 640 : linking || clearing ? 680 : 520,
+                     height: folders ? 730 : lobby ? 590 : desktopMenus ? 660 : conversation ? 502 : timeline ? 450 : muteUntil ? 600 : usernameEditor ? 540 : usernameCard ? 576 : screenShare ? 620 : stickers ? 460 : photoViewer ? 560 : callsTab || inbox ? 520 : about ? 620 : note ? 380 : request ? 510 : linkDetails ? 620 : nickname ? 560 : history ? 418 : settings ? 567 : survey ? 600 : colorPicker ? 720 : colorEditor ? 620 : recording || draft ? 84 : discard ? 280 : linking || clearing ? 420 : 440)
     }
 }
 

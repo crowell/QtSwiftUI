@@ -104,6 +104,7 @@ public struct CSSTextStyle {
         self.lineHeight = lineHeight
         self.letterSpacing = letterSpacing
     }
+    var fontMetrics: (ascent: CGFloat, descent: CGFloat, xHeight: CGFloat) { AxoFonts.metrics(family: fontName, size: size) }
     var weight: Int {
         if fontName.hasSuffix("SemiBold") { return 600 }
         if fontName.hasSuffix("Bold") { return 700 }
@@ -254,6 +255,9 @@ public struct CSSText: View {
     }
 }
 public enum AxoSymbol {
+    static func style(size: CGFloat, weight: Int) -> CSSTextStyle {
+        CSSTextStyle(fontName: "Signal Symbols", size: size, lineHeight: size)
+    }
     public typealias Name = String
     struct Icon: View {
         let symbol: Name

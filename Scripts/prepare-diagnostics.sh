@@ -258,11 +258,34 @@ cp "$source_dir/Components/ShortcutGuide.swift" "$target_dir/"
 } > "$target_dir/ChromiumFocusOutline.swift"
 cp "$source_dir/Calling/CallingButton.swift" "$source_dir/Calling/CallControls.swift" "$source_dir/Calling/CallingHeader.swift" \
    "$source_dir/Calling/CallingLobby.swift" "$source_dir/Calling/CallingPreCallInfo.swift" "$source_dir/Components/Tooltip.swift" "$target_dir/"
-# The panel's optional live NSVisualEffectView is specific to AppKit.
+if [ -f "$source_dir/Axo/WithinWindowBlur+AppKit.swift" ]; then
+    cp "$source_dir/Axo/AxoBaseDialog.swift" "$source_dir/Axo/WithinWindowBlur+AppKit.swift" "$target_dir/"
+    if [ "$(uname -s)" = Linux ]; then cp "$source_dir/Linux/WithinWindowBlur.swift" "$target_dir/"; fi
+else
+# Older Serein revisions keep the AppKit effect in the same source file as the panel.
 awk '/^import AppKit/ || /\.background \{ if backdropBlur/ { print "#if canImport(AppKit)"; print; print "#endif"; next }
      /^struct WithinWindowBlur:/ { print "#if canImport(AppKit)"; blur = 1 }
      { print } END { if (!blur) exit 1; print "#endif" }' \
     "$source_dir/Axo/AxoBaseDialog.swift" > "$target_dir/AxoBaseDialog.swift"
+fi
+prefs="$source_dir/Components/Preferences"
+cp "$prefs/PreferencesChatFoldersPage.swift" "$prefs/PreferencesChatFolderItems.swift" "$prefs/PreferencesContent.swift" "$target_dir/"
+{
+    echo 'import SwiftUI'
+    declarations '^public struct (ChatFolder|ChatFolderPreset):' 2 "$source_dir/Components/LeftPane/LeftPaneChatFolders.swift"
+    declarations '^public struct (SettingsRow<|PreferencesBackButton:)|^struct PreferencesDescription:' 3 "$prefs/PreferencesUtil.swift"
+} > "$target_dir/ChatFolderTypes.swift"
+if [ -f "$source_dir/Axo/SecondaryClick+AppKit.swift" ]; then
+    cp "$source_dir/Axo/AxoContextMenu.swift" "$source_dir/Axo/SecondaryClick+AppKit.swift" "$target_dir/"
+    if [ "$(uname -s)" = Linux ]; then cp "$source_dir/Linux/SecondaryClick+Qt.swift" "$target_dir/"; fi
+elif [ "$(uname -s)" = Linux ]; then
+    awk '/^import AppKit/ { print "@_spi(Qt) import SwiftUI"; next }
+         /^struct SecondaryClickCatcher:/ { exit }
+         /overlay \{ if !isStatic \{ SecondaryClickCatcher/ { print "                .qtOnContextRequest(isEnabled: !isStatic) { location = $0 }"; next }
+         { print }' "$source_dir/Axo/AxoContextMenu.swift" > "$target_dir/AxoContextMenu.swift"
+else
+    cp "$source_dir/Axo/AxoContextMenu.swift" "$target_dir/"
+fi
 # The color-editor dialog uses the actual header, tab, scroll and action implementations.
 # Two unrelated slot types use Serein's CoreText-only measurement helpers.
 awk '/^    public struct (BodyTitle|FooterContent):/ { skip=1; count++ }
@@ -378,6 +401,7 @@ awk '!/^import CoreText$/ {
          if (/let font = CSSTextStyle.*\.ctFont/) { print "            let font = AxoFonts.interMetrics(size: size)"; metrics++; next }
          gsub(/CTFontGetAscent\(font\)/, "font.ascent"); gsub(/CTFontGetDescent\(font\)/, "font.descent")
          gsub(/CTFontGetXHeight\(font\)/, "font.xHeight"); print }
+     /let font = CSSTextStyle.*\.fontMetrics/ { metrics++ }
      END { if (metrics!=1) exit 1 }' "$source_dir/Axo/Items/AxoBaseItem.swift" > "$target_dir/AxoBaseItem.swift"
 awk 'BEGIN { print "extension ChatColorPickerPreview {" } /^    static let customColors:/ { inside=1; count++ }
      inside { print } /^    ]$/ { inside=0 } END { print "}"; if (count!=1 || inside) exit 1 }' \

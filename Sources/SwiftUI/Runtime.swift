@@ -71,7 +71,7 @@ enum Part: Hashable {
         return owner
     }
     func widget(_ kind: QSKind, pressed: ((Bool) -> Void)? = nil, exitCommand: (() -> Void)? = nil,
-                tap: ((UnsafeMutableRawPointer) -> Void)? = nil,
+                tap: ((UnsafeMutableRawPointer) -> Void)? = nil, transfer: TransferAction? = nil,
                 adjustment: ((AccessibilityAdjustmentDirection) -> Void)? = nil,
                 drag: ((QSDragSample, UnsafeMutableRawPointer) -> Void)? = nil,
                 magnify: ((QSMagnifySample) -> Void)? = nil,
@@ -79,6 +79,7 @@ enum Part: Hashable {
                 continuousHover: ((UnsafeMutableRawPointer, Bool) -> Void)? = nil, action: ((String) -> Void)? = nil) -> UnsafeMutableRawPointer {
         let entry = host.mount(path: path + [.widget(kind.rawValue)], kind: kind, parent: parent)
         host.keys.install(environment.keyPressHandlers, for: entry.id)
+        host.transfers[entry.id] = transfer
         if let drag { host.drags[entry.id] = { drag($0, entry.widget) } }
         else { host.drags[entry.id] = nil }
         let focus = environment.focus
@@ -159,6 +160,7 @@ enum Part: Hashable {
         nextDisappear[path] = action
     }
     let keys = WindowKeyPresses()
+    var transfers: [Int32: TransferAction] = [:]
     var drags: [Int32: (QSDragSample) -> Void] = [:]
     var events: [Int32: (QSEventKind, String) -> Void] = [:]
     private let content: (Context) -> [Element]
@@ -188,6 +190,12 @@ enum Part: Hashable {
                 Unmanaged<Host>.fromOpaque(pointer!).takeUnretainedValue().keys.dispatch(key, to: id) == .handled ? 1 : 0
             }
         }
+        qs_transfer_handler(window) { pointer, id, phase, mime, x, y in
+            MainActor.assumeIsolated {
+                let host = Unmanaged<Host>.fromOpaque(pointer!).takeUnretainedValue()
+                return host.transfers[id]?.handle(phase, mime: mime, point: CGPoint(x: x, y: y)) == true ? 1 : 0
+            }
+        }
         qs_set_drag_handler(window) { pointer, id, sample in
             MainActor.assumeIsolated { Unmanaged<Host>.fromOpaque(pointer!).takeUnretainedValue().drags[id]?(sample) }
         }
@@ -201,6 +209,7 @@ enum Part: Hashable {
         mounts.removeAll()
         events.removeAll()
         drags.removeAll()
+        transfers.removeAll()
         keys.reset()
         storage.removeAll()
     }
@@ -283,6 +292,7 @@ enum Part: Hashable {
             if let mount = mounts.removeValue(forKey: path) {
                 events[mount.id] = nil
                 drags[mount.id] = nil
+                transfers[mount.id] = nil
                 keys.install([], for: mount.id)
                 qs_destroy(mount.widget)
             }
