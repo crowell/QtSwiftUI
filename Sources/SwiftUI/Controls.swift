@@ -269,6 +269,11 @@ public struct ScrollView<Content: View>: Primitive {
                              context.environment.colorScheme == .dark ? 1 : 0)
         var inner = context.descending(.position(0))
         inner.parent = qs_scroll_content(widget)
+        if !context.registerScrollArea.isEmpty {
+            let targets = ScrollAreaTargets(widget, axes: axes, direction: context.environment.layoutDirection)
+            inner.scrollTargets = targets
+            for register in context.registerScrollArea { register(targets) }
+        }
         if axes.contains(.vertical) { inner.verticalViewport = widget }
         let origin = NamedOrigin()
         inner.spaces[ScrollSpace.nearest] = origin

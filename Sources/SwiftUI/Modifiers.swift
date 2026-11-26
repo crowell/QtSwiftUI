@@ -58,7 +58,9 @@ extension View {
     public func environment<V>(_ keyPath: WritableKeyPath<EnvironmentValues, V>, _ value: V) -> some View {
         Transform(content: self, readingContext: { $0.with(keyPath, value) }) { $0.resolve($1.with(keyPath, value)) }
     }
-    public func id<ID: Hashable>(_ id: ID) -> some View { Transform(content: self) { $0.resolve($1.descending(.id(AnyHashable(id)))) } }
+    nonisolated public func id<ID: Hashable>(_ id: ID) -> some View {
+        IdentifiedView(content: self, id: id)
+    }
     public func font(_ font: Font?) -> some View { environment(\.font, font) }
     public func fontWeight(_ weight: Font.Weight?) -> some View {
         Transform(content: self) { view, ctx in view.resolve(ctx.with(\.font, (ctx.environment.font ?? .body).weight(weight ?? .regular))) }

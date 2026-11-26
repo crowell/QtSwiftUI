@@ -106,6 +106,10 @@ public struct ForEach<Data: RandomAccessCollection, ID: Hashable, Content: View>
         self.init(data, id: \.self, content: content)
     }
     func elements(in context: Context) -> [Element] {
-        data.flatMap { item in content(item).resolve(context.descending(.id(AnyHashable(item[keyPath: key]))).preferenceBranch()) }
+        data.flatMap { item in
+            let id = AnyHashable(item[keyPath: key])
+            let inner = context.descending(.id(id)).preferenceBranch()
+            return inner.identified(content(item).resolve(inner), by: id)
+        }
     }
 }

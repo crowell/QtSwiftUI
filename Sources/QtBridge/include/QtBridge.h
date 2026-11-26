@@ -34,6 +34,7 @@ void qs_close(QSWindow *);
 QSWidget qs_create(QSWindow *, QSWidget parent, enum QSKind, int id);
 QSWidget qs_scroll_content(QSWidget);
 QSRect qs_scroll_viewport(QSWidget);
+void qs_scroll_set_offset(QSWidget, double x, double y);
 void qs_scroll_refining(QSWidget);
 void qs_scroll_size(QSWidget, int width, int height);
 void qs_drawing_only(QSWidget);

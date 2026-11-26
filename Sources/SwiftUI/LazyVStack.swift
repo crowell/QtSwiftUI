@@ -10,6 +10,7 @@ public struct PinnedScrollableViews: OptionSet, Sendable {
 private struct LazyRow {
     let id: [Part]
     let render: @MainActor (Context) -> [Element]
+    var scrollID: (@MainActor () -> AnyHashable?)?
     var section: [Part]?
     var pin: PinnedScrollableViews = []
 }
@@ -19,7 +20,9 @@ private struct LazyRow {
 }
 @MainActor private func rows<V: View>(_ view: V, at path: [Part]) -> [LazyRow] {
     if let group = view as? any LazyRowSource { return group.rows(at: path) }
-    return [LazyRow(id: path, render: { view.resolve($0) })]
+    var row = LazyRow(id: path, render: { view.resolve($0) })
+    if let source = view as? any ScrollIdentitySource { row.scrollID = { source.explicitScrollID } }
+    return [row]
 }
 extension Group: LazyRowSource {
     fileprivate func rows(at path: [Part]) -> [LazyRow] { SwiftUI.rows(content, at: path) }
@@ -54,7 +57,11 @@ extension ForEach: LazyRowSource {
         data.flatMap { item -> [LazyRow] in
             let id = path + [.id(AnyHashable(item[keyPath: key]))]
             if Content.self is any LazyRowSource.Type { return SwiftUI.rows(content(item), at: id) }
-            return [LazyRow(id: id, render: { context in content(item).resolve(context) })]
+            var row = LazyRow(id: id, render: { context in content(item).resolve(context) })
+            if Content.self is any ScrollIdentitySource.Type {
+                row.scrollID = { (content(item) as? any ScrollIdentitySource)?.explicitScrollID }
+            }
+            return [row]
         }
     }
 }
@@ -240,6 +247,20 @@ public nonisolated struct LazyVStack<Content: View>: Primitive {
         var pinned: [(Range<Int>, CGFloat)] = []
         var sectionBounds: [[Part]: ClosedRange<CGFloat>] = [:]
 
+        @MainActor func recordTarget(_ index: Int, rect: CGRect, estimated: Bool) {
+            guard let targets = context.scrollTargets else { return }
+            let path = items[index].id
+            if estimated, let name = items[index].scrollID {
+                targets.registerLazyID(name, bounds: rect, context: context, path: base.path + path)
+            }
+            for part in path.reversed() {
+                if case .id(let id) = part {
+                    targets.record(id, bounds: rect, context: context, path: base.path + path, estimated: estimated)
+                    return
+                }
+            }
+        }
+
         @MainActor func place(_ line: Range<Int>, at y: CGFloat, height: CGFloat) {
             let area = CGRect(x: bounds.minX, y: bounds.minY + y, width: bounds.width, height: height)
             // Compute the group's leading-to-trailing coordinates before mirroring the whole row.
@@ -257,8 +278,9 @@ public nonisolated struct LazyVStack<Content: View>: Primitive {
                     cell.size.width = track.width
                     alignment = track.alignment
                 }
-                let frame = alignment.rect(size, in: cell)
-                item.place(direction.position(frame, in: area), proposal)
+                let frame = direction.position(alignment.rect(size, in: cell), in: area)
+                recordTarget(index, rect: frame, estimated: false)
+                item.place(frame, proposal)
             }
         }
 
@@ -269,6 +291,17 @@ public nonisolated struct LazyVStack<Content: View>: Primitive {
             else if y <= viewport.maxY && y + height >= viewport.minY {
                 height = measuredSize(line, tracks: plan, width: bounds.width, record: true).height
                 place(line, at: y, height: height)
+            } else if context.scrollTargets != nil {
+                let area = CGRect(x: bounds.minX, y: bounds.minY + y, width: bounds.width, height: height)
+                for index in line {
+                    var cell = area
+                    if let plan {
+                        let track = plan.tracks[index - line.lowerBound]
+                        cell.origin.x += rowAlignment.rect(CGSize(width: plan.usedWidth, height: height), in: area).minX - area.minX + track.x
+                        cell.size.width = track.width
+                    }
+                    recordTarget(index, rect: direction.position(cell, in: area), estimated: true)
+                }
             }
             let end = y + height
             if let section = first.section {

@@ -1088,6 +1088,15 @@ QSRect qs_scroll_viewport(QSWidget w) {
     return {double(area->horizontalScrollBar()->value()), double(area->verticalScrollBar()->value()),
             double(area->viewport()->width()), double(area->viewport()->height())};
 }
+void qs_scroll_set_offset(QSWidget w, double x, double y) {
+    auto *area = static_cast<QScrollArea *>(w);
+    auto set = [](QScrollBar *bar, double value) {
+        if (std::isfinite(value))
+            bar->setValue(qRound(qBound(double(bar->minimum()), value, double(bar->maximum()))));
+    };
+    set(area->horizontalScrollBar(), x);
+    set(area->verticalScrollBar(), y);
+}
 void qs_scroll_input(QSWidget w, int enabled) {
     auto *input = static_cast<ScrollInput *>(widget(w)->property("qsScrollInput").value<QObject *>());
     input->setEnabled(enabled);

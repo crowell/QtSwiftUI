@@ -11,6 +11,8 @@ enum Part: Hashable {
     var path: [Part] = []
     var parent: UnsafeMutableRawPointer?
     var verticalViewport: UnsafeMutableRawPointer?
+    var registerScrollArea: [(ScrollAreaTargets) -> Void] = []
+    var scrollTargets: ScrollAreaTargets?
     var menuEntries: MenuEntries?
     var environment = EnvironmentValues()
     var preferences: [ObjectIdentifier: any PreferenceScope] = [:]
