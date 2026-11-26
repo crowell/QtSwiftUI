@@ -37,11 +37,16 @@ extension PreferenceKey where Value: ExpressibleByNilLiteral {
     }
 }
 
-@MainActor private final class PreviousPreference<K: PreferenceKey> {
-    var value: K.Value?
+@MainActor private final class PreviousPreference<Value> {
+    var value: Value?
 }
 
 extension Context {
+    mutating func publish<K: PreferenceKey>(_ key: K.Type, _ read: @escaping () -> K.Value) {
+        let observer = preferences.removeValue(forKey: ObjectIdentifier(key)) as? PreferenceValues<K>
+        observer?.inputs.append { read }
+    }
+
     func preferenceBranch() -> Self {
         guard !preferences.isEmpty else { return self }
         var child = self
@@ -131,6 +136,11 @@ extension View {
 
     public func onPreferenceChange<K: PreferenceKey>(_ key: K.Type = K.self,
                                                      perform action: @escaping (K.Value) -> Void) -> some View where K.Value: Equatable {
+        observePreference(key, project: { $0 }) { _, value in action(value) }
+    }
+
+    func observePreference<K: PreferenceKey, T: Equatable>(_ key: K.Type, project: @escaping (K.Value) -> T,
+                                                           action: @escaping (T?, T) -> Void) -> some View {
         Transform(content: self) { view, context in
             let id = ObjectIdentifier(key)
             let values = PreferenceValues<K>()
@@ -138,15 +148,16 @@ extension View {
             var inner = context
             inner.preferences[id] = values
             let path = context.path + [.property("onPreferenceChange"), .type(id)]
-            let previous = context.host.storage[path] as? PreviousPreference<K> ?? PreviousPreference<K>()
+            let previous = context.host.storage[path] as? PreviousPreference<T> ?? PreviousPreference<T>()
             context.host.storage[path] = previous
             context.host.liveStorage.insert(path)
             let items = view.resolve(inner)
             context.host.afterLayout {
-                let value = values.producer()?() ?? K.defaultValue
-                if previous.value != .some(value) {
+                let value = project(values.producer()?() ?? K.defaultValue)
+                let old = previous.value
+                if old != .some(value) {
                     previous.value = .some(value)
-                    action(value)
+                    action(old, value)
                 }
             }
             return items

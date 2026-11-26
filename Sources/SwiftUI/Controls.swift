@@ -155,6 +155,8 @@ public struct ScrollView<Content: View>: Primitive {
         let widget = context.widget(QSScroll)
         var inner = context.descending(.position(0))
         inner.parent = qs_scroll_content(widget)
+        var geometry: ScrollGeometry?
+        inner.publish(FirstScrollGeometry.self) { geometry }
         let view = stacked(content.resolve(inner), axis: .vertical, alignment: .center, spacing: 8)
         let horizontal = axes.contains(.horizontal), vertical = axes.contains(.vertical)
         qs_scroll_axes(widget, showsIndicators && horizontal && context.environment.horizontalScrollIndicatorVisibility.showsBar ? 1 : 0,
@@ -162,7 +164,8 @@ public struct ScrollView<Content: View>: Primitive {
         func offer(_ p: ProposedViewSize) -> ProposedViewSize { .init(width: horizontal ? nil : p.width, height: vertical ? nil : p.height) }
         return [Element { p in
             let ideal = view.measure(offer(p))
-            return CGSize(width: p.width ?? ideal.width, height: p.height ?? ideal.height)
+            return CGSize(width: horizontal ? (p.width ?? ideal.width) : ideal.width,
+                          height: vertical ? (p.height ?? ideal.height) : ideal.height)
         } place: { bounds, _ in
             qs_place(widget, bounds.minX, bounds.minY, bounds.width, bounds.height)
             let proposal = offer(ProposedViewSize(bounds.size))
@@ -170,6 +173,9 @@ public struct ScrollView<Content: View>: Primitive {
             let contentSize = CGSize(width: max(bounds.width, size.width), height: max(bounds.height, size.height))
             qs_scroll_size(widget, Int32(contentSize.width.rounded(.up)), Int32(contentSize.height.rounded(.up)))
             view.place(Alignment.top.rect(size, in: CGRect(origin: .zero, size: contentSize)), proposal)
+            let viewport = qs_scroll_viewport(widget)
+            geometry = ScrollGeometry(contentOffset: CGPoint(x: viewport.x, y: viewport.y), contentSize: size,
+                                      contentInsets: EdgeInsets(), containerSize: CGSize(width: viewport.width, height: viewport.height))
         }]
     }
 }

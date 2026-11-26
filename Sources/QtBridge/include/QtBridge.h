@@ -25,6 +25,7 @@ int qs_run(QSWindow *, const char *screenshot, QSPump pump);
 void qs_close(QSWindow *);
 QSWidget qs_create(QSWindow *, QSWidget parent, enum QSKind, int id);
 QSWidget qs_scroll_content(QSWidget);
+QSRect qs_scroll_viewport(QSWidget);
 void qs_scroll_size(QSWidget, int width, int height);
 void qs_scroll_axes(QSWidget, int horizontal, int vertical);
 void qs_destroy(QSWidget);

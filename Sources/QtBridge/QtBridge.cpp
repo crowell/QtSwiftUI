@@ -506,6 +506,9 @@ QSWidget qs_create(QSWindow *window, QSWidget parent, QSKind kind, int id) {
     case QSScroll: {
         auto *scroll = new QScrollArea(container);
         scroll->setFrameShape(QFrame::NoFrame);
+        for (auto *bar : {scroll->horizontalScrollBar(), scroll->verticalScrollBar()}) {
+            QObject::connect(bar, &QScrollBar::valueChanged, window, [window] { window->schedule(); });
+        }
         auto *content = new QWidget();
         scroll->setWidget(content);
         scroll->viewport()->setAutoFillBackground(false);
@@ -529,6 +532,11 @@ QSWidget qs_create(QSWindow *window, QSWidget parent, QSKind kind, int id) {
 }
 QSWidget qs_scroll_content(QSWidget w) { return static_cast<QScrollArea *>(w)->widget(); }
 void qs_scroll_size(QSWidget w, int width, int height) { widget(qs_scroll_content(w))->resize(width, height); }
+QSRect qs_scroll_viewport(QSWidget w) {
+    auto *area = static_cast<QScrollArea *>(w);
+    return {double(area->horizontalScrollBar()->value()), double(area->verticalScrollBar()->value()),
+            double(area->viewport()->width()), double(area->viewport()->height())};
+}
 void qs_scroll_axes(QSWidget w, int h, int v) {
     auto *scroll = static_cast<QScrollArea *>(w);
     scroll->setHorizontalScrollBarPolicy(h ? Qt::ScrollBarAsNeeded : Qt::ScrollBarAlwaysOff);
