@@ -40,7 +40,7 @@ nonisolated public struct Subview: Primitive, Identifiable {
     @MainActor func elements(in context: Context) -> [Element] {
         render(context.descending(.id(AnyHashable(id))))
     }
-    @MainActor func applying(_ transform: @escaping (any View, Context) -> [Element]) -> Self {
+    @MainActor func applying(_ transform: @escaping @MainActor (any View, Context) -> [Element]) -> Self {
         var result = self
         result.render = { context in transform(RenderLeaf(render: render), context) }
         return result

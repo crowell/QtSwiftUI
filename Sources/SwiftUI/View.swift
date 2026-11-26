@@ -26,6 +26,8 @@ extension View {
     }
 }
 
+public typealias ContentBuilder = ViewBuilder
+
 @resultBuilder public enum ViewBuilder {
     public static func buildExpression<V: View>(_ v: V) -> V { v }
     @MainActor public static func buildBlock() -> EmptyView { EmptyView() }

@@ -183,6 +183,8 @@ public struct ScrollView<Content: View>: Primitive {
         inner.publish(FirstScrollGeometry.self) { geometry }
         let view = stacked(content.resolve(inner), axis: .vertical, alignment: .center, spacing: 8)
         let horizontal = axes.contains(.horizontal), vertical = axes.contains(.vertical)
+        qs_scroll_bounce(widget, horizontal ? context.environment.horizontalScrollBounceBehavior.policy : -1,
+                         vertical ? context.environment.verticalScrollBounceBehavior.policy : -1)
         qs_scroll_axes(widget, showsIndicators && horizontal && context.environment.horizontalScrollIndicatorVisibility.showsBar ? 1 : 0,
                        showsIndicators && vertical && context.environment.verticalScrollIndicatorVisibility.showsBar ? 1 : 0)
         func offer(_ p: ProposedViewSize) -> ProposedViewSize { .init(width: horizontal ? nil : p.width, height: vertical ? nil : p.height) }

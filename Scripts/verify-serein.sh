@@ -32,6 +32,7 @@ fi
 diagnostics="$preview/diagnostics"
 sh /src/Scripts/prepare-diagnostics.sh "$checkout" "$diagnostics"
 if [ -n "${QTSWIFTUI_SCREENSHOT:-}" ]; then
+    export QTSWIFTUI_SETTINGS_REFERENCE="$(dirname "$QTSWIFTUI_SCREENSHOT")"
     export QTSWIFTUI_SURVEY_REFERENCE="$(dirname "$QTSWIFTUI_SCREENSHOT")"
     export QTSWIFTUI_GALLERY_MENU_CAPTURE="$(dirname "$QTSWIFTUI_SCREENSHOT")/media-gallery-sort.png"
 fi
@@ -41,6 +42,8 @@ if [ -n "${QTSWIFTUI_SCREENSHOT:-}" ]; then
     QTSWIFTUI_SCREENSHOT="$(dirname "$QTSWIFTUI_SCREENSHOT")/recording-draft.png" "$binary" --recording-draft
     QTSWIFTUI_SCREENSHOT="$(dirname "$QTSWIFTUI_SCREENSHOT")/voice-recording.png" "$binary" --recording
     QTSWIFTUI_SCREENSHOT="$(dirname "$QTSWIFTUI_SCREENSHOT")/discard-recording.png" "$binary" --discard-recording
+    QTSWIFTUI_SCREENSHOT="$(dirname "$QTSWIFTUI_SCREENSHOT")/data-usage-settings.png" "$binary" --data-usage-settings
+    QTSWIFTUI_SCREENSHOT="$(dirname "$QTSWIFTUI_SCREENSHOT")/call-settings.png" "$binary" --call-settings
     QTSWIFTUI_SCREENSHOT="$(dirname "$QTSWIFTUI_SCREENSHOT")/call-quality-survey.png" "$binary" --call-survey
     QTSWIFTUI_SCREENSHOT="$(dirname "$QTSWIFTUI_SCREENSHOT")/chat-color-picker.png" "$binary" --color-picker
     QTSWIFTUI_SCREENSHOT="$(dirname "$QTSWIFTUI_SCREENSHOT")/custom-color-editor.png" "$binary" --color-editor

@@ -19,7 +19,7 @@ import AppKit
     var tick = 0
     #endif
 
-    init(_ content: some View, width: Int, height: Int) async throws {
+    init(_ content: some View, width: Int, height: Int, keyboard: Bool = false) async throws {
         self.width = width
         self.height = height
         let screen = content
@@ -32,13 +32,13 @@ import AppKit
         #else
         hosting = NSHostingView(rootView: AnyView(screen))
         window = NSWindow(contentRect: CGRect(x: 0, y: 0, width: width, height: height),
-                          styleMask: [.borderless], backing: .buffered, defer: false)
+                          styleMask: keyboard ? [.titled] : [.borderless], backing: .buffered, defer: false)
         window.isReleasedWhenClosed = false
         bitmap = try XCTUnwrap(NSBitmapImageRep(bitmapDataPlanes: nil, pixelsWide: width, pixelsHigh: height,
             bitsPerSample: 8, samplesPerPixel: 4, hasAlpha: true, isPlanar: false, colorSpaceName: .deviceRGB,
             bytesPerRow: 0, bitsPerPixel: 0))
         window.contentView = hosting
-        window.orderFrontRegardless()
+        if keyboard { window.makeKeyAndOrderFront(nil) } else { window.orderFrontRegardless() }
         hosting.layoutSubtreeIfNeeded()
         try await Task.sleep(for: .milliseconds(50))
         #endif

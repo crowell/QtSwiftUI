@@ -8,6 +8,8 @@ struct DiagnosticPreview: App {
         let linking = linkError || CommandLine.arguments.contains("--link-device")
         let leaveCall = CommandLine.arguments.contains("--leave-call")
         let clearing = CommandLine.arguments.contains("--clearing-data")
+        let calls = CommandLine.arguments.contains("--call-settings")
+        let settings = calls || CommandLine.arguments.contains("--data-usage-settings")
         let survey = CommandLine.arguments.contains("--call-survey")
         let colorPicker = CommandLine.arguments.contains("--color-picker")
         let colorEditor = CommandLine.arguments.contains("--color-editor")
@@ -17,8 +19,9 @@ struct DiagnosticPreview: App {
         let recording = CommandLine.arguments.contains("--recording")
         let discard = CommandLine.arguments.contains("--discard-recording")
         let arabic = CommandLine.arguments.contains("--arabic")
-        WindowGroup(survey ? "Call quality" : colorPicker ? "Chat color" : colorEditor ? "Custom chat color" : recording || draft || discard ? "Voice message" : gallery ? "All media" : clearing ? "Clearing data" : linking ? "Link device" : leaveCall ? "Leave current call" : "Call diagnostics") {
-            if survey { CallSurveyPreview() }
+        WindowGroup(settings ? (calls ? "Calls" : "Data usage") : survey ? "Call quality" : colorPicker ? "Chat color" : colorEditor ? "Custom chat color" : recording || draft || discard ? "Voice message" : gallery ? "All media" : clearing ? "Clearing data" : linking ? "Link device" : leaveCall ? "Leave current call" : "Call diagnostics") {
+            if settings { SettingsPreview(calls: calls) }
+            else if survey { CallSurveyPreview() }
             else if colorPicker { ChatColorPickerPreview() }
             else if colorEditor { ColorEditorPreview() }
             else if draft { RecordingDraftPreview() }
@@ -34,8 +37,8 @@ struct DiagnosticPreview: App {
             else if leaveCall { LeaveCallPreview() }
             else { DiagnosticContent() }
         }
-        .defaultSize(width: colorPicker ? 780 : recording || draft ? 640 : linking || clearing ? 680 : 520,
-                     height: survey ? 600 : colorPicker ? 720 : colorEditor ? 620 : recording || draft ? 84 : discard ? 280 : linking || clearing ? 420 : 440)
+        .defaultSize(width: settings ? 640 : colorPicker ? 780 : recording || draft ? 640 : linking || clearing ? 680 : 520,
+                     height: settings ? 567 : survey ? 600 : colorPicker ? 720 : colorEditor ? 620 : recording || draft ? 84 : discard ? 280 : linking || clearing ? 420 : 440)
     }
 }
 

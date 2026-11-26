@@ -1,4 +1,5 @@
 #include "QtBridge.h"
+#include "AlphaMask.hpp"
 #include "AttributedLabel.hpp"
 #include "CanvasBlur.hpp"
 #include "PointerDrag.hpp"
@@ -36,6 +37,7 @@
 #include <QResizeEvent>
 #include <QScrollArea>
 #include <QScrollBar>
+#include <QScroller>
 #include <QSignalBlocker>
 #include <QSlider>
 #include <QTimer>
@@ -738,6 +740,7 @@ QSWidget qs_create(QSWindow *window, QSWidget parent, QSKind kind, int id) {
     }
     case QSTextEditor: {
         auto *edit = new PlainTextEditor(container);
+        QScroller::grabGesture(edit->viewport(), QScroller::TouchGesture);
         window->observeFocus(edit, id);
         QObject::connect(edit, &QPlainTextEdit::textChanged, window, [=] {
             window->event(window->context, id, QSActivate, "");
@@ -776,6 +779,7 @@ QSWidget qs_create(QSWindow *window, QSWidget parent, QSKind kind, int id) {
     case QSScroll: {
         auto *scroll = new QScrollArea(container);
         scroll->setFrameShape(QFrame::NoFrame);
+        QScroller::grabGesture(scroll->viewport(), QScroller::TouchGesture);
         for (auto *bar : {scroll->horizontalScrollBar(), scroll->verticalScrollBar()}) {
             QObject::connect(bar, &QScrollBar::valueChanged, window, [window] { window->schedule(); });
         }
@@ -806,6 +810,23 @@ QSRect qs_scroll_viewport(QSWidget w) {
     auto *area = static_cast<QScrollArea *>(w);
     return {double(area->horizontalScrollBar()->value()), double(area->verticalScrollBar()->value()),
             double(area->viewport()->width()), double(area->viewport()->height())};
+}
+void qs_scroll_bounce(QSWidget w, int horizontal, int vertical) {
+    using P = QScrollerProperties;
+    auto *scroller = QScroller::scroller(static_cast<QAbstractScrollArea *>(w)->viewport());
+    auto properties = scroller->scrollerProperties();
+    const P defaults;
+    auto policy = [&](int value, P::ScrollMetric metric) -> QVariant {
+        switch (value) {
+        case -1: return QVariant::fromValue(P::OvershootAlwaysOff);
+        case 1: return QVariant::fromValue(P::OvershootAlwaysOn);
+        case 2: return QVariant::fromValue(P::OvershootWhenScrollable);
+        default: return defaults.scrollMetric(metric);
+        }
+    };
+    properties.setScrollMetric(P::HorizontalOvershootPolicy, policy(horizontal, P::HorizontalOvershootPolicy));
+    properties.setScrollMetric(P::VerticalOvershootPolicy, policy(vertical, P::VerticalOvershootPolicy));
+    if (properties != scroller->scrollerProperties()) scroller->setScrollerProperties(properties);
 }
 void qs_scroll_axes(QSWidget w, int h, int v) {
     auto *scroll = static_cast<QScrollArea *>(w);
@@ -1116,6 +1137,16 @@ void qs_group_spin(QSWidget w, int milliseconds) {
     animation->setDuration(milliseconds);
     if (animation->state() != QAbstractAnimation::Running) animation->start();
 }
+void qs_drawing_only(QSWidget w) {
+    auto *item = widget(w);
+    item->setProperty("qsDrawingOnly", true);
+    item->hide();
+}
+void qs_alpha_mask(QSWidget w, QSWidget stencil) {
+    auto *item = widget(w);
+    if (auto *effect = dynamic_cast<AlphaMaskEffect *>(item->graphicsEffect())) effect->update();
+    else item->setGraphicsEffect(new AlphaMaskEffect(widget(stencil)));
+}
 void qs_group_opacity(QSWidget w, double value) {
     auto *item = widget(w);
     value = qBound(0.0, value, 1.0);
@@ -1221,8 +1252,10 @@ void qs_place(QSWidget w, double x, double y, double width, double height) {
     }
     item->setGeometry(geometry);
     if (auto *group = dynamic_cast<GroupWidget *>(item)) group->layoutRect = group->rect();
-    item->raise();
-    item->show();
+    if (!item->property("qsDrawingOnly").toBool()) {
+        item->raise();
+        item->show();
+    }
 }
 
 void qs_match_place(QSWidget drawing, QSWidget marker, double x, double y, double width, double height) {
@@ -1497,6 +1530,15 @@ int qs_is_named_link(QSWindow *window, const char *id, const char *name) {
 int qs_has_help(QSWindow *window, const char *id, const char *expected) {
     auto *item = window->findChild<QWidget *>(QString::fromUtf8(id));
     return item && item->toolTip() == QString::fromUtf8(expected);
+}
+int qs_can_overshoot(QSWindow *window, int horizontal) {
+    auto *area = window->findChild<QAbstractScrollArea *>();
+    if (!area) return -1;
+    using P = QScrollerProperties;
+    auto properties = QScroller::scroller(area->viewport())->scrollerProperties();
+    auto policy = properties.scrollMetric(horizontal ? P::HorizontalOvershootPolicy : P::VerticalOvershootPolicy).toInt();
+    auto *bar = horizontal ? area->horizontalScrollBar() : area->verticalScrollBar();
+    return policy == P::OvershootAlwaysOn || (policy == P::OvershootWhenScrollable && bar->maximum() > bar->minimum());
 }
 int qs_scroll_to_end(QSWindow *window) {
     auto *area = window->findChild<QScrollArea *>();

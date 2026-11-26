@@ -14,14 +14,14 @@ public enum Edge: Int8, CaseIterable, Sendable {
         public static let horizontal: Self = [.leading, .trailing], vertical: Self = [.top, .bottom], all: Self = [.horizontal, .vertical]
     }
 }
-struct Transform<Content: View>: Primitive, SubviewSource {
+nonisolated struct Transform<Content: View>: Primitive, SubviewSource {
     let content: Content
-    var readingContext: (Context) -> Context = { $0 }
-    let transform: (any View, Context) -> [Element]
-    func subviews(in context: Context) -> [Subview] {
+    var readingContext: @MainActor (Context) -> Context = { $0 }
+    let transform: @MainActor (any View, Context) -> [Element]
+    @MainActor func subviews(in context: Context) -> [Subview] {
         content.collectSubviews(in: readingContext(context)).map { $0.applying(transform) }
     }
-    func elements(in context: Context) -> [Element] { transform(content, context) }
+    @MainActor func elements(in context: Context) -> [Element] { transform(content, context) }
 }
 @MainActor @preconcurrency public protocol ViewModifier {
     associatedtype Body: View

@@ -29,12 +29,15 @@ enum AxoFonts {
     static func register() { _ = registered }
     #endif
     static func interMetrics(size: CGFloat) -> (ascent: CGFloat, descent: CGFloat, xHeight: CGFloat) {
+        metrics(family: "Inter", size: size)
+    }
+    static func metrics(family: String, size: CGFloat) -> (ascent: CGFloat, descent: CGFloat, xHeight: CGFloat) {
         register()
         #if os(Linux)
-        let font = qs_font_metrics("Inter", size)
+        let font = qs_font_metrics(family, size)
         return (font.ascent, font.descent, font.xHeight)
         #else
-        let font = CTFontCreateWithName("Inter-Regular" as CFString, size, nil)
+        let font = CTFontCreateWithName(family as CFString, size, nil)
         return (CTFontGetAscent(font), CTFontGetDescent(font), CTFontGetXHeight(font))
         #endif
     }
@@ -111,12 +114,12 @@ struct CSSText: View {
     init(_ value: String, style: CSSTextStyle, wrap: CSSTextWrap = .wrap, alignment: TextAlignment = .leading, color: AxoColor? = nil) {
         self.init(value, type: style.type, wrap: wrap, alignment: alignment, color: color)
     }
-    init(runs: [CSSTextRun], style: CSSTextStyle, wrap: CSSTextWrap, color: AxoColor? = nil) {
-        self.init(runs.map(\.text).joined(), type: style.type, wrap: wrap, color: color)
+    init(runs: [CSSTextRun], style: CSSTextStyle, wrap: CSSTextWrap, color: AxoColor? = nil, alignment: TextAlignment = .leading) {
+        self.init(runs.map(\.text).joined(), type: style.type, wrap: wrap, alignment: alignment, color: color)
         if runs.contains(where: { $0.action != nil || $0.color != nil || $0.fontName != nil }) { self.runs = runs }
     }
-    init(runs: [CSSTextRun], style: CSSTextStyle, color: AxoColor? = nil, onTap: ((String) -> Void)?) {
-        self.init(runs: runs, style: style, wrap: .wrap, color: color)
+    init(runs: [CSSTextRun], style: CSSTextStyle, color: AxoColor? = nil, alignment: TextAlignment = .leading, onTap: ((String) -> Void)?) {
+        self.init(runs: runs, style: style, wrap: .wrap, color: color, alignment: alignment)
         self.onTap = onTap
     }
     private var content: Text {

@@ -39,6 +39,8 @@ public struct EnvironmentValues {
     public var font: Font?
     public var multilineTextAlignment: TextAlignment = .leading
     public var lineLimit: Int?
+    public var verticalScrollBounceBehavior = ScrollBounceBehavior.automatic
+    public var horizontalScrollBounceBehavior = ScrollBounceBehavior.automatic
     public var verticalScrollIndicatorVisibility = ScrollIndicatorVisibility.automatic
     public var horizontalScrollIndicatorVisibility = ScrollIndicatorVisibility.automatic
     var selectableText = false

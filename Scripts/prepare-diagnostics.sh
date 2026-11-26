@@ -155,7 +155,19 @@ awk '/^    @MainActor func width\(i18n:/ { skip=1; count++ }
 cp "$source_dir/Theme/I18nRichText.swift" "$source_dir/Calling/CallQualitySurveyDialog.swift" "$source_dir/Axo/AxoCheckbox.swift" "$source_dir/Axo/AxoSwitch.swift" "$target_dir/"
 cp "$source_dir/Components/ChatColorPicker.swift" "$source_dir/Axo/AxoContainer.swift" \
    "$source_dir/Axo/Items/AxoClickableItem.swift" "$target_dir/"
-# Only the avatar and mixed-inline section title are outside this fixture.
+cp "$source_dir/Components/Preferences/PreferencesCallsPage.swift" "$source_dir/Components/Preferences/PreferencesList.swift" \
+   "$source_dir/Components/CallingDeviceSelectionItems.swift" "$source_dir/Axo/AxoPanel.swift" "$source_dir/Axo/AxoScrollArea.swift" \
+   "$source_dir/Axo/Items/AxoSwitchItem.swift" "$source_dir/Axo/Items/AxoSelectItem.swift" "$source_dir/Axo/Items/AxoList.swift" "$target_dir/"
+# Replace CoreText font measurement in the select trigger with the portable font metrics.
+sed -e '/^import CoreText$/d' -e 's/CSSTextStyle(text).ctFont/AxoFonts.interMetrics(size: text.size)/' \
+    -e 's/AxoSymbol.style(size: iconSize, weight: 400).ctFont/AxoFonts.metrics(family: "Signal Symbols", size: iconSize)/' \
+    -e 's/CTFontGetAscent(\([ts]\))/\1.ascent/g' -e 's/CTFontGetDescent(\([ts]\))/\1.descent/g' \
+    "$source_dir/Axo/AxoSelect.swift" > "$target_dir/AxoSelect.swift"
+declarations '^public enum AxoInlinePiece:' 1 "$source_dir/Axo/Chat/AxoInlineFlow.swift" > "$target_dir/InlinePiece.swift"
+awk 'BEGIN { print "extension SettingsModel {" } /^    static let microphones =/ { inside=1; count++ }
+     inside && /^$/ { inside=0 } inside { print } END { print "}"; if (count!=1 || inside) exit 1 }' \
+    "$checkout/Packages/SignalUI/Tests/SignalUITests/Components/Preferences/PreferencesTests.swift" > "$target_dir/SettingsDevices.swift"
+# Only the avatar is outside these item fixtures.
 # Keep both original item layouts, trigger registration, and hit targets.
 awk '/^    public struct IconAvatar:/ { skip=1; omitted++ }
      !skip && !/^import CoreText$/ {
@@ -165,9 +177,6 @@ awk '/^    public struct IconAvatar:/ { skip=1; omitted++ }
      /^    }$/ { skip=0 } END { if (omitted!=1 || metrics!=1) exit 1 }' \
     "$source_dir/Axo/Items/AxoBaseItem.swift" > "$target_dir/AxoBaseItem.swift"
 sed '/public typealias IconAvatar =/d' "$source_dir/Axo/Items/AxoItem.swift" > "$target_dir/AxoItem.swift"
-awk '/^    public struct Label:/ { skip=1; count++ }
-     !skip { print } /^    }$/ { skip=0 } END { if (count!=1) exit 1 }' \
-    "$source_dir/Axo/Items/AxoList.swift" > "$target_dir/AxoList.swift"
 awk 'BEGIN { print "extension ChatColorPickerPreview {" } /^    static let customColors:/ { inside=1; count++ }
      inside { print } /^    ]$/ { inside=0 } END { print "}"; if (count!=1 || inside) exit 1 }' \
     "$checkout/Packages/SignalUI/Tests/SignalUITests/Components/ChatColorPickerTests.swift" > "$target_dir/PickerColors.swift"
