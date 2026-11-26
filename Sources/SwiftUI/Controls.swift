@@ -60,8 +60,10 @@ public struct Text: Primitive {
         }
         return [Element { p in
             let hint = qs_measure(widget, p.width ?? -1)
-            let font = ctx.environment.font ?? .body
-            let height = ctx.environment.lineLimit.map { min(hint.height, CGFloat($0) * ceil(font.size * 1.25)) } ?? hint.height
+            let line = qs_line_height(widget)
+            let minimum = ctx.environment.minimumLines
+            let capped = ctx.environment.lineLimit.map { min(hint.height, CGFloat(max(1, $0)) * line) } ?? hint.height
+            let height = minimum > 1 ? max(capped, CGFloat(minimum) * line) : capped
             return CGSize(width: hint.width, height: height)
         } place: { rect, _ in qs_place(widget, rect.minX, rect.minY, rect.width, rect.height) }]
     }
@@ -125,25 +127,57 @@ public struct Toggle<Label: View>: Primitive {
     let widget = context.widget(secure ? QSSecureEdit : QSEdit, action: { text.wrappedValue = $0 })
     qs_text(widget, text.wrappedValue)
     qs_hint(widget, title)
+    qs_autocorrection(widget, context.environment.autocorrectionDisabled ? 1 : 0)
     let control = context.control(widget, expands: true)
     qs_field_style(widget, context.environment.plainField ? 1 : 0)
     return control
 }
 public struct TextField<Label: View>: Primitive {
     let title: String, text: Binding<String>
-    public init<S: StringProtocol>(_ title: S, text: Binding<String>) where Label == Text { self.title = String(title); self.text = text }
+    var axis: Axis = .horizontal
+    var prompt: Text?
     var secure = false
-    init(configuration title: String, text: Binding<String>, secure: Bool) {
+    public nonisolated init<S: StringProtocol>(_ title: S, text: Binding<String>) where Label == Text {
+        self.init(title, text: text, prompt: nil, axis: .horizontal)
+    }
+    public nonisolated init<S: StringProtocol>(_ title: S, text: Binding<String>, axis: Axis) where Label == Text {
+        self.init(title, text: text, prompt: nil, axis: axis)
+    }
+    public nonisolated init<S: StringProtocol>(_ title: S, text: Binding<String>, prompt: Text?) where Label == Text {
+        self.init(title, text: text, prompt: prompt, axis: .horizontal)
+    }
+    public nonisolated init<S: StringProtocol>(_ title: S, text: Binding<String>, prompt: Text?, axis: Axis) where Label == Text {
+        self.title = String(title)
+        self.text = text
+        self.prompt = prompt
+        self.axis = axis
+    }
+    init(configuration title: String, text: Binding<String>, secure: Bool, prompt: Text? = nil, axis: Axis = .horizontal) {
+        self.prompt = prompt
+        self.axis = axis
         self.title = title
         self.text = text
         self.secure = secure
     }
     func elements(in context: Context) -> [Element] {
         if let style = context.environment.fieldStyle {
-            let configuration = TextField<_TextFieldStyleLabel>(configuration: title, text: text, secure: secure)
+            let configuration = TextField<_TextFieldStyleLabel>(configuration: title, text: text, secure: secure, prompt: prompt, axis: axis)
             return style(configuration).resolve(context.with(\.fieldStyle, nil))
         }
-        return [field(title, text: text, secure: secure, in: context)]
+        var context = context
+        if context.environment.label.isEmpty { context.environment.label = title }
+        let placeholder = prompt?.string ?? title
+        guard axis == .vertical else { return [field(placeholder, text: text, secure: secure, in: context)] }
+        let widget = boundEditor(QSMultilineField, text: text, in: context)
+        qs_hint(widget, placeholder)
+        context.style(widget)
+        qs_field_style(widget, context.environment.plainField ? 1 : 0)
+        let minimum = Int32(clamping: context.environment.minimumLines)
+        let maximum = Int32(clamping: context.environment.lineLimit.map { max(1, $0) } ?? 0)
+        return [Element { proposal in
+            let width = proposal.width ?? 0
+            return CGSize(width: width, height: qs_field_height(widget, proposal.width ?? -1, minimum, maximum))
+        } place: { rect, _ in qs_place(widget, rect.minX, rect.minY, rect.width, rect.height) }]
     }
 }
 public struct SecureField<Label: View>: Primitive {

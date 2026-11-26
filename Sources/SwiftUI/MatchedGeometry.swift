@@ -2,10 +2,10 @@ import QtBridge
 
 @propertyWrapper public struct Namespace: MountedProperty, @unchecked Sendable {
     public struct ID: Hashable, Sendable { fileprivate let value: UUID }
-    private let state = State(wrappedValue: ID(value: UUID()))
+    private var state = State(wrappedValue: ID(value: UUID()))
     public init() {}
     public var wrappedValue: ID { state.wrappedValue }
-    func install(in context: Context) { state.install(in: context) }
+    mutating func install(in context: Context) { state.install(in: context) }
 }
 
 public struct MatchedGeometryProperties: OptionSet, Sendable {

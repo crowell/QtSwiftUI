@@ -2,40 +2,88 @@ import QtBridge
 
 public enum AccessibilityAdjustmentDirection: Hashable, Sendable { case increment, decrement }
 
+public struct AccessibilityActionKind: Equatable, Sendable {
+    fileprivate let name: String
+    private init(_ name: String) { self.name = name }
+    public init(named name: Text) { self.name = name.string }
+    public static let `default` = Self("Press"), escape = Self("Escape"), magicTap = Self("Magic Tap")
+    public static let delete = Self("Delete"), showMenu = Self("ShowMenu")
+}
 @MainActor final class AccessibleAdjustment {
-    let perform: (AccessibilityAdjustmentDirection) -> Void
+    let perform: ((AccessibilityAdjustmentDirection) -> Void)?
+    let actions: [String: () -> Void]
     var attached = false
-    init(_ perform: @escaping (AccessibilityAdjustmentDirection) -> Void) { self.perform = perform }
+    init(_ perform: ((AccessibilityAdjustmentDirection) -> Void)?, actions: [String: () -> Void]) {
+        self.perform = perform
+        self.actions = actions
+    }
 }
 
 nonisolated public struct AccessibilityAttachmentModifier: PrimitiveModifier {
     public typealias Body = Never
-    fileprivate var adjustment: (AccessibilityAdjustmentDirection) -> Void
+    fileprivate var adjustment: ((AccessibilityAdjustmentDirection) -> Void)?
+    fileprivate var actions: [String: () -> Void] = [:]
+    fileprivate var hint: String?
     public func body(content: Content) -> Never { fatalError("Accessibility attachments are rendered directly") }
 
     @MainActor func applying(to content: AnyView) -> any View {
         Transform(content: content) { view, context in
-            let target = AccessibleAdjustment(adjustment)
-            let group = context.widget(QSGroup, adjustment: adjustment)
+            var context = context
+            if let hint { context.environment.accessibleHint = hint }
+            guard adjustment != nil || !actions.isEmpty else { return view.resolve(context) }
+            let target = AccessibleAdjustment(adjustment, actions: actions)
+            let group = context.widget(QSGroup, adjustment: adjustment, accessibilityAction: { actions[$0]?() })
             let children = context.with(\.adjustment, target).children(of: view, inside: group)
             // Explicit accessibility elements preserve their own names, values and children.
             // A bare view gets a combined element to own the adjustment actions.
             qs_group(group, target.attached ? 1 : 2, 0, 0, context.environment.accessibleValue)
-            qs_adjustable(group, target.attached ? 0 : 1)
+            qs_adjustable(group, !target.attached && adjustment != nil ? 1 : 0)
+            qs_group_actions_clear(group)
+            if !target.attached { for action in actions.keys { qs_group_action(group, action) } }
             return children
         }
     }
 }
 
 extension View {
+    nonisolated public func accessibilityAction(_ actionKind: AccessibilityActionKind = .default, _ handler: @escaping () -> Void) -> ModifiedContent<Self, AccessibilityAttachmentModifier> {
+        .init(content: self, modifier: .init(actions: [actionKind.name: handler]))
+    }
+    nonisolated public func accessibilityAction(named name: Text, _ handler: @escaping () -> Void) -> ModifiedContent<Self, AccessibilityAttachmentModifier> {
+        accessibilityAction(.init(named: name), handler)
+    }
+    nonisolated public func accessibilityHint(_ hint: Text) -> ModifiedContent<Self, AccessibilityAttachmentModifier> { accessibilityHint(hint, isEnabled: true) }
+    nonisolated public func accessibilityHint(_ hint: Text, isEnabled: Bool) -> ModifiedContent<Self, AccessibilityAttachmentModifier> {
+        .init(content: self, modifier: .init(hint: isEnabled ? hint.string : nil))
+    }
+    nonisolated public func accessibilityHint<S: StringProtocol>(_ hint: S) -> ModifiedContent<Self, AccessibilityAttachmentModifier> { accessibilityHint(Text(hint)) }
+    nonisolated public func accessibilityHint<S: StringProtocol>(_ hint: S, isEnabled: Bool) -> ModifiedContent<Self, AccessibilityAttachmentModifier> { accessibilityHint(Text(hint), isEnabled: isEnabled) }
     nonisolated public func accessibilityAdjustableAction(_ handler: @escaping (AccessibilityAdjustmentDirection) -> Void)
         -> ModifiedContent<Self, AccessibilityAttachmentModifier> {
         .init(content: self, modifier: .init(adjustment: handler))
     }
 }
 extension ModifiedContent where Modifier == AccessibilityAttachmentModifier {
+    nonisolated public func accessibilityAction(_ actionKind: AccessibilityActionKind = .default, _ handler: @escaping () -> Void) -> ModifiedContent<Content, Modifier> {
+        var attachment = modifier
+        attachment.actions[actionKind.name] = handler
+        return .init(content: content, modifier: attachment)
+    }
+    nonisolated public func accessibilityAction(named name: Text, _ handler: @escaping () -> Void) -> ModifiedContent<Content, Modifier> {
+        accessibilityAction(.init(named: name), handler)
+    }
+    nonisolated public func accessibilityHint(_ hint: Text) -> ModifiedContent<Content, Modifier> { accessibilityHint(hint, isEnabled: true) }
+    nonisolated public func accessibilityHint(_ hint: Text, isEnabled: Bool) -> ModifiedContent<Content, Modifier> {
+        var attachment = modifier
+        if isEnabled { attachment.hint = hint.string }
+        return .init(content: content, modifier: attachment)
+    }
+    nonisolated public func accessibilityHint<S: StringProtocol>(_ hint: S) -> ModifiedContent<Content, Modifier> { accessibilityHint(Text(hint)) }
+    nonisolated public func accessibilityHint<S: StringProtocol>(_ hint: S, isEnabled: Bool) -> ModifiedContent<Content, Modifier> { accessibilityHint(Text(hint), isEnabled: isEnabled) }
     nonisolated public func accessibilityAdjustableAction(_ handler: @escaping (AccessibilityAdjustmentDirection) -> Void)
         -> ModifiedContent<Content, Modifier> {
-        .init(content: content, modifier: .init(adjustment: handler))
+        var attachment = modifier
+        attachment.adjustment = handler
+        return .init(content: content, modifier: attachment)
     }
 }

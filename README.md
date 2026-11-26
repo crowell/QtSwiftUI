@@ -12,7 +12,7 @@ From a checkout with Docker running, this command builds the Ubuntu 24.04 image,
 ./Scripts/verify-linux.sh
 ```
 
-Pass a Serein checkout to render its call-quality survey, chat-color picker and custom editor, media gallery, voice-note controls, data-clearing and device-link screens, leave-call dialog, call diagnostics window, device card and artwork.
+Pass a Serein checkout to render its call history, call-link details, nickname editor, call settings, data usage settings, call-quality survey, chat-color picker and custom editor, media gallery, voice-note controls, data-clearing and device-link screens, leave-call dialog, call diagnostics window, device card and artwork.
 
 ```sh
 ./Scripts/verify-linux.sh ../serein
@@ -80,6 +80,14 @@ The call-history preview compiles Serein’s `CallsList`, search field, avatars,
 
 [Missed calls on Ubuntu](Screenshots/call-history-missed.png). Set `QTSWIFTUI_HISTORY_REFERENCE` to an existing directory when running the Apple checks to capture both reference states.
 
+Selecting Weekend plans in call history opens Serein’s call-link details. Create a Call Link opens its management dialog with a local sample link. The standalone `--call-link` example uses the admin link and four history entries from Serein’s tests. Rename, approval and deletion change local state. Copy link writes the original URL to the clipboard. Join and Share via Signal expose callbacks for a calling service.
+
+![Serein call-link details on Ubuntu](Screenshots/call-link.png)
+
+The `--nickname` example opens Serein’s nickname and note editor. Its note field grows from two to five lines, accepts multiline input, and enforces Serein’s byte and grapheme limits. Shared tests use Qt and AppKit to rename a link, cancel an edit, change the approval requirement, and save a multiline note. At their example window sizes, the mean absolute RGB difference from Apple’s rendering was 1.55/255 for call-link details and 0.88/255 for the nickname editor. Set `QTSWIFTUI_LINK_SCREENS` to an existing directory to capture the same views during Apple verification.
+
+[Link management](Screenshots/call-link-manager.png) · [Rename dialog](Screenshots/call-link-rename.png) · [Nickname and note editor](Screenshots/nickname-and-note.png)
+
 The Calls and Data usage fixtures compile Serein’s original settings pages, scroll area, list rows, switches, and device and quality selectors. They run as standalone settings panes with Serein’s example devices. SwiftUI bindings hold the changes for the lifetime of the window. Both test suites operate all seven switches, choose devices and media quality, open the quality menu with Down Arrow, and dismiss it with an outside click. At 640 × 567, the mean absolute RGB difference from the Apple SDK rendering was 1.61/255 for Calls and 0.88/255 for Data usage. Set `QTSWIFTUI_SETTINGS_REFERENCE` to an existing directory to capture the two pages and their open menus on macOS.
 
 ![Serein Calls settings on Ubuntu](Screenshots/call-settings.png)
@@ -132,7 +140,7 @@ The target is source compatibility with Apple's public SwiftUI APIs. The impleme
 
 `./Scripts/check-apple.sh ../serein` type-checks the example source with Apple's SwiftUI module on a Mac with Xcode. `./Scripts/check-api.sh` extracts public symbol graphs from Xcode and the Linux image. Pass `--missing` to list missing declaration paths. The inventory groups declarations by symbol kind and path, counts overload spellings separately, and excludes underscored and synthesized members. A shared name alone cannot establish matching signatures, constraints, availability or behavior.
 
-The inventory against the macOS 27.2 SDK found 1,133 shared declaration paths out of 7,627 and 694 identical declaration spellings out of 8,735. The examples exercise a smaller set at runtime. Navigation, multiwindow scenes, broader animation support, text shaping parity, gestures and platform integration remain substantial gaps. Font metrics, control appearance and several layout behaviors differ from Apple's implementation.
+The inventory against the macOS 27.2 SDK found 1,156 shared declaration paths out of 7,627 and 721 identical declaration spellings out of 8,735. The examples exercise a smaller set at runtime. Navigation, multiwindow scenes, broader animation support, text shaping parity, gestures and platform integration remain substantial gaps. Font metrics, control appearance and several layout behaviors differ from Apple's implementation.
 
 After capturing the Linux examples, run `./Scripts/compare-artwork.sh ../serein` on macOS to render both illustrations with Apple's `ImageRenderer`. At a threshold of 8/255 in any RGB channel, 101 of 119,680 account artwork pixels (0.084%) and 91 of 49,928 key transparency pixels (0.182%) differed. The mean absolute channel differences were 0.104/255 and 0.095/255 respectively. Both reference images are saved in `.build/artwork/`.
 

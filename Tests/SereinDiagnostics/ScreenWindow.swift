@@ -120,6 +120,18 @@ import AppKit
     var showsVerticalScroller: Bool { scrollView(in: hosting)?.hasVerticalScroller == true }
     #endif
 
+    func pressReturn(option: Bool = false) async throws {
+        #if os(Linux)
+        XCTAssertEqual(qs_send_key_sequence(host.window, option ? "Alt+Return" : "Return"), 1)
+        #else
+        let event = try XCTUnwrap(NSEvent.keyEvent(with: .keyDown, location: .zero, modifierFlags: option ? [.option] : [],
+            timestamp: ProcessInfo.processInfo.systemUptime, windowNumber: window.windowNumber, context: nil,
+            characters: "\r", charactersIgnoringModifiers: "\r", isARepeat: false, keyCode: 36))
+        window.sendEvent(event)
+        #endif
+        try await settle()
+    }
+
     func type(_ text: String) async throws {
         #if os(Linux)
         XCTAssertEqual(text.withCString { qs_commit_text(host.window, $0, text.utf8.count) }, 1)

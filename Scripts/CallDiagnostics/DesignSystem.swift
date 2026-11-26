@@ -60,6 +60,7 @@ public struct CSSTextRun: Hashable, Sendable {
     public var color: AxoColor?
     public var action: String?
     public var background: AxoColor?
+    public var breakAll = false
     public init(_ text: String, color: AxoColor? = nil) { self.text = text; self.color = color }
 }
 public struct CSSTextStyle {
@@ -67,12 +68,19 @@ public struct CSSTextStyle {
     var size: CGFloat
     var lineHeight: CGFloat
     var letterSpacing: CGFloat
+    var tabular = false
+
+    func tabularNums() -> Self {
+        var copy = self
+        copy.tabular = true
+        return copy
+    }
 
     public init(_ type: AxoType) {
         self.init(fontName: AxoFonts.interName(weight: type.weight), size: type.size,
                   lineHeight: type.lineHeight, letterSpacing: type.tracking * type.size)
     }
-    init(fontName: String, size: CGFloat, lineHeight: CGFloat, letterSpacing: CGFloat) {
+    init(fontName: String, size: CGFloat, lineHeight: CGFloat, letterSpacing: CGFloat = 0) {
         self.fontName = fontName
         self.size = size
         self.lineHeight = lineHeight
@@ -88,10 +96,31 @@ extension EnvironmentValues {
     @Entry var cssTextColor: AxoColor = .labelPrimary
     @Entry var cssTextWrapWidth: CGFloat? = nil
 }
-public enum CSSTextWrap: Equatable { case wrap, truncate, nowrap, clamp(Int) }
+public enum CSSTextWrap: Equatable { case wrap, truncate, nowrap, balance, clamp(Int) }
 extension TextAlignment {
     static var start: Self { .leading }
     static var end: Self { .trailing }
+}
+
+// Narrow the text column until another wrap would add a line.
+private struct BalancedTextLayout: Layout {
+    func sizeThatFits(proposal: ProposedViewSize, subviews: Subviews, cache: inout ()) -> CGSize {
+        guard let text = subviews.first else { return .zero }
+        let size = text.sizeThatFits(proposal)
+        guard let width = proposal.width, width.isFinite, width > 1,
+              size.height > text.sizeThatFits(.unspecified).height else { return size }
+        var low: CGFloat = 1
+        var high = min(width, ceil(size.width))
+        while high - low > 1 {
+            let middle = floor((low + high) / 2)
+            if text.sizeThatFits(.init(width: middle, height: nil)).height <= size.height { high = middle }
+            else { low = middle }
+        }
+        return CGSize(width: high, height: size.height)
+    }
+    func placeSubviews(in bounds: CGRect, proposal: ProposedViewSize, subviews: Subviews, cache: inout ()) {
+        subviews.first?.place(at: bounds.origin, proposal: .init(width: bounds.width, height: bounds.height))
+    }
 }
 
 struct CSSText: View {
@@ -101,6 +130,7 @@ struct CSSText: View {
     let alignment: TextAlignment
     let color: AxoColor?
     private var runs: [CSSTextRun] = []
+    private var tabular = false
     private var onTap: ((String) -> Void)?
     @Environment(\.colorScheme) private var scheme
     @Environment(\.cssTextWrapWidth) private var wrapWidth
@@ -114,10 +144,18 @@ struct CSSText: View {
     }
     init(_ value: String, style: CSSTextStyle, wrap: CSSTextWrap = .wrap, alignment: TextAlignment = .leading, color: AxoColor? = nil) {
         self.init(value, type: style.type, wrap: wrap, alignment: alignment, color: color)
+        self.tabular = style.tabular
     }
     init(runs: [CSSTextRun], style: CSSTextStyle, wrap: CSSTextWrap, color: AxoColor? = nil, alignment: TextAlignment = .leading) {
-        self.init(runs.map(\.text).joined(), type: style.type, wrap: wrap, alignment: alignment, color: color)
-        if runs.contains(where: { $0.action != nil || $0.color != nil || $0.background != nil || $0.fontName != nil }) { self.runs = runs }
+        let displayed = runs.map { run -> CSSTextRun in
+            guard run.breakAll else { return run }
+            var copy = run
+            copy.text = run.text.map(String.init).joined(separator: "\u{200B}")
+            return copy
+        }
+        self.init(displayed.map(\.text).joined(), type: style.type, wrap: wrap, alignment: alignment, color: color)
+        self.tabular = style.tabular
+        if runs.contains(where: { $0.action != nil || $0.color != nil || $0.background != nil || $0.fontName != nil }) { self.runs = displayed }
     }
     init(runs: [CSSTextRun], style: CSSTextStyle, color: AxoColor? = nil, alignment: TextAlignment = .leading, onTap: ((String) -> Void)?) {
         self.init(runs: runs, style: style, wrap: .wrap, color: color, alignment: alignment)
@@ -145,7 +183,21 @@ struct CSSText: View {
     @ViewBuilder private var label: some View {
         let _ = AxoFonts.register()
         let text = content.font(type.font).tracking(type.tracking * type.size)
-        if wrap == .nowrap {
+        if tabular && wrap == .nowrap && !value.isEmpty && value.allSatisfy({ $0.isASCII && $0.isNumber }) {
+            HStack(spacing: 0) {
+                ForEach(Array(value.enumerated()), id: \.offset) { _, digit in
+                    ZStack {
+                        ForEach(0..<10) { Text(verbatim: String($0)).hidden() }
+                        Text(verbatim: String(digit))
+                    }
+                }
+            }.font(type.font).tracking(type.tracking * type.size)
+                .fixedSize(horizontal: true, vertical: false).frame(height: type.lineHeight)
+                .accessibilityElement(children: .ignore).accessibilityLabel(value)
+        } else if wrap == .balance {
+            BalancedTextLayout { text.fixedSize(horizontal: false, vertical: true) }
+                .frame(minHeight: type.lineHeight)
+        } else if wrap == .nowrap {
             text.lineLimit(1).fixedSize(horizontal: true, vertical: false).frame(height: type.lineHeight)
         } else if case .clamp(let lines) = wrap {
             text.lineLimit(lines).fixedSize(horizontal: false, vertical: true).frame(minHeight: type.lineHeight)

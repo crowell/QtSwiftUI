@@ -39,10 +39,13 @@ public struct EnvironmentValues {
     var allowsHits = true
     var keyPressHandlers: [KeyPressHandler] = []
     var adjustment: AccessibleAdjustment?
+    var accessibleHint = ""
     var gesturesEnabled = true
     public var font: Font?
     public var multilineTextAlignment: TextAlignment = .leading
-    public var lineLimit: Int?
+    public var lineLimit: Int? { didSet { minimumLines = 1 } }
+    var minimumLines = 1
+    public internal(set) var autocorrectionDisabled = false
     public var verticalScrollBounceBehavior = ScrollBounceBehavior.automatic
     public var horizontalScrollBounceBehavior = ScrollBounceBehavior.automatic
     public var verticalScrollIndicatorVisibility = ScrollIndicatorVisibility.automatic
@@ -81,8 +84,7 @@ extension Context {
     }
 }
 @propertyWrapper @MainActor public struct Environment<Value>: MountedProperty {
-    private final class Storage { var values = EnvironmentValues() }
-    private let storage = Storage()
+    private var values = EnvironmentValues()
     private let read: (EnvironmentValues) -> Value
     public init(_ keyPath: KeyPath<EnvironmentValues, Value>) { read = { $0[keyPath: keyPath] } }
     public init(_ objectType: Value.Type) where Value: AnyObject, Value: Observable {
@@ -96,8 +98,8 @@ extension Context {
     public init<T>(_ objectType: T.Type) where T: AnyObject, T: Observable, Value == T? {
         read = { $0.objects[ObjectIdentifier(objectType)] as? T }
     }
-    public var wrappedValue: Value { read(storage.values) }
-    func install(in context: Context) { storage.values = context.environment }
+    public var wrappedValue: Value { read(values) }
+    mutating func install(in context: Context) { values = context.environment }
 }
 public struct Font: Hashable, Sendable {
     public struct Weight: Hashable, Sendable {

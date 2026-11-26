@@ -3,6 +3,7 @@ import QtBridge
 public struct AccessibilityTraits: OptionSet, Sendable {
     public var rawValue: UInt64
     public init(rawValue: UInt64) { self.rawValue = rawValue }
+    public static let isSearchField = Self(rawValue: 128)
     public static let isImage = Self(rawValue: 1)
     public static let updatesFrequently = Self(rawValue: 2)
     public static let isSelected = Self(rawValue: 16), isButton = Self(rawValue: 32), isToggle = Self(rawValue: 64)
@@ -39,9 +40,11 @@ extension View {
     public func accessibilityElement(children: AccessibilityChildBehavior = .ignore) -> some View {
         Transform(content: self) { view, ctx in
             let adjustment = ctx.environment.adjustment
-            let widget = ctx.widget(QSGroup, adjustment: adjustment?.perform)
+            let widget = ctx.widget(QSGroup, adjustment: adjustment?.perform, accessibilityAction: { adjustment?.actions[$0]?() })
+            qs_group_actions_clear(widget)
+            if let adjustment { for name in adjustment.actions.keys { qs_group_action(widget, name) } }
             adjustment?.attached = true
-            qs_adjustable(widget, adjustment == nil ? 0 : 1)
+            qs_adjustable(widget, adjustment?.perform == nil ? 0 : 1)
             let traits = ctx.environment.accessibilityTraits
             qs_group(widget, children.behavior, traits.contains(.isImage) ? 1 : 0,
                      traits.contains(.updatesFrequently) ? 1 : 0, ctx.environment.accessibleValue)
@@ -51,6 +54,7 @@ extension View {
             inner.environment.identifier = ""
             inner.environment.accessibilityTraits = []
             inner.environment.accessibleValue = ""
+            inner.environment.accessibleHint = ""
             inner.environment.adjustment = nil
             let child = stacked(view.resolve(inner), axis: .vertical, alignment: .center, spacing: 8)
             return [child.grouped(in: widget)]

@@ -20,7 +20,7 @@ struct FocusLink {
         }
         public var projectedValue: Self { self }
     }
-    private let state: State<Value>
+    private var state: State<Value>
     public init() where Value == Bool { state = State(wrappedValue: false) }
     public init<T>() where Value == T?, T: Hashable { state = State(wrappedValue: nil) }
     public var wrappedValue: Value {
@@ -28,7 +28,7 @@ struct FocusLink {
         nonmutating set { state.wrappedValue = newValue }
     }
     public var projectedValue: Binding { Binding(state: state) }
-    func install(in context: Context) { state.install(in: context) }
+    mutating func install(in context: Context) { state.install(in: context) }
 }
 public struct SubmitTriggers: OptionSet, Sendable {
     public let rawValue: UInt
@@ -42,7 +42,6 @@ extension View {
             let group = ctx.widget(QSGroup)
             let elements = ctx.children(of: view, inside: group)
             qs_group_focus(group, isFocusable ? 1 : 0, Int32(truncatingIfNeeded: interactions.rawValue))
-            if let focus = ctx.environment.focus { qs_focus(group, focus.active() ? 1 : 0) }
             return elements
         }
     }

@@ -7,6 +7,7 @@
 #include "CanvasBlur.hpp"
 #include "PointerDrag.hpp"
 #include "PlainTextEditor.hpp"
+#include <QClipboard>
 #include "WindowShortcuts.hpp"
 #include "PathTrim.hpp"
 #include "RasterWidget.hpp"
@@ -107,6 +108,7 @@ public:
     QPointF pressPosition, tapLocation;
     QElapsedTimer lastTap;
     bool accessibilityHidden = false;
+    QStringList accessibilityActions;
     void cancelPointer() {
         trackingTap = trackingDrag = pointerDrag.tracking = false;
         consecutiveTaps = 0;
@@ -143,7 +145,7 @@ protected:
         return !restricted;
     }
 };
-static void sendAccessibleEvent(GroupWidget *target, QSEventKind kind);
+static void sendAccessibleEvent(GroupWidget *target, QSEventKind kind, const QString &value = {});
 static void activateAccessibleButton(QAbstractButton *button);
 
 class AccessibleGroup final : public QAccessibleWidget {
@@ -155,6 +157,7 @@ public:
     }
     QAccessible::Role role() const override {
         if (group->adjustable) return QAccessible::Slider;
+        if (group->property("qsSearchField").toBool()) return QAccessible::EditableText;
         if (group->property("qsAXToggle").toBool()) return QAccessible::CheckBox;
         if (group->property("qsAXButton").toBool()) return QAccessible::Button;
         if (group->modal) return QAccessible::Dialog;
@@ -179,6 +182,7 @@ public:
         auto names = QAccessibleWidget::actionNames();
         if (!group->isEnabled() || group->accessibilityHidden) return {};
         if (group->adjustable) names << QAccessibleActionInterface::increaseAction() << QAccessibleActionInterface::decreaseAction();
+        names.append(group->accessibilityActions);
         if (group->tapCount == 1) names.append(QAccessibleActionInterface::pressAction());
         for (const auto &entry : combinedActions()) names.append(entry.name);
         names.removeDuplicates();
@@ -186,6 +190,10 @@ public:
     }
     void doAction(const QString &action) override {
         if (!group->isEnabled() || group->accessibilityHidden) return;
+        if (group->accessibilityActions.contains(action)) {
+            sendAccessibleEvent(group, QSAccessibilityAction, action);
+            return;
+        }
         if (group->adjustable && (action == increaseAction() || action == decreaseAction())) {
             sendAccessibleEvent(group, action == increaseAction() ? QSIncrement : QSDecrement);
             return;
@@ -284,6 +292,13 @@ public:
         updateBoundingRect();
         update();
     }
+    void setScale(QPointF value, QPointF anchorValue) {
+        if (scale == value && anchor == anchorValue) return;
+        scale = value;
+        anchor = anchorValue;
+        updateBoundingRect();
+        update();
+    }
     QRectF boundingRectFor(const QRectF &source) const override { return matrix(source).mapRect(source); }
 protected:
     void draw(QPainter *painter) override {
@@ -297,12 +312,14 @@ protected:
     }
 private:
     double degrees = 0;
+    QPointF scale{1, 1};
     QPointF anchor;
     QTransform matrix(const QRectF &source) const {
         const QPointF center(source.x() + anchor.x() * source.width(), source.y() + anchor.y() * source.height());
         QTransform t;
         t.translate(center.x(), center.y());
         t.rotate(degrees);
+        t.scale(scale.x(), scale.y());
         t.translate(-center.x(), -center.y());
         return t;
     }
@@ -615,11 +632,11 @@ struct QSWindow final : QWidget {
 };
 
 namespace {
-static void sendAccessibleEvent(GroupWidget *target, QSEventKind kind) {
+static void sendAccessibleEvent(GroupWidget *target, QSEventKind kind, const QString &value) {
     auto *window = dynamic_cast<QSWindow *>(target->window());
     if (!window || !target->isEnabled()) return;
     if (kind == QSActivate) target->tapLocation = target->mapTo(window, QRectF(target->layoutRect).center());
-    window->event(window->context, target->property("swiftId").toInt(), kind, "");
+    window->event(window->context, target->property("swiftId").toInt(), kind, value.toUtf8().constData());
 }
 static void activateAccessibleButton(QAbstractButton *button) {
     for (auto *parent = button->parentWidget(); parent; parent = parent->parentWidget()) {
@@ -753,8 +770,12 @@ QSWidget qs_create(QSWindow *window, QSWidget parent, QSKind kind, int id) {
         QObject::connect(toggle, &QCheckBox::toggled, window, [=](bool on) { window->event(window->context, id, QSActivate, on ? "1" : "0"); });
         return toggle;
     }
-    case QSTextEditor: {
+    case QSMultilineField: case QSTextEditor: {
         auto *edit = new PlainTextEditor(container);
+        if (kind == QSMultilineField) {
+            edit->configureField();
+            edit->submit = [=] { window->event(window->context, id, QSSubmit, ""); };
+        }
         edit->setProperty("qsScrollInput", QVariant::fromValue<QObject *>(new ScrollInput(edit)));
         window->observeFocus(edit, id);
         QObject::connect(edit, &QPlainTextEdit::textChanged, window, [=] {
@@ -885,6 +906,12 @@ void qs_control_scale(QSWidget w, double scale) {
     item->update();
 }
 void qs_field_style(QSWidget w, int plain) {
+    if (auto *multi = qobject_cast<QPlainTextEdit *>(widget(w))) {
+        multi->setFrameShape(plain ? QFrame::NoFrame : QFrame::StyledPanel);
+        multi->viewport()->setAutoFillBackground(!plain);
+        multi->viewport()->setAttribute(Qt::WA_OpaquePaintEvent, false);
+        return;
+    }
     auto *edit = static_cast<QLineEdit *>(w);
     edit->setFrame(!plain);
     auto palette = edit->palette();
@@ -913,7 +940,22 @@ void qs_scroll_background(QSWidget w, int visible, int dark) {
 void qs_editor_indicators(QSWidget w, int vertical) {
     static_cast<PlainTextEditor *>(w)->setVerticalScrollBarPolicy(vertical ? Qt::ScrollBarAsNeeded : Qt::ScrollBarAlwaysOff);
 }
-void qs_hint(QSWidget w, const char *s) { static_cast<QLineEdit *>(w)->setPlaceholderText(QString::fromUtf8(s)); }
+double qs_field_height(QSWidget w, double width, int minimum, int maximum) {
+    return static_cast<PlainTextEditor *>(w)->fieldHeight(width, minimum, maximum);
+}
+double qs_line_height(QSWidget w) { return widget(w)->fontMetrics().lineSpacing(); }
+void qs_autocorrection(QSWidget w, int disabled) {
+    auto *item = widget(w);
+    const auto *edit = qobject_cast<QLineEdit *>(item);
+    auto hints = item->inputMethodHints();
+    hints.setFlag(Qt::ImhNoPredictiveText, disabled || (edit && edit->echoMode() == QLineEdit::Password));
+    item->setInputMethodHints(hints);
+}
+void qs_clipboard_text(const char *text) { application().clipboard()->setText(QString::fromUtf8(text)); }
+void qs_hint(QSWidget w, const char *s) {
+    if (auto *editor = qobject_cast<QPlainTextEdit *>(widget(w))) editor->setPlaceholderText(QString::fromUtf8(s));
+    else static_cast<QLineEdit *>(w)->setPlaceholderText(QString::fromUtf8(s));
+}
 void qs_checked(QSWidget w, int on) {
     const QSignalBlocker block(widget(w));
     static_cast<QCheckBox *>(w)->setChecked(on);
@@ -1129,6 +1171,14 @@ void qs_group_shape(QSWidget w, const QSPath *path, int evenOdd) {
 void qs_focus_effect(QSWidget w, int enabled) { widget(w)->setProperty("qsNoFocusEffect", !enabled); }
 void qs_group_focus(QSWidget w, int enabled, int interactions) {
     auto *group = widget(w);
+    const bool acceptsFocus = enabled && interactions;
+    group->setProperty("qsFocusable", acceptsFocus);
+    if (!acceptsFocus) {
+        // Removing the container as a focus target leaves nested editors independently focusable.
+        group->setFocusProxy(nullptr);
+        group->setFocusPolicy(Qt::NoFocus);
+        return;
+    }
     QWidget *proxy = group->focusProxy();
     if (!proxy || !group->isAncestorOf(proxy)) {
         proxy = nullptr;
@@ -1139,10 +1189,7 @@ void qs_group_focus(QSWidget w, int enabled, int interactions) {
         }
         group->setFocusProxy(proxy);
     }
-    group->setProperty("qsFocusable", bool(enabled && interactions));
-    const auto policy = !enabled || !interactions ? Qt::NoFocus : Qt::StrongFocus;
-    if (group->focusPolicy() != policy) group->setFocusPolicy(policy);
-    if (proxy && proxy->focusPolicy() != policy) proxy->setFocusPolicy(policy);
+    if (group->focusPolicy() != Qt::StrongFocus) group->setFocusPolicy(Qt::StrongFocus);
 }
 void qs_group_hover(QSWidget w, int enabled) { widget(w)->setProperty("qsHover", bool(enabled)); }
 void qs_help(QSWidget w, const char *text) { widget(w)->setToolTip(QString::fromUtf8(text)); }
@@ -1158,6 +1205,16 @@ void qs_group_rotation(QSWidget w, double degrees, double anchorX, double anchor
         item->setGraphicsEffect(effect);
     }
     effect->setRotation(degrees, QPointF(anchorX, anchorY));
+}
+void qs_group_scale(QSWidget w, double x, double y, double anchorX, double anchorY) {
+    auto *item = widget(w);
+    if (x == 1 && y == 1) {
+        if (item->graphicsEffect()) item->setGraphicsEffect(nullptr);
+        return;
+    }
+    auto *effect = dynamic_cast<RotationEffect *>(item->graphicsEffect());
+    if (!effect) { effect = new RotationEffect(item); item->setGraphicsEffect(effect); }
+    effect->setScale(QPointF(x, y), QPointF(anchorX, anchorY));
 }
 void qs_group_spin(QSWidget w, int milliseconds) {
     auto *item = widget(w);
@@ -1225,7 +1282,12 @@ int qs_button_down(QSWidget w) { return static_cast<QPushButton *>(w)->isDown();
 void qs_focus(QSWidget w, int active) {
     auto *item = widget(w);
     if (!item->isEnabled() || item->focusPolicy() == Qt::NoFocus) return;
-    if (active && !item->hasFocus()) item->setFocus(Qt::OtherFocusReason);
+    if (active && !item->hasFocus()) {
+        auto *window = item->window();
+        const QRect bounds(item->mapTo(window, QPoint()), item->size());
+        if (item->isVisibleTo(window) && bounds.intersects(window->rect()))
+            item->setFocus(Qt::OtherFocusReason);
+    }
     else if (!active && item->hasFocus()) item->clearFocus();
 }
 void qs_enabled(QSWidget w, int enabled) { widget(w)->setEnabled(enabled); }
@@ -1243,7 +1305,13 @@ void qs_accessible_control(QSWidget w, int selected, int button, int toggle) {
         QAccessible::updateAccessibility(&event);
     }
 }
-void qs_accessibility(QSWidget w, const char *label, const char *identifier) {
+void qs_group_actions_clear(QSWidget w) { static_cast<GroupWidget *>(w)->accessibilityActions.clear(); }
+void qs_group_action(QSWidget w, const char *name) {
+    static_cast<GroupWidget *>(w)->accessibilityActions.append(QString::fromUtf8(name));
+}
+void qs_accessibility(QSWidget w, const char *label, const char *identifier, const char *hint, int search) {
+    widget(w)->setAccessibleDescription(QString::fromUtf8(hint));
+    widget(w)->setProperty("qsSearchField", bool(search));
     widget(w)->setAccessibleName(QString::fromUtf8(label));
     widget(w)->setObjectName(QString::fromUtf8(identifier));
 }

@@ -10,19 +10,32 @@ extension View {
     }
 }
 
+@MainActor func boundEditor(_ kind: QSKind, text: Binding<String>, in context: Context) -> UnsafeMutableRawPointer {
+    func synchronize(_ widget: UnsafeMutableRawPointer) {
+        let value = text.wrappedValue
+        value.withCString { qs_editor_text(widget, $0, value.utf8.count) }
+    }
+    let widget = context.widget(kind, tap: { editor in
+        var count = 0
+        let bytes = qs_editor_value(editor, &count)
+        let value = String(decoding: UnsafeBufferPointer(start: bytes, count: count), as: UTF8.self)
+        if value != text.wrappedValue {
+            text.wrappedValue = value
+            if value != text.wrappedValue { synchronize(editor) }
+        }
+    })
+    synchronize(widget)
+    qs_autocorrection(widget, context.environment.autocorrectionDisabled ? 1 : 0)
+    return widget
+}
+
 public struct TextEditor: Primitive {
     private let text: Binding<String>
     public nonisolated init(text: Binding<String>) { self.text = text }
 
     func elements(in context: Context) -> [Element] {
-        let widget = context.widget(QSTextEditor, tap: { editor in
-            var count = 0
-            let bytes = qs_editor_value(editor, &count)
-            let value = String(decoding: UnsafeBufferPointer(start: bytes, count: count), as: UTF8.self)
-            if value != text.wrappedValue { text.wrappedValue = value }
-        })
+        let widget = boundEditor(QSTextEditor, text: text, in: context)
         let value = text.wrappedValue
-        value.withCString { qs_editor_text(widget, $0, value.utf8.count) }
         let font = context.environment.font
         context.with(\.font, font ?? .custom("Helvetica", fixedSize: 12)).style(widget)
         qs_scroll_background(widget, context.environment.scrollBackground == .hidden ? 0 : 1,

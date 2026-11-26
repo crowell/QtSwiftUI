@@ -34,8 +34,9 @@ enum Part: Hashable {
         func update<P: DynamicProperty>(_ property: P, at name: String) -> P {
             let child = descending(.property(name))
             var result = property
-            if let builtIn = result as? any MountedProperty {
+            if var builtIn = result as? any MountedProperty {
                 builtIn.install(in: child)
+                result = builtIn as! P
             } else {
                 result = child.preparing(result)
             }
@@ -44,7 +45,10 @@ enum Part: Hashable {
         }
         // Stored-property key paths preserve value semantics when a custom
         // DynamicProperty's mutating update() changes its own fields.
-        let enumerated = _forEachFieldWithKeyPath(of: Owner.self) { name, key in
+        // Swift 6.2 declares the ignoreUnknown flag as mutable global state.
+        // Skip closure fields so the remaining property wrappers still get writable key paths.
+        let ignoreUnknown = _EachFieldOptions(rawValue: 1 << 1)
+        let enumerated = _forEachFieldWithKeyPath(of: Owner.self, options: ignoreUnknown) { name, key in
             if let property = owner[keyPath: key] as? any DynamicProperty {
                 @MainActor func assign<P: DynamicProperty>(_ property: P) {
                     let updated = update(property, at: String(cString: name))
@@ -65,7 +69,7 @@ enum Part: Hashable {
                 tap: ((UnsafeMutableRawPointer) -> Void)? = nil,
                 adjustment: ((AccessibilityAdjustmentDirection) -> Void)? = nil,
                 drag: ((QSDragSample, UnsafeMutableRawPointer) -> Void)? = nil,
-                cancelGesture: (() -> Void)? = nil, hover: ((Bool) -> Void)? = nil, action: ((String) -> Void)? = nil) -> UnsafeMutableRawPointer {
+                accessibilityAction: ((String) -> Void)? = nil, cancelGesture: (() -> Void)? = nil, hover: ((Bool) -> Void)? = nil, action: ((String) -> Void)? = nil) -> UnsafeMutableRawPointer {
         let entry = host.mount(path: path + [.widget(kind.rawValue)], kind: kind, parent: parent)
         host.keys.install(environment.keyPressHandlers, for: entry.id)
         if let drag { host.drags[entry.id] = { drag($0, entry.widget) } }
@@ -77,6 +81,7 @@ enum Part: Hashable {
             case QSActivate:
                 tap?(entry.widget)
                 action?(value)
+            case QSAccessibilityAction: accessibilityAction?(value)
             case QSIncrement: adjustment?(.increment)
             case QSDecrement: adjustment?(.decrement)
             case QSFocusChanged: focus?.change(value == "1")
@@ -91,7 +96,8 @@ enum Part: Hashable {
         if kind != QSSurface && kind != QSCanvas && kind != QSRaster { qs_hit_testing(entry.widget, environment.allowsHits ? 1 : 0) }
         qs_direction(entry.widget, environment.layoutDirection == .rightToLeft ? 1 : 0)
         qs_enabled(entry.widget, environment.isEnabled ? 1 : 0)
-        qs_accessibility(entry.widget, environment.label, environment.identifier)
+        qs_accessibility(entry.widget, environment.label, environment.identifier, environment.accessibleHint,
+                         environment.accessibilityTraits.contains(.isSearchField) ? 1 : 0)
         if kind == QSGroup || kind == QSButton || kind == QSLink {
             let traits = environment.accessibilityTraits
             qs_accessible_control(entry.widget, traits.contains(.isSelected) ? 1 : 0,
@@ -99,7 +105,7 @@ enum Part: Hashable {
         }
         qs_help(entry.widget, environment.helpText)
         qs_focus_effect(entry.widget, environment.isFocusEffectEnabled ? 1 : 0)
-        if let focus { qs_focus(entry.widget, focus.active() ? 1 : 0) }
+        if let focus { host.afterLayout { qs_focus(entry.widget, focus.active() ? 1 : 0) } }
         return entry.widget
     }
 }
@@ -253,7 +259,7 @@ extension DynamicProperty {
 }
 
 protocol MountedProperty: DynamicProperty {
-    @MainActor func install(in context: Context)
+    @MainActor mutating func install(in context: Context)
 }
 
 @propertyWrapper @dynamicMemberLookup public struct Binding<Value>: DynamicProperty {
@@ -318,29 +324,23 @@ protocol MountedProperty: DynamicProperty {
         }
         func attach(to host: Host) { lock.withLock { self.host = host } }
     }
-    private final class Link {
-        private let lock = NSLock()
-        private var target: Cell
-        init(_ cell: Cell) { target = cell }
-        var cell: Cell {
-            get { lock.withLock { target } }
-            set { lock.withLock { target = newValue } }
-        }
-    }
-    private let link: Link
-    public init(wrappedValue: Value) { link = Link(Cell(wrappedValue)) }
+    private var cell: Cell
+    public init(wrappedValue: Value) { cell = Cell(wrappedValue) }
     public init(initialValue: Value) { self.init(wrappedValue: initialValue) }
     public var wrappedValue: Value {
-        get { link.cell.value }
-        nonmutating set { link.cell.value = newValue }
+        get { cell.value }
+        nonmutating set { cell.value = newValue }
     }
     public var projectedValue: Binding<Value> { Binding(get: { wrappedValue }, set: { wrappedValue = $0 }) }
-    func install(in context: Context) {
+    mutating func install(in context: Context) {
         let host = context.host
         host.liveStorage.insert(context.path)
-        if let existing = host.storage[context.path] as? Cell { link.cell = existing }
-        else { host.storage[context.path] = link.cell }
-        link.cell.attach(to: host)
+        if let existing = host.storage[context.path] as? Cell { cell = existing }
+        else {
+            cell = Cell(cell.value)
+            host.storage[context.path] = cell
+            cell.attach(to: host)
+        }
     }
 }
 

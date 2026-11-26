@@ -147,6 +147,7 @@ awk '/^    @MainActor func width\(i18n:/ { skip=1; count++ }
     declarations '^extension RGBA ' 1 "$source_dir/Components/Conversation/Quote.swift"
     declarations '^public enum BubbleColor:|^struct BubbleFill:' 2 "$source_dir/Components/Conversation/Message/Message.swift"
     declarations '^struct UndimmedButtonStyle:' 1 "$source_dir/Calling/CallingButton.swift"
+    declarations '^extension FormatTimestamp ' 2 "$source_dir/Components/Conversation/TimelineDateHeader.swift"
     declarations '^public enum FormatTimestamp ' 1 "$source_dir/Components/LeftPaneDialogs.swift"
     awk '/^public enum MessageDirection:/ { print; count++ } END { if (count!=1) exit 1 }' "$source_dir/Components/Conversation/MessageTextRenderer.swift"
     awk 'BEGIN { print "extension EnvironmentValues {" } /@Entry public var chatColorViewport:/ { print; count++ }
@@ -164,7 +165,7 @@ cp "$source_dir/Components/Avatar.swift" "$source_dir/Theme/StaticAwareScrollVie
     echo 'import SignalI18n'
     declarations '^public struct CallsListItem:|^public enum CallsTabSelectedView:|^public struct CallsNewCallButton:|^struct CallsListTile<|^public struct CallsList:|^struct CallsListTimestamp:|^struct MissedFilterToggle:' 7 "$source_dir/Calling/CallsTab.swift"
     declarations '^public struct CallingConversation:' 1 "$source_dir/Calling/CallingModels.swift"
-    declarations '^public struct CallHistoryGroup:' 1 "$source_dir/Components/Conversation/ConversationDetails/CallHistoryGroupPanelSection.swift"
+    declarations '^public struct ConversationAvatarData |^struct ListAvatar:' 2 "$source_dir/Components/ConversationList/BaseConversationListItem.swift"
     awk '/^public enum Call(Type|Direction):/ { print; count++ } END { if (count!=2) exit 1 }' "$source_dir/Components/Conversation/Notifications/CallingNotification.swift"
     declarations '^public enum CallStatus:' 1 "$source_dir/Components/Conversation/Notifications/CallingNotification.swift"
     declarations '^extension AvatarStrings ' 1 "$source_dir/Components/ConversationList/BaseConversationListItem.swift"
@@ -185,16 +186,28 @@ declarations '^public enum AxoInlinePiece:' 1 "$source_dir/Axo/Chat/AxoInlineFlo
 awk 'BEGIN { print "extension SettingsModel {" } /^    static let microphones =/ { inside=1; count++ }
      inside && /^$/ { inside=0 } inside { print } END { print "}"; if (count!=1 || inside) exit 1 }' \
     "$checkout/Packages/SignalUI/Tests/SignalUITests/Components/Preferences/PreferencesTests.swift" > "$target_dir/SettingsDevices.swift"
-# Only the avatar is outside these item fixtures.
-# Keep both original item layouts, trigger registration, and hit targets.
-awk '/^    public struct IconAvatar:/ { skip=1; omitted++ }
-     !skip && !/^import CoreText$/ {
+cp "$source_dir/Calling/CallLinkDetails.swift" "$source_dir/Components/Conversation/ConversationDetails/CallHistoryGroupPanelSection.swift" \
+   "$source_dir/Components/EditNicknameAndNoteModal.swift" "$source_dir/Axo/AxoAvatar.swift" "$source_dir/Axo/Items/AxoTextItem.swift" \
+   "$source_dir/Axo/Fields/AxoBaseField.swift" "$source_dir/Axo/Fields/AxoFieldGroup.swift" "$source_dir/Axo/Fields/AxoTextField.swift" \
+   "$source_dir/Axo/Items/AxoFieldList.swift" "$source_dir/Axo/Items/AxoItem.swift" "$target_dir/"
+{
+    echo 'import SwiftUI'
+    echo 'import SignalI18n'
+    declarations '^func callLinkColor[(]' 1 "$source_dir/Components/Conversation/Message/MessageLinkPreview.swift"
+    declarations '^public struct CallLink(EditModal|AddNameModal):|^struct CallLinkURLButton:' 3 "$source_dir/Calling/CallLinkModals.swift"
+    awk 'BEGIN {print "enum CallingNotification {"} /^    static func directText\(/ { inside=1; count++ }
+         inside { print } /^    }$/ { inside=0 } END {print "}"; if (count!=1 || inside) exit 1}' \
+        "$source_dir/Components/Conversation/Notifications/CallingNotification.swift"
+} > "$target_dir/CallLinkModals.swift"
+awk 'BEGIN { print "import SwiftUI\nextension CallLinkModel {" } /^    static let now =/ {copy=1; count++}
+     copy {print} /^    nonisolated static let fun =/ {copy=0} END {print "}"; if (count!=1 || copy) exit 1}' \
+    "$checkout/Packages/SignalUI/Tests/SignalUITests/Calling/CallLinkDetailsTests.swift" > "$target_dir/CallLinkSample.swift"
+# Keep all original item slots and use portable font metrics for the icon baseline.
+awk '!/^import CoreText$/ {
          if (/let font = CSSTextStyle.*\.ctFont/) { print "            let font = AxoFonts.interMetrics(size: size)"; metrics++; next }
          gsub(/CTFontGetAscent\(font\)/, "font.ascent"); gsub(/CTFontGetDescent\(font\)/, "font.descent")
          gsub(/CTFontGetXHeight\(font\)/, "font.xHeight"); print }
-     /^    }$/ { skip=0 } END { if (omitted!=1 || metrics!=1) exit 1 }' \
-    "$source_dir/Axo/Items/AxoBaseItem.swift" > "$target_dir/AxoBaseItem.swift"
-sed '/public typealias IconAvatar =/d' "$source_dir/Axo/Items/AxoItem.swift" > "$target_dir/AxoItem.swift"
+     END { if (metrics!=1) exit 1 }' "$source_dir/Axo/Items/AxoBaseItem.swift" > "$target_dir/AxoBaseItem.swift"
 awk 'BEGIN { print "extension ChatColorPickerPreview {" } /^    static let customColors:/ { inside=1; count++ }
      inside { print } /^    ]$/ { inside=0 } END { print "}"; if (count!=1 || inside) exit 1 }' \
     "$checkout/Packages/SignalUI/Tests/SignalUITests/Components/ChatColorPickerTests.swift" > "$target_dir/PickerColors.swift"

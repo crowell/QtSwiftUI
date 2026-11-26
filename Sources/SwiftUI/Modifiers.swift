@@ -69,7 +69,24 @@ extension View {
         Transform(content: self) { view, ctx in view.resolve(ctx.with(\.foregroundPaint, style.paint(in: ctx.environment))) }
     }
     public func multilineTextAlignment(_ alignment: TextAlignment) -> some View { environment(\.multilineTextAlignment, alignment) }
-    public func lineLimit(_ number: Int?) -> some View { environment(\.lineLimit, number) }
+    nonisolated public func lineLimit(_ number: Int?) -> some View { limits(minimum: 1, maximum: number) }
+    nonisolated public func lineLimit(_ limit: ClosedRange<Int>) -> some View { limits(minimum: limit.lowerBound, maximum: limit.upperBound) }
+    nonisolated public func lineLimit(_ limit: PartialRangeFrom<Int>) -> some View { limits(minimum: limit.lowerBound, maximum: nil) }
+    nonisolated public func lineLimit(_ limit: PartialRangeThrough<Int>) -> some View { limits(minimum: 1, maximum: limit.upperBound) }
+    nonisolated public func lineLimit(_ limit: Int, reservesSpace: Bool) -> some View { limits(minimum: reservesSpace ? limit : 1, maximum: limit) }
+
+    private nonisolated func limits(minimum: Int, maximum: Int?) -> some View {
+        let apply: @MainActor (Context) -> Context = { context in
+            var copy = context
+            copy.environment.lineLimit = maximum
+            copy.environment.minimumLines = max(1, minimum)
+            return copy
+        }
+        return Transform(content: self, readingContext: apply) { $0.resolve(apply($1)) }
+    }
+    nonisolated public func autocorrectionDisabled(_ disable: Bool = true) -> some View {
+        Transform(content: self) { $0.resolve($1.with(\.autocorrectionDisabled, disable)) }
+    }
     public func allowsHitTesting(_ enabled: Bool) -> some View {
         Transform(content: self) { view, ctx in
             view.resolve(ctx.with(\.allowsHits, ctx.environment.allowsHits && enabled))

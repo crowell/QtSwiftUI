@@ -131,6 +131,20 @@ extension View {
         }
     }
 
+    nonisolated public func scaleEffect(_ scale: CGSize, anchor: UnitPoint = .center) -> some View {
+        scaleEffect(x: scale.width, y: scale.height, anchor: anchor)
+    }
+    nonisolated public func scaleEffect(_ s: CGFloat, anchor: UnitPoint = .center) -> some View {
+        scaleEffect(x: s, y: s, anchor: anchor)
+    }
+    nonisolated public func scaleEffect(x: CGFloat = 1, y: CGFloat = 1, anchor: UnitPoint = .center) -> some View {
+        Transform(content: self) { view, ctx in
+            let group = ctx.widget(QSGroup)
+            let anchorX = ctx.environment.layoutDirection == .rightToLeft ? 1 - anchor.x : anchor.x
+            qs_group_scale(group, ctx.interpolated(x, key: "scale x"), ctx.interpolated(y, key: "scale y"), anchorX, anchor.y)
+            return ctx.children(of: view, inside: group)
+        }
+    }
     public func rotationEffect(_ angle: Angle, anchor: UnitPoint = .center) -> some View {
         Transform(content: self) { view, ctx in
             let group = ctx.widget(QSGroup)

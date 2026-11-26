@@ -4,7 +4,7 @@
         var current: Value
         var active = false
     }
-    private let phase: State<Phase>
+    private var phase: State<Phase>
     private let resetTransaction: (Value) -> Transaction
 
     public init(wrappedValue: Value) { self.init(wrappedValue: wrappedValue, resetTransaction: Transaction()) }
@@ -24,7 +24,7 @@
     public init(initialValue: Value, reset: @escaping (Value, inout Transaction) -> Void) { self.init(wrappedValue: initialValue, reset: reset) }
     public var wrappedValue: Value { phase.wrappedValue.current }
     public var projectedValue: Self { self }
-    func install(in context: Context) { phase.install(in: context) }
+    mutating func install(in context: Context) { phase.install(in: context) }
 
     fileprivate func change(_ update: (inout Value, inout Transaction) -> Void) {
         var next = phase.wrappedValue
