@@ -120,8 +120,14 @@ public:
     int gestureInputs = 127;
     qint64 gestureDevice = -1;
     QMenu *contextPopup = nullptr;
-    bool hasContextMenu() const { return contextPopup && !contextPopup->isEmpty(); }
+    bool customContextRequest = false;
+    bool hasContextMenu() const { return customContextRequest || (contextPopup && !contextPopup->isEmpty()); }
+    void sendContextRequest(QPoint global);
     void openContextMenu(QPoint global, bool keyboard) {
+        if (customContextRequest) {
+            sendContextRequest(global);
+            return;
+        }
         contextPopup->popup(global);
         if (keyboard) {
             for (auto *item : contextPopup->actions()) {
@@ -176,6 +182,14 @@ public:
         return false;
     }
 };
+
+void installContextMenuFilter() {
+    static QPointer<ContextMenuFilter> filter;
+    if (!filter) {
+        filter = new ContextMenuFilter(qApp);
+        qApp->installEventFilter(filter);
+    }
+}
 
 class SwiftButton final : public QPushButton {
 public:
@@ -853,6 +867,12 @@ struct QSWindow final : QWidget {
 };
 
 namespace {
+void GroupWidget::sendContextRequest(QPoint global) {
+    auto *host = static_cast<QSWindow *>(window());
+    tapLocation = host->mapFromGlobal(global);
+    host->event(host->context, property("swiftId").toInt(), QSActivate, "");
+}
+
 static void sendAccessibleEvent(GroupWidget *target, QSEventKind kind, const QString &value) {
     auto *window = dynamic_cast<QSWindow *>(target->window());
     if (!window || !target->isEnabled()) return;
@@ -1801,14 +1821,15 @@ void qs_plain_button(QSWidget w, int plain) {
     auto *button = static_cast<QPushButton *>(w);
     button->setFlat(plain);
 }
+void qs_context_request_scope(QSWidget w, int enabled) {
+    auto *group = static_cast<GroupWidget *>(w);
+    group->customContextRequest = enabled;
+    if (enabled) installContextMenuFilter();
+}
 QSWidget qs_context_menu(QSWidget w) {
     auto *group = static_cast<GroupWidget *>(w);
     if (!group->contextPopup) {
-        static QPointer<ContextMenuFilter> filter;
-        if (!filter) {
-            filter = new ContextMenuFilter(qApp);
-            qApp->installEventFilter(filter);
-        }
+        installContextMenuFilter();
         group->contextPopup = new QMenu(group);
         auto *window = static_cast<QSWindow *>(group->window());
         window->connectMenu(group->contextPopup, group->property("swiftId").toInt());

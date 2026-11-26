@@ -19,6 +19,19 @@ private nonisolated struct ContextMenuHost<Content: View, Items: View>: Primitiv
 }
 
 extension View {
+    /// Provides the trigger-local anchor for an application-drawn desktop context menu.
+    @_spi(Qt) nonisolated public func qtOnContextRequest(isEnabled: Bool = true, perform: @escaping @MainActor (CGPoint) -> Void) -> some View {
+        Transform(content: self) { content, context in
+            let group = context.widget(QSGroup, tap: { widget in
+                let origin = context.origin(of: .local, widget: widget)
+                let point = qs_tap_location(widget)
+                perform(CGPoint(x: point.width - origin.x, y: point.height - origin.y))
+            })
+            qs_context_request_scope(group, isEnabled && context.environment.isEnabled ? 1 : 0)
+            return context.children(of: content, inside: group)
+        }
+    }
+
     nonisolated public func contextMenu<MenuItems: View>(@ContentBuilder menuItems: () -> MenuItems) -> some View {
         contextMenu(ContextMenu(menuItems: menuItems))
     }
