@@ -36,6 +36,12 @@ int commandFor(QKeyEvent *key) {
 void qs_clipboard_scope(QSWidget item, int command) {
     static_cast<QWidget *>(item)->setProperty("qsClipboardCommand", command);
 }
+uint64_t qs_clipboard_revision() {
+    static uint64_t revision = 0;
+    static const auto connection = QObject::connect(QApplication::clipboard(), &QClipboard::dataChanged, [] { ++revision; });
+    return revision;
+}
+void *qs_clipboard_contents() { return const_cast<QMimeData *>(QApplication::clipboard()->mimeData()); }
 void *qs_clipboard_add_item(void *clipboard) {
     auto *items = static_cast<ClipboardItems *>(clipboard);
     return items->items.emplace_back(std::make_unique<QMimeData>()).get();

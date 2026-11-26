@@ -84,6 +84,15 @@ public final class NSItemProvider: NSObject {
         }
         return provider
     }
+    static func clipboardItems(_ mime: UnsafeMutableRawPointer?, matching types: [String], includingData: Bool) -> [NSItemProvider] {
+        (0..<qs_clipboard_item_count(mime)).compactMap { index in
+            guard let item = qs_clipboard_item(mime, index) else { return nil }
+            let offered = read(item, includingData: false)
+            guard types.contains(where: offered.hasItemConformingToTypeIdentifier) else { return nil }
+            return includingData ? read(item, includingData: true) : offered
+        }
+    }
+
     fileprivate func write(to mime: UnsafeMutableRawPointer) -> Bool {
         for item in representations {
             item.data.withUnsafeBytes { bytes in
@@ -113,12 +122,7 @@ struct TransferAction {
             return true
         case QSPasteItems:
             guard let mime, let pasteItems else { return false }
-            let providers = (0..<qs_clipboard_item_count(mime)).compactMap { index -> NSItemProvider? in
-                guard let item = qs_clipboard_item(mime, index) else { return nil }
-                let offered = NSItemProvider.read(item, includingData: false)
-                guard types.contains(where: offered.hasItemConformingToTypeIdentifier) else { return nil }
-                return NSItemProvider.read(item, includingData: true)
-            }
+            let providers = NSItemProvider.clipboardItems(mime, matching: types, includingData: true)
             return !providers.isEmpty && pasteItems(providers)
         case QSWriteTransfer:
             guard let mime, let source else { return false }

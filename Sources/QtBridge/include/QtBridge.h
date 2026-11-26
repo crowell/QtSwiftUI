@@ -222,6 +222,8 @@ typedef int (*QSTransferHandler)(void *context, int id, enum QSTransferPhase, vo
 void qs_transfer_handler(QSWindow *, QSTransferHandler);
 void qs_transfer_scope(QSWidget, int source, int destination);
 void qs_clipboard_scope(QSWidget, int command);
+uint64_t qs_clipboard_revision(void);
+void *qs_clipboard_contents(void);
 void *qs_clipboard_add_item(void *clipboard);
 int qs_clipboard_item_count(void *clipboard);
 void *qs_clipboard_item(void *clipboard, int index);
