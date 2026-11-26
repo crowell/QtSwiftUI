@@ -55,6 +55,7 @@ public nonisolated struct Text: Primitive {
     }
     public func accessibilityLabel(_ labelKey: LocalizedStringKey) -> Text { accessibilityLabel(Text(labelKey)) }
     @_disfavoredOverload public func accessibilityLabel<S: StringProtocol>(_ label: S) -> Text { accessibilityLabel(Text(label)) }
+    public func kerning(_ kerning: CGFloat) -> Text { modified { $0.kerning = kerning } }
     public func tracking(_ tracking: CGFloat) -> Text { modified { $0.tracking = tracking } }
     public func fontWeight(_ weight: Font.Weight?) -> Text { modified { $0.font = ($0.font ?? .body).weight(weight ?? .regular) } }
     public func bold(_ active: Bool = true) -> Text { modified { if active { $0.font = ($0.font ?? .body).bold() } } }

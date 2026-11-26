@@ -40,10 +40,10 @@ public:
         hasCustomStrikes = false;
     }
     void append(const QString &text, const char *link, const char *foreground, const char *background,
-                const char *family, double size, int weight, bool italic, int underline, const char *underlineColor, int strike, const char *strikeColor) {
+                const char *family, double size, int weight, bool italic, int underline, const char *underlineColor, int strike, const char *strikeColor, double spacing) {
         bool customStrike;
         const auto format = swiftTextFormat(font(), palette(), link, foreground, background, family, size, weight, italic,
-                                            underline, underlineColor, strike, strikeColor, customStrike);
+                                            underline, underlineColor, strike, strikeColor, spacing, customStrike);
         hasCustomStrikes |= customStrike;
         hasLinks |= *link != 0;
         pending.append({text, format});

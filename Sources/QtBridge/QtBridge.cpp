@@ -1474,8 +1474,8 @@ void qs_text_display(QSWidget w, int limit, QSTextTruncation mode, int automatic
 }
 void qs_attributed_begin(QSWidget w) { static_cast<AttributedLabel *>(w)->begin(); }
 void qs_attributed_append(QSWidget w, const char *text, size_t count, const char *link, const char *foreground, const char *background,
-                          const char *family, double size, int weight, int italic, int underline, const char *underlineColor, int strike, const char *strikeColor) {
-    static_cast<AttributedLabel *>(w)->append(QString::fromUtf8(text, qsizetype(count)), link, foreground, background, family, size, weight, italic, underline, underlineColor, strike, strikeColor);
+                          const char *family, double size, int weight, int italic, int underline, const char *underlineColor, int strike, const char *strikeColor, double spacing) {
+    static_cast<AttributedLabel *>(w)->append(QString::fromUtf8(text, qsizetype(count)), link, foreground, background, family, size, weight, italic, underline, underlineColor, strike, strikeColor, spacing);
 }
 void qs_attributed_finish(QSWidget w, int selectable, double lineSpacing) { static_cast<AttributedLabel *>(w)->finish(selectable, lineSpacing); }
 void qs_control_scale(QSWidget w, double scale) {
@@ -1504,11 +1504,11 @@ void qs_field_style(QSWidget w, int style) {
 }
 void qs_rich_define(QSWidget w, int id, const char *link, const char *foreground, const char *background,
                     const char *family, double size, int weight, int italic, int underline, const char *underlineColor,
-                    int strike, const char *strikeColor) {
+                    int strike, const char *strikeColor, double spacing) {
     auto *editor = static_cast<RichTextEditor *>(w);
     bool customStrike;
     auto format = swiftTextFormat(editor->font(), editor->palette(), link, foreground, background, family, size, weight,
-                                  italic, underline, underlineColor, strike, strikeColor, customStrike);
+                                  italic, underline, underlineColor, strike, strikeColor, spacing, customStrike);
     if (customStrike) format.setFontStrikeOut(true);
     editor->define(id, format);
 }

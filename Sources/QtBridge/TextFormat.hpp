@@ -2,11 +2,19 @@
 #include "RegisteredFonts.hpp"
 #include "TextStrike.hpp"
 #include <QPalette>
+#include <cmath>
+
+inline void setRunSpacing(QTextCharFormat &format, double spacing) {
+    if (std::isfinite(spacing)) {
+        format.setFontLetterSpacingType(QFont::AbsoluteSpacing);
+        format.setFontLetterSpacing(spacing);
+    }
+}
 
 inline QTextCharFormat swiftTextFormat(const QFont &base, const QPalette &palette, const char *link, const char *foreground,
                                        const char *background, const char *family, double size, int weight, bool italic,
                                        int underline, const char *underlineColor, int strike, const char *strikeColor,
-                                       bool &customStrike) {
+                                       double spacing, bool &customStrike) {
     QTextCharFormat format;
     if (*link) {
         format.setAnchor(true);
@@ -22,6 +30,7 @@ inline QTextCharFormat swiftTextFormat(const QFont &base, const QPalette &palett
         face.setLetterSpacing(base.letterSpacingType(), base.letterSpacing());
         format.setFont(face);
     }
+    setRunSpacing(format, spacing);
     if (underline) format.setUnderlineStyle(static_cast<QTextCharFormat::UnderlineStyle>(underline));
     if (*underlineColor) format.setUnderlineColor(QColor(QString::fromUtf8(underlineColor)));
     customStrike = setStrikeFormat(format, strike, QString::fromUtf8(strikeColor));

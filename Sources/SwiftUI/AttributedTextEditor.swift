@@ -23,7 +23,7 @@ import QtBridge
                        attributes.backgroundColor?.hex(environment.colorScheme) ?? "", font?.qtFamily ?? "", Double(font?.size ?? 0),
                        font?.qtWeight ?? -1, font?.slanted == true ? 1 : 0,
                        underline?.pattern.qt ?? 0, underline?.color?.hex(environment.colorScheme) ?? "",
-                       strike?.pattern.qt ?? 0, strike?.color?.hex(environment.colorScheme) ?? "")
+                       strike?.pattern.qt ?? 0, strike?.color?.hex(environment.colorScheme) ?? "", Double(attributes.tracking ?? attributes.kern ?? .nan))
         return id
     }
 

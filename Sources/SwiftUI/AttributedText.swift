@@ -5,6 +5,8 @@ extension AttributeScopes {
     public var swiftUI: SwiftUIAttributes.Type { SwiftUIAttributes.self }
     public struct SwiftUIAttributes: AttributeScope {
         public let font: FontAttribute
+        public let kern: KerningAttribute
+        public let tracking: TrackingAttribute
         public let foregroundColor: ForegroundColorAttribute
         public let strikethroughStyle: StrikethroughStyleAttribute
         public let underlineStyle: UnderlineStyleAttribute
@@ -18,6 +20,14 @@ extension AttributeScopes {
         public enum UnderlineStyleAttribute: AttributedStringKey {
             public typealias Value = Text.LineStyle
             public static let name = "SwiftUI.UnderlineStyle"
+        }
+        @frozen public enum KerningAttribute: CodableAttributedStringKey {
+            public typealias Value = CGFloat
+            public static let name = "SwiftUI.Kern"
+        }
+        @frozen public enum TrackingAttribute: CodableAttributedStringKey {
+            public typealias Value = CGFloat
+            public static let name = "SwiftUI.Tracking"
         }
         public enum FontAttribute: AttributedStringKey {
             public typealias Value = Font
@@ -62,7 +72,7 @@ extension Text {
                                      run.backgroundColor?.hex(environment.colorScheme) ?? "",
                                      font?.qtFamily ?? "", Double(font?.size ?? 0), font?.qtWeight ?? 400, font?.slanted == true ? 1 : 0,
                                      underline?.pattern.qt ?? 0, underline?.color?.hex(environment.colorScheme) ?? "",
-                                     strike?.pattern.qt ?? 0, strike?.color?.hex(environment.colorScheme) ?? "")
+                                     strike?.pattern.qt ?? 0, strike?.color?.hex(environment.colorScheme) ?? "", Double(run.tracking ?? run.kern ?? .nan))
             }
         }
     }

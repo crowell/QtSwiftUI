@@ -10,12 +10,12 @@
 
 void qs_canvas_text_append(void *target, const char *utf8, size_t count, const char *link, const char *foreground,
                            const char *background, const char *family, double size, int weight, int italic,
-                           int underline, const char *underlineColor, int strike, const char *strikeColor) {
+                           int underline, const char *underlineColor, int strike, const char *strikeColor, double spacing) {
     auto &paragraph = *static_cast<QSTextParagraph *>(target);
     bool customStrike;
     const auto format = swiftTextFormat(paragraph.document.defaultFont(), QGuiApplication::palette(), link, foreground,
                                         background, family, size, weight, italic, underline, underlineColor,
-                                        strike, strikeColor, customStrike);
+                                        strike, strikeColor, spacing, customStrike);
     paragraph.customStrikes |= customStrike;
     paragraph.cursor.insertText(QString::fromUtf8(utf8, qsizetype(count)), format);
 }

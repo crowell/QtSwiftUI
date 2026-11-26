@@ -2,6 +2,23 @@ import XCTest
 @_spi(Qt) import SwiftUI
 
 final class QtTextLayoutTests: XCTestCase {
+    @MainActor func testInlinePaddingReservesWidthAndWrapsAsOneWord() async throws {
+        let font = Font.system(size: 16)
+        let prefix = AttributedString("message\u{200b}")
+        var padding = AttributedString("\u{00a0}\u{00a0}")
+        let space = try XCTUnwrap(QtTextLayout.lines(in: "\u{00a0}", font: font).first?.advance)
+        padding.kern = 18 - space
+        let natural = try XCTUnwrap(QtTextLayout.lines(in: prefix, font: font).first?.advance)
+        let full = QtTextLayout.lines(in: prefix + padding, font: font)
+        XCTAssertEqual(try XCTUnwrap(full.first?.advance), natural + 36, accuracy: 0.1)
+        let wrapped = QtTextLayout.lines(in: prefix + padding, font: font, width: natural + 35)
+        XCTAssertEqual(wrapped.count, 2)
+        XCTAssertEqual(try XCTUnwrap(wrapped.last?.width), 36, accuracy: 0.1)
+        padding.tracking = 4
+        let tracked = try XCTUnwrap(QtTextLayout.lines(in: padding, font: font).first?.advance)
+        XCTAssertEqual(tracked, 2 * (space + 4), accuracy: 0.1)
+    }
+
     @MainActor func testRunFontsParagraphsAndWordWrapping() async {
         let font = Font.system(size: 14)
         var word = AttributedString("ferry")

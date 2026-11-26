@@ -1,12 +1,13 @@
 #include "QtBridge.h"
 #include "RegisteredFonts.hpp"
 #include "TextParagraph.hpp"
+#include "TextFormat.hpp"
 #include <QTextBlock>
 #include <algorithm>
 #include <cmath>
 
 void qs_paragraph_append(QSTextParagraph *paragraph, const char *text, size_t length, const char *family,
-                         double size, int weight, int italic) {
+                         double size, int weight, int italic, double spacing) {
     QTextCharFormat format;
     if (size > 0) {
         auto font = resolveFont(paragraph->document.defaultFont(), QString::fromUtf8(family), weight, italic);
@@ -14,6 +15,7 @@ void qs_paragraph_append(QSTextParagraph *paragraph, const char *text, size_t le
         font.setLetterSpacing(QFont::AbsoluteSpacing, paragraph->tracking);
         format.setFont(font);
     }
+    setRunSpacing(format, spacing);
     auto string = QString::fromUtf8(text, qsizetype(length));
     if (string.isEmpty()) return;
     // QTextDocument stores CRLF as one paragraph separator. Keep public ranges

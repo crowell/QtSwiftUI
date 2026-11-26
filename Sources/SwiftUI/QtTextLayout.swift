@@ -19,7 +19,7 @@ import QtBridge
             let face = run.font
             value.withCString { bytes in
                 qs_paragraph_append(paragraph, bytes, value.utf8.count, face?.qtFamily ?? "", Double(face?.size ?? 0),
-                                    face?.qtWeight ?? -1, face?.slanted == true ? 1 : 0)
+                                    face?.qtWeight ?? -1, face?.slanted == true ? 1 : 0, Double(run.tracking ?? run.kern ?? .nan))
             }
         }
         var lines: [Line] = []

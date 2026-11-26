@@ -70,7 +70,12 @@ public struct EnvironmentValues {
     var selectableText = false
     public internal(set) var accessibilityReduceMotion = false
     public var displayScale: CGFloat = 1
-    var tracking: CGFloat = 0
+    private var explicitTracking: CGFloat?
+    var kerning: CGFloat = 0
+    var tracking: CGFloat {
+        get { explicitTracking ?? kerning }
+        set { explicitTracking = newValue }
+    }
     var foregroundPaint = ResolvedPaint.color(.primary)
     var foreground: Color {
         get { foregroundPaint.representativeColor }
