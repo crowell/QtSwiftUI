@@ -9,9 +9,12 @@ struct DiagnosticPreview: App {
         let leaveCall = CommandLine.arguments.contains("--leave-call")
         let clearing = CommandLine.arguments.contains("--clearing-data")
         let gallery = CommandLine.arguments.contains("--gallery")
+        let recording = CommandLine.arguments.contains("--recording")
+        let discard = CommandLine.arguments.contains("--discard-recording")
         let arabic = CommandLine.arguments.contains("--arabic")
-        WindowGroup(gallery ? "All media" : clearing ? "Clearing data" : linking ? "Link device" : leaveCall ? "Leave current call" : "Call diagnostics") {
-            if gallery { GalleryPreview() }
+        WindowGroup(recording || discard ? "Voice message" : gallery ? "All media" : clearing ? "Clearing data" : linking ? "Link device" : leaveCall ? "Leave current call" : "Call diagnostics") {
+            if recording || discard { RecordingPreview(discard: discard) }
+            else if gallery { GalleryPreview() }
             else if clearing {
                 ClearingData(step: .deletingData)
                     .background(AxoColor.surfacePrimary)
@@ -22,7 +25,32 @@ struct DiagnosticPreview: App {
             else if leaveCall { LeaveCallPreview() }
             else { DiagnosticContent() }
         }
-        .defaultSize(width: linking || clearing ? 680 : 520, height: linking || clearing ? 420 : 440)
+        .defaultSize(width: recording ? 640 : linking || clearing ? 680 : 520,
+                     height: recording ? 84 : discard ? 280 : linking || clearing ? 420 : 440)
+    }
+}
+
+struct RecordingPreview: View {
+    let discard: Bool
+    @Environment(\.dismiss) var dismiss
+    @State private var start = Date.now.addingTimeInterval(-83)
+    static let peaks: [RecordingPeak] = (0..<64).map { index in
+        let envelope = abs(sin(Double(index) / 8) * cos(Double(index) / 3))
+        return RecordingPeak(value: 15 + envelope * 200, index: index)
+    }
+    var body: some View {
+        Group {
+            if discard {
+                AxoBaseDialog.Host {
+                    DiscardDraftDialog(onClose: { dismiss() }, onDiscard: { dismiss() })
+                }
+            } else {
+                CompositionRecording(peaks: Self.peaks, startedAt: start, onCancel: { dismiss() }, onSend: { dismiss() })
+                    .environment(\.conversationListNow, start.addingTimeInterval(83))
+            }
+        }
+        .frame(maxWidth: .infinity, maxHeight: .infinity)
+        .background(AxoColor.surfacePrimary)
     }
 }
 

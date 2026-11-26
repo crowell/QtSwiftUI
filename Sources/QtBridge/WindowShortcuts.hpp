@@ -13,27 +13,35 @@ class WindowShortcuts {
     };
     QHash<QKeySequence, Binding> bindings;
 
+    struct KeyMapping { char32_t scalar; Qt::Key qt; };
+    static constexpr KeyMapping special[] = {
+        {0x08, Qt::Key_Backspace}, {0x09, Qt::Key_Tab}, {0x0d, Qt::Key_Return}, {0x1b, Qt::Key_Escape},
+        {0xf700, Qt::Key_Up}, {0xf701, Qt::Key_Down}, {0xf702, Qt::Key_Left}, {0xf703, Qt::Key_Right},
+        {0xf728, Qt::Key_Delete}, {0xf729, Qt::Key_Home}, {0xf72b, Qt::Key_End}, {0xf72c, Qt::Key_PageUp},
+        {0xf72d, Qt::Key_PageDown}, {0xf739, Qt::Key_Clear}
+    };
     static Qt::Key specialKey(char32_t character, bool mirror) {
-        switch (character) {
-        case 0x08: return Qt::Key_Backspace;
-        case 0x09: return Qt::Key_Tab;
-        case 0x0d: return Qt::Key_Return;
-        case 0x1b: return Qt::Key_Escape;
-        case 0xf700: return Qt::Key_Up;
-        case 0xf701: return Qt::Key_Down;
-        case 0xf702: return mirror ? Qt::Key_Right : Qt::Key_Left;
-        case 0xf703: return mirror ? Qt::Key_Left : Qt::Key_Right;
-        case 0xf728: return Qt::Key_Delete;
-        case 0xf729: return Qt::Key_Home;
-        case 0xf72b: return Qt::Key_End;
-        case 0xf72c: return Qt::Key_PageUp;
-        case 0xf72d: return Qt::Key_PageDown;
-        case 0xf739: return Qt::Key_Clear;
-        default: return static_cast<Qt::Key>(QChar::toUpper(character));
-        }
+        if (mirror && character == 0xf702) return Qt::Key_Right;
+        if (mirror && character == 0xf703) return Qt::Key_Left;
+        for (auto mapping : special) if (mapping.scalar == character) return mapping.qt;
+        return static_cast<Qt::Key>(QChar::toUpper(character));
     }
 
 public:
+    static QString characters(int key, const QString &text) {
+        if (key == Qt::Key_Enter) key = Qt::Key_Return;
+        if (key == Qt::Key_Backtab) key = Qt::Key_Tab;
+        for (auto mapping : special) if (mapping.qt == key) return QString::fromUcs4(&mapping.scalar, 1);
+        if (key >= Qt::Key_F1 && key <= Qt::Key_F35) {
+            const char32_t scalar = 0xf704 + key - Qt::Key_F1;
+            return QString::fromUcs4(&scalar, 1);
+        }
+        if (key > 0 && key <= 0x10ffff) {
+            const char32_t scalar = QChar::toLower(static_cast<char32_t>(key));
+            return QString::fromUcs4(&scalar, 1);
+        }
+        return text;
+    }
     void begin() {
         for (auto &binding : bindings) binding.target.clear();
     }

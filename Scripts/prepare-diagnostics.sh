@@ -36,6 +36,19 @@ cp "$source_dir/Calling/CallingAudioIndicator.swift" "$source_dir/Theme/SignalIc
 cp "$source_dir/Calling/ConfirmLeaveCallModal.swift" "$source_dir/Axo/AxoAlertDialog.swift" \
    "$source_dir/Axo/AxoConfirmDialog.swift" "$source_dir/Theme/CSSShapes.swift" \
    "$source_dir/Axo/AxoPopper.swift" "$target_dir/"
+cp "$source_dir/Components/Slider.swift" "$target_dir/"
+# Serein observes AppKit's app-deactivation notification to save the recording draft.
+# The Linux scene supplies the same transition from Qt window and application events.
+awk '/^public struct CompositionRecording: View/ { print; print "#if os(Linux)\n    @Environment(\\.scenePhase) var phase\n#endif"; next }
+     /NSApplication.didResignActiveNotification/ {
+         print "#if os(Linux)\n        .onChange(of: phase) { old, new in if old == .active && new != .active { saveDraftRecordingIfNeeded() } }\n#else"
+         print; print "#endif"; found=1; next }
+     { print } END { if (!found) exit 1 }' "$source_dir/Components/CompositionRecording.swift" > "$target_dir/CompositionRecording.swift"
+awk 'BEGIN { print "import Foundation" } /^func durationToPlaybackText\(/ { inside=1 }
+     inside { print } inside && /^}$/ { done=1; exit } END { if (!done) exit 1 }' \
+    "$source_dir/Components/Conversation/Message/MessageAudio.swift" > "$target_dir/PlaybackTime.swift"
+awk 'BEGIN { print "import SwiftUI\nextension EnvironmentValues {" } /@Entry public var conversationListNow:/ { print; found=1 }
+     END { print "}"; if (!found) exit 1 }' "$source_dir/Components/ConversationList/BaseConversationListItem.swift" > "$target_dir/RecordingClock.swift"
 cp "$source_dir/Components/ClearingData.swift" "$source_dir/Components/ProgressBar.swift" "$target_dir/"
 cp "$source_dir/Axo/AxoBrand.swift" "$source_dir/Axo/AxoDragRegion.swift" \
    "$source_dir/Components/Button.swift" "$source_dir/Components/Spinner.swift" \

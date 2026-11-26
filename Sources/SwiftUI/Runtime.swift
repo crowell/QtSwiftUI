@@ -61,9 +61,11 @@ enum Part: Hashable {
         return owner
     }
     func widget(_ kind: QSKind, pressed: ((Bool) -> Void)? = nil, exitCommand: (() -> Void)? = nil,
+                adjustment: ((AccessibilityAdjustmentDirection) -> Void)? = nil,
                 drag: ((QSDragSample, UnsafeMutableRawPointer) -> Void)? = nil,
                 hover: ((Bool) -> Void)? = nil, action: ((String) -> Void)? = nil) -> UnsafeMutableRawPointer {
         let entry = host.mount(path: path + [.widget(kind.rawValue)], kind: kind, parent: parent)
+        host.keys.install(environment.keyPressHandlers, for: entry.id)
         if let drag { host.drags[entry.id] = { drag($0, entry.widget) } }
         else { host.drags[entry.id] = nil }
         let focus = environment.focus
@@ -71,6 +73,8 @@ enum Part: Hashable {
         host.events[entry.id] = { kind, value in
             switch kind {
             case QSActivate: action?(value)
+            case QSIncrement: adjustment?(.increment)
+            case QSDecrement: adjustment?(.decrement)
             case QSFocusChanged: focus?.change(value == "1")
             case QSSubmit: submit?()
             case QSExitCommand: exitCommand?()
@@ -118,6 +122,7 @@ enum Part: Hashable {
         if disappear[path] == nil && nextDisappear[path] == nil { afterRender.append(appear) }
         nextDisappear[path] = action
     }
+    let keys = WindowKeyPresses()
     var drags: [Int32: (QSDragSample) -> Void] = [:]
     var events: [Int32: (QSEventKind, String) -> Void] = [:]
     private let content: (Context) -> [Element]
@@ -138,6 +143,15 @@ enum Part: Hashable {
             let string = value.map { String(cString: $0) } ?? ""
             MainActor.assumeIsolated { Unmanaged<Host>.fromOpaque(pointer!).takeUnretainedValue().events[id]?(kind, string) }
         })
+        qs_set_key_handler(window) { pointer, id, phase, chars, modifiers in
+            let characters = String(cString: chars!)
+            guard let first = characters.first else { return 0 }
+            let key = KeyPress(phase: .init(rawValue: Int(phase)), key: KeyEquivalent(first),
+                               characters: characters, modifiers: .init(rawValue: Int(modifiers)))
+            return MainActor.assumeIsolated {
+                Unmanaged<Host>.fromOpaque(pointer!).takeUnretainedValue().keys.dispatch(key, to: id) == .handled ? 1 : 0
+            }
+        }
         qs_set_drag_handler(window) { pointer, id, sample in
             MainActor.assumeIsolated { Unmanaged<Host>.fromOpaque(pointer!).takeUnretainedValue().drags[id]?(sample) }
         }
@@ -151,6 +165,7 @@ enum Part: Hashable {
         mounts.removeAll()
         events.removeAll()
         drags.removeAll()
+        keys.reset()
         storage.removeAll()
     }
     func update(transaction: Transaction? = nil) {
@@ -194,6 +209,11 @@ enum Part: Hashable {
         var context = Context(host: self)
         context.transaction = pendingTransaction ?? Transaction()
         pendingTransaction = nil
+        switch qs_scene_phase(window) {
+        case 2: context.environment.scenePhase = .active
+        case 1: context.environment.scenePhase = .inactive
+        default: context.environment.scenePhase = .background
+        }
         context.environment.displayScale = qs_window_scale(window)
         context.environment.closePresentation = { [weak self] in
             if let window = self?.window { qs_request_close(window) }
@@ -211,6 +231,7 @@ enum Part: Hashable {
             if let mount = mounts.removeValue(forKey: path) {
                 events[mount.id] = nil
                 drags[mount.id] = nil
+                keys.install([], for: mount.id)
                 qs_destroy(mount.widget)
             }
         }

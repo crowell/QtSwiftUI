@@ -28,6 +28,9 @@ struct Transform<Content: View>: Primitive, SubviewSource {
     typealias Content = _ViewModifier_Content<Self>
     @MainActor @ViewBuilder func body(content: Content) -> Body
 }
+@MainActor protocol PrimitiveModifier: ViewModifier where Body == Never {
+    func applying(to content: AnyView) -> any View
+}
 public struct _ViewModifier_Content<Modifier: ViewModifier>: View {
     let view: AnyView
     public var body: some View { view }
@@ -39,10 +42,15 @@ public struct ModifiedContent<Content, Modifier> {
 }
 extension ModifiedContent: Primitive, View, SubviewSource where Content: View, Modifier: ViewModifier {
     func subviews(in context: Context) -> [Subview] {
-        context.preparing(modifier).body(content: .init(view: AnyView(content))).collectSubviews(in: context)
+        applied(in: context).collectSubviews(in: context)
     }
     func elements(in context: Context) -> [Element] {
-        context.preparing(modifier).body(content: .init(view: AnyView(content))).resolve(context)
+        applied(in: context).resolve(context)
+    }
+    @MainActor private func applied(in context: Context) -> any View {
+        let modifier = context.preparing(modifier)
+        if let primitive = modifier as? any PrimitiveModifier { return primitive.applying(to: AnyView(content)) }
+        return modifier.body(content: .init(view: AnyView(content)))
     }
 }
 extension View {

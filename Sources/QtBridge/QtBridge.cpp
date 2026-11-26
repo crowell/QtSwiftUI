@@ -70,7 +70,7 @@ public:
     QPointF dragOrigin;
     PointerDrag pointerDrag;
     bool isImage = false;
-    bool heading = false;
+    bool heading = false, adjustable = false;
     bool modal = false;
     bool updatesFrequently = false;
     QString accessibleValue;
@@ -111,7 +111,7 @@ protected:
         return !restricted;
     }
 };
-static void activateAccessibleTap(GroupWidget *target);
+static void sendAccessibleEvent(GroupWidget *target, QSEventKind kind);
 static void activateAccessibleButton(QAbstractButton *button);
 
 class AccessibleGroup final : public QAccessibleWidget {
@@ -121,6 +121,7 @@ public:
         return QRect(group->mapToGlobal(group->layoutRect.topLeft()), group->layoutRect.size());
     }
     QAccessible::Role role() const override {
+        if (group->adjustable) return QAccessible::Slider;
         if (group->property("qsAXToggle").toBool()) return QAccessible::CheckBox;
         if (group->property("qsAXButton").toBool()) return QAccessible::Button;
         if (group->modal) return QAccessible::Dialog;
@@ -144,6 +145,7 @@ public:
     QStringList actionNames() const override {
         auto names = QAccessibleWidget::actionNames();
         if (!group->isEnabled() || group->accessibilityHidden) return {};
+        if (group->adjustable) names << QAccessibleActionInterface::increaseAction() << QAccessibleActionInterface::decreaseAction();
         if (group->tapCount == 1) names.append(QAccessibleActionInterface::pressAction());
         for (const auto &entry : combinedActions()) names.append(entry.name);
         names.removeDuplicates();
@@ -151,8 +153,12 @@ public:
     }
     void doAction(const QString &action) override {
         if (!group->isEnabled() || group->accessibilityHidden) return;
+        if (group->adjustable && (action == increaseAction() || action == decreaseAction())) {
+            sendAccessibleEvent(group, action == increaseAction() ? QSIncrement : QSDecrement);
+            return;
+        }
         if (group->tapCount == 1 && action == QAccessibleActionInterface::pressAction()) {
-            activateAccessibleTap(group);
+            sendAccessibleEvent(group, QSActivate);
             return;
         }
         for (const auto &entry : combinedActions()) {
@@ -386,6 +392,7 @@ struct QSWindow final : QWidget {
     QSRender render;
     QSEvent event;
     QSDragHandler dragHandler = nullptr;
+    QSKeyHandler keyHandler = nullptr;
     bool pending = false, framePending = false;
     WindowShortcuts shortcuts;
 
@@ -398,6 +405,22 @@ struct QSWindow final : QWidget {
         });
     }
     bool eventFilter(QObject *source, QEvent *input) override {
+        if (keyHandler && source == focusWidget() && (input->type() == QEvent::KeyPress || input->type() == QEvent::KeyRelease)) {
+            const auto *key = static_cast<QKeyEvent *>(input);
+            const bool release = input->type() == QEvent::KeyRelease;
+            if (!(release && key->isAutoRepeat())) {
+                const auto chars = WindowShortcuts::characters(key->key(), key->text()).toUtf8();
+                auto modifiers = key->modifiers();
+                const int flags = (modifiers & Qt::ShiftModifier ? 2 : 0) | (modifiers & Qt::ControlModifier ? 4 : 0)
+                                | (modifiers & Qt::AltModifier ? 8 : 0) | (modifiers & Qt::MetaModifier ? 16 : 0)
+                                | (modifiers & Qt::KeypadModifier ? 32 : 0);
+                if (!chars.isEmpty() && keyHandler(context, source->property("swiftId").toInt(),
+                                                    release ? 4 : key->isAutoRepeat() ? 2 : 1, chars.constData(), flags)) {
+                    input->accept();
+                    return true;
+                }
+            }
+        }
         if ((input->type() == QEvent::Enter || input->type() == QEvent::Leave) && source->property("qsHover").toBool()) {
             event(context, source->property("swiftId").toInt(), QSHoverChanged, input->type() == QEvent::Enter ? "1" : "0");
         }
@@ -513,18 +536,22 @@ struct QSWindow final : QWidget {
         QWidget::keyPressEvent(key);
     }
     void resizeEvent(QResizeEvent *) override { schedule(); }
+    void changeEvent(QEvent *change) override {
+        QWidget::changeEvent(change);
+        if (change->type() == QEvent::WindowStateChange || change->type() == QEvent::ActivationChange) schedule();
+    }
 };
 
 namespace {
-static void activateAccessibleTap(GroupWidget *target) {
+static void sendAccessibleEvent(GroupWidget *target, QSEventKind kind) {
     auto *window = dynamic_cast<QSWindow *>(target->window());
     if (window && target->isEnabled())
-        window->event(window->context, target->property("swiftId").toInt(), QSActivate, "");
+        window->event(window->context, target->property("swiftId").toInt(), kind, "");
 }
 static void activateAccessibleButton(QAbstractButton *button) {
     for (auto *parent = button->parentWidget(); parent; parent = parent->parentWidget()) {
         auto *group = dynamic_cast<GroupWidget *>(parent);
-        if (group && group->simultaneous && group->tapCount == 1) activateAccessibleTap(group);
+        if (group && group->simultaneous && group->tapCount == 1) sendAccessibleEvent(group, QSActivate);
     }
     button->click();
 }
@@ -537,6 +564,7 @@ QSWindow *qs_window(const char *title, void *context, QSRender render, QSEvent e
     window->render = render;
     window->event = event;
     window->setWindowTitle(QString::fromUtf8(title));
+    QObject::connect(qApp, &QGuiApplication::applicationStateChanged, window, [window] { window->schedule(); });
     return window;
 }
 void qs_open(QSWindow *window, int width, int height) {
@@ -587,7 +615,18 @@ int qs_run(QSWindow *window, const char *screenshot, QSPump pump) {
     }
     return application().exec();
 }
+int qs_scene_phase(QSWindow *window) {
+    const auto app = QGuiApplication::applicationState();
+    if (!window->isVisible() || window->isMinimized() || app == Qt::ApplicationHidden || app == Qt::ApplicationSuspended) return 0;
+    return app == Qt::ApplicationActive && window->isActiveWindow() ? 2 : 1;
+}
+void qs_minimize(QSWindow *window, int minimized) {
+    if (minimized) window->showMinimized();
+    else { window->showNormal(); window->activateWindow(); }
+    qs_flush();
+}
 double qs_window_scale(QSWindow *window) { return window->devicePixelRatioF(); }
+void qs_set_key_handler(QSWindow *window, QSKeyHandler handler) { window->keyHandler = handler; }
 void qs_set_drag_handler(QSWindow *window, QSDragHandler handler) { window->dragHandler = handler; }
 void qs_group_gesture(QSWidget w, int taps, int drag, int simultaneous, double dragDistance) {
     auto *group = static_cast<GroupWidget *>(w);
@@ -887,8 +926,14 @@ void qs_group(QSWidget w, int behavior, int isImage, int updatesFrequently, cons
     group->combineChildren = behavior == 2;
     group->isImage = isImage;
     group->updatesFrequently = updatesFrequently;
-    group->accessibleValue = QString::fromUtf8(value);
+    const QString next = QString::fromUtf8(value);
+    if (group->accessibleValue != next) {
+        group->accessibleValue = next;
+        QAccessibleValueChangeEvent changed(group, next);
+        QAccessible::updateAccessibility(&changed);
+    }
 }
+void qs_adjustable(QSWidget w, int adjustable) { static_cast<GroupWidget *>(w)->adjustable = adjustable; }
 void qs_group_hidden(QSWidget w, int hidden) { static_cast<GroupWidget *>(w)->accessibilityHidden = hidden; }
 void qs_group_shape(QSWidget w, const QSPath *path, int evenOdd) {
     auto *group = static_cast<GroupWidget *>(w);
@@ -1099,6 +1144,14 @@ void qs_group_finish_layout(QSWidget w) {
     for (auto *child : children) child->move(child->pos() + offset);
 }
 
+int qs_accessible_value_is(QSWindow *window, const char *name, const char *value) {
+    for (auto *widget : window->findChildren<QWidget *>()) {
+        auto *object = QAccessible::queryAccessibleInterface(widget);
+        if (object && !object->state().invisible && object->text(QAccessible::Name) == QString::fromUtf8(name)
+            && object->text(QAccessible::Value) == QString::fromUtf8(value)) return 1;
+    }
+    return 0;
+}
 int qs_accessible_checked(QSWindow *window, const char *name) {
     for (auto *widget : window->findChildren<QWidget *>()) {
         auto *object = QAccessible::queryAccessibleInterface(widget);
@@ -1137,13 +1190,18 @@ int qs_enter(QSWindow *window, const char *id, const char *value) {
     qs_flush();
     return 1;
 }
-int qs_send_key_sequence(QSWindow *window, const char *keys) {
+int qs_send_key_sequence(QSWindow *window, const char *keys) { return qs_send_repeated_key(window, keys, 0); }
+int qs_send_repeated_key(QSWindow *window, const char *keys, int repeats) {
     const auto sequence = QKeySequence::fromString(QString::fromUtf8(keys), QKeySequence::PortableText);
     if (sequence.count() != 1 || !window->windowHandle()) return 0;
     auto combination = sequence[0];
     QKeyEvent press(QEvent::KeyPress, combination.key(), combination.keyboardModifiers());
     QKeyEvent release(QEvent::KeyRelease, combination.key(), combination.keyboardModifiers());
     QApplication::sendEvent(window->windowHandle(), &press);
+    for (int i = 0; i < repeats; ++i) {
+        QKeyEvent repeated(QEvent::KeyPress, combination.key(), combination.keyboardModifiers(), QString(), true);
+        QApplication::sendEvent(window->windowHandle(), &repeated);
+    }
     QApplication::sendEvent(window->windowHandle(), &release);
     qs_flush();
     return 1;

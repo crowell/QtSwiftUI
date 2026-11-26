@@ -42,7 +42,10 @@ extension View {
     }
     public func accessibilityElement(children: AccessibilityChildBehavior = .ignore) -> some View {
         Transform(content: self) { view, ctx in
-            let widget = ctx.widget(QSGroup)
+            let adjustment = ctx.environment.adjustment
+            let widget = ctx.widget(QSGroup, adjustment: adjustment?.perform)
+            adjustment?.attached = true
+            qs_adjustable(widget, adjustment == nil ? 0 : 1)
             let traits = ctx.environment.accessibilityTraits
             qs_group(widget, children.behavior, traits.contains(.isImage) ? 1 : 0,
                      traits.contains(.updatesFrequently) ? 1 : 0, ctx.environment.accessibleValue)
@@ -52,6 +55,7 @@ extension View {
             inner.environment.identifier = ""
             inner.environment.accessibilityTraits = []
             inner.environment.accessibleValue = ""
+            inner.environment.adjustment = nil
             let child = stacked(view.resolve(inner), axis: .vertical, alignment: .center, spacing: 8)
             return [child.wrapping(size: child.measure) { bounds, p in
                 qs_place(widget, bounds.minX, bounds.minY, bounds.width, bounds.height)

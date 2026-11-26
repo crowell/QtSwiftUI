@@ -11,7 +11,7 @@ typedef struct { double x, y, width, height; } QSRect;
 typedef struct { double a, b, c, d, tx, ty; } QSAffine;
 typedef struct QSPath QSPath;
 typedef void (*QSRender)(void *context, int width, int height);
-enum QSEventKind { QSActivate, QSFocusChanged, QSSubmit, QSPressedChanged, QSExitCommand, QSHoverChanged };
+enum QSEventKind { QSActivate, QSFocusChanged, QSSubmit, QSPressedChanged, QSExitCommand, QSHoverChanged, QSIncrement, QSDecrement };
 typedef void (*QSEvent)(void *context, int id, enum QSEventKind kind, const char *value);
 enum QSKind { QSLabel, QSButton, QSToggle, QSEdit, QSSecureEdit, QSSurface, QSScroll, QSSlider, QSProgress, QSGroup, QSCanvas, QSLink };
 
@@ -19,6 +19,7 @@ QSWindow *qs_window(const char *title, void *context, QSRender render, QSEvent e
 void qs_open(QSWindow *, int width, int height);
 void qs_update(QSWindow *);
 double qs_window_scale(QSWindow *);
+int qs_scene_phase(QSWindow *);
 void qs_animation_frame(QSWindow *);
 typedef void (*QSPump)(void);
 int qs_run(QSWindow *, const char *screenshot, QSPump pump);
@@ -67,11 +68,14 @@ void qs_canvas_stop(QSWidget, double location, const char *color);
 void qs_hit_testing(QSWidget, int enabled);
 void qs_direction(QSWidget, int rtl);
 void qs_group(QSWidget, int behavior, int isImage, int updatesFrequently, const char *value);
+void qs_adjustable(QSWidget, int adjustable);
 void qs_group_hidden(QSWidget, int hidden);
 void qs_group_hover(QSWidget, int enabled);
 typedef struct { double time, startX, startY, x, y, velocityX, velocityY; int ended; } QSDragSample;
 typedef void (*QSDragHandler)(void *context, int id, QSDragSample sample);
 void qs_set_drag_handler(QSWindow *, QSDragHandler);
+typedef int (*QSKeyHandler)(void *context, int id, int phase, const char *characters, int modifiers);
+void qs_set_key_handler(QSWindow *, QSKeyHandler);
 void qs_group_gesture(QSWidget, int taps, int windowDrag, int simultaneous, double dragDistance);
 void qs_group_spin(QSWidget, int milliseconds);
 void qs_group_opacity(QSWidget, double value);
@@ -97,6 +101,7 @@ void qs_place(QSWidget, double x, double y, double width, double height);
 
 // Drive the native controls in the offscreen integration tests.
 void qs_flush(void);
+int qs_accessible_value_is(QSWindow *, const char *name, const char *value);
 int qs_accessible_checked(QSWindow *, const char *name);
 int qs_accessible_element(QSWindow *, const char *name, int childCount, const char *action);
 int qs_click(QSWindow *, const char *identifier);
@@ -105,6 +110,8 @@ int qs_read_text(QSWindow *, const char *identifier, const char *expected);
 int qs_key_return(QSWindow *, const char *identifier);
 int qs_key_escape(QSWindow *);
 int qs_send_key_sequence(QSWindow *, const char *keys);
+int qs_send_repeated_key(QSWindow *, const char *keys, int repeats);
+void qs_minimize(QSWindow *, int minimized);
 int qs_scroll_to_end(QSWindow *);
 int qs_hover(QSWindow *, const char *identifier, int inside);
 int qs_has_help(QSWindow *, const char *identifier, const char *expected);

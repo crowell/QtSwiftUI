@@ -73,6 +73,9 @@ extension EnvironmentValues {
     @Entry var axoInheritedTextSize: (size: CGFloat, lineHeight: CGFloat) = (14, 20)
 }
 enum PreviewWrap { case wrap, truncate, nowrap }
+extension TextAlignment {
+    static var end: Self { .trailing }
+}
 
 struct CSSText: View {
     let value: String

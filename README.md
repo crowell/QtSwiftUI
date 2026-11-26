@@ -46,6 +46,14 @@ The empty media gallery runs Serein’s production conversation panel, four-tab 
 
 [Audio tab with its sort menu open](Screenshots/media-gallery-sort.png)
 
+Serein’s voice-note recorder runs with sample peaks and a fixed 1:23 timer. The production code supplies its waveform, buttons, one-hour timeout and discard dialog. Ubuntu substitutes a SwiftUI scene-phase change for the single AppKit deactivation notification that saves the draft. The tests exercise draft saving, cancellation of the timeout when a recording is replaced, and the timeout callback on Apple and Ubuntu. Qt also receives native clicks, focused Escape, and the two discard-dialog actions. Full microphone capture and message delivery are outside this UI fixture.
+
+![Serein voice-note recorder on Ubuntu](Screenshots/voice-recording.png)
+
+[Discard draft dialog on Ubuntu](Screenshots/discard-recording.png)
+
+Serein’s original slider accepts pointer drags, Home, End, arrow keys, and Qt accessibility Increase and Decrease actions. Drag events in a 140 × 80 window reached the same start and end locations in AppKit and Qt in local, global, and named coordinate spaces. The velocity estimate comes from native pointer samples. Exact velocity and prediction parity remains unverified.
+
 ![Serein device card running on Ubuntu](Screenshots/serein-components.png)
 
 ![Serein account artwork drawn with Qt](Screenshots/account-artwork.png)
@@ -83,7 +91,7 @@ The target is source compatibility with Apple's public SwiftUI APIs. The impleme
 
 `./Scripts/check-apple.sh ../serein` type-checks the example source with Apple's SwiftUI module on a Mac with Xcode. `./Scripts/check-api.sh` extracts public symbol graphs from Xcode and the Linux image. Pass `--missing` to list missing declaration paths. The inventory groups declarations by symbol kind and path, counts overload spellings separately, and excludes underscored and synthesized members. A shared name alone cannot establish matching signatures, constraints, availability or behavior.
 
-The inventory against the macOS 27.2 SDK found 893 shared declaration paths out of 7,627 and 516 identical declaration spellings out of 8,735. The examples exercise a smaller set at runtime. Navigation, multiwindow scenes, broader animation support, text shaping parity, gestures and platform integration remain substantial gaps. Font metrics, control appearance and several layout behaviors differ from Apple's implementation.
+The inventory against the macOS 27.2 SDK found 941 shared declaration paths out of 7,627 and 558 identical declaration spellings out of 8,735. The examples exercise a smaller set at runtime. Navigation, multiwindow scenes, broader animation support, text shaping parity, gestures and platform integration remain substantial gaps. Font metrics, control appearance and several layout behaviors differ from Apple's implementation.
 
 After capturing the Linux examples, run `./Scripts/compare-artwork.sh ../serein` on macOS to render both illustrations with Apple's `ImageRenderer`. At a threshold of 8/255 in any RGB channel, 208 of 119,680 account artwork pixels (0.174%) and 251 of 49,928 key transparency pixels (0.503%) differed. The mean absolute channel differences were 0.128/255 and 0.129/255 respectively. Both reference images are saved in `.build/artwork/`.
 
