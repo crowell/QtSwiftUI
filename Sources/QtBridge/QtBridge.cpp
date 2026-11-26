@@ -1,5 +1,6 @@
 #include "QtBridge.h"
 #include "CanvasBlur.hpp"
+#include "PointerDrag.hpp"
 #include "WindowShortcuts.hpp"
 #include "PathTrim.hpp"
 #include <QApplication>
@@ -67,6 +68,7 @@ public:
     bool exposeChildren = true, combineChildren = false;
     bool windowDrag = false, trackingDrag = false, simultaneous = false;
     QPointF dragOrigin;
+    PointerDrag pointerDrag;
     bool isImage = false;
     bool heading = false;
     bool modal = false;
@@ -383,6 +385,7 @@ struct QSWindow final : QWidget {
     void *context;
     QSRender render;
     QSEvent event;
+    QSDragHandler dragHandler = nullptr;
     bool pending = false, framePending = false;
     WindowShortcuts shortcuts;
 
@@ -403,7 +406,7 @@ struct QSWindow final : QWidget {
             (input->type() == QEvent::MouseButtonPress || input->type() == QEvent::MouseButtonRelease ||
              input->type() == QEvent::MouseButtonDblClick || input->type() == QEvent::MouseMove)) {
             auto *mouse = static_cast<QMouseEvent *>(input);
-            if (!group->layoutRect.contains(mouse->position().toPoint())) {
+            if (!group->pointerDrag.tracking && !group->layoutRect.contains(mouse->position().toPoint())) {
                 const auto at = mapFromGlobal(mouse->globalPosition().toPoint());
                 // Paint overflow is transparent to input. Find the sibling underneath.
                 group->setAttribute(Qt::WA_TransparentForMouseEvents);
@@ -442,6 +445,14 @@ struct QSWindow final : QWidget {
         const auto type = mouse->type();
         const auto point = group->mapFromGlobal(mouse->globalPosition());
         const bool press = type == QEvent::MouseButtonPress || type == QEvent::MouseButtonDblClick;
+        if (group->pointerDrag.threshold >= 0) {
+            const bool inside = group->layoutRect.contains(point.toPoint());
+            const bool tracking = group->pointerDrag.tracking;
+            const auto sample = group->pointerDrag.update(*mouse, mapFromGlobal(mouse->globalPosition()), inside);
+            if (sample && dragHandler) dragHandler(context, group->property("swiftId").toInt(), *sample);
+            if (mouse->button() == Qt::LeftButton || mouse->type() == QEvent::MouseMove)
+                return tracking || group->pointerDrag.tracking;
+        }
         if (group->windowDrag && mouse->button() == Qt::LeftButton) {
             if (press && !group->trackingDrag) {
                 group->dragOrigin = mouse->globalPosition();
@@ -577,11 +588,14 @@ int qs_run(QSWindow *window, const char *screenshot, QSPump pump) {
     return application().exec();
 }
 double qs_window_scale(QSWindow *window) { return window->devicePixelRatioF(); }
-void qs_group_gesture(QSWidget w, int taps, int drag, int simultaneous) {
+void qs_set_drag_handler(QSWindow *window, QSDragHandler handler) { window->dragHandler = handler; }
+void qs_group_gesture(QSWidget w, int taps, int drag, int simultaneous, double dragDistance) {
     auto *group = static_cast<GroupWidget *>(w);
     group->tapCount = taps;
     group->windowDrag = drag;
     group->simultaneous = simultaneous;
+    group->pointerDrag.threshold = dragDistance;
+    if (dragDistance < 0) group->pointerDrag.tracking = false;
 }
 void qs_close(QSWindow *window) {
     delete window;
@@ -1066,7 +1080,7 @@ void qs_group_finish_layout(QSWidget w) {
     auto *group = static_cast<GroupWidget *>(w);
     // A frame around paint-only descendants must leave the controls underneath reachable.
     const auto children = group->findChildren<QWidget *>(QString(), Qt::FindDirectChildrenOnly);
-    if (!group->tapCount && !group->windowDrag && !group->property("qsHover").toBool() &&
+    if (!group->tapCount && !group->windowDrag && group->pointerDrag.threshold < 0 && !group->property("qsHover").toBool() &&
         std::all_of(children.begin(), children.end(), [](QWidget *child) {
             return child->isHidden() || child->testAttribute(Qt::WA_TransparentForMouseEvents);
         })) group->setAttribute(Qt::WA_TransparentForMouseEvents);
@@ -1172,6 +1186,25 @@ int qs_tab(QSWindow *window) {
     QApplication::sendEvent(window->focusWidget() ? window->focusWidget() : window, &tab);
     qs_flush();
     return tab.isAccepted();
+}
+int qs_drag_pointer(QSWindow *window, int x1, int y1, int x2, int y2, int steps) {
+    const QPointF start(x1, y1), end(x2, y2);
+    QPointer<QWidget> target = window->childAt(start.toPoint());
+    if (!target || steps < 1) return 0;
+    auto send = [&](QEvent::Type type, QPointF position, int tick) {
+        if (!target) return;
+        const auto global = window->mapToGlobal(position);
+        QMouseEvent mouse(type, target->mapFromGlobal(global), global,
+                          type == QEvent::MouseMove ? Qt::NoButton : Qt::LeftButton,
+                          type == QEvent::MouseButtonRelease ? Qt::NoButton : Qt::LeftButton, Qt::NoModifier);
+        mouse.setTimestamp(1000 + 16 * tick);
+        QApplication::sendEvent(target, &mouse);
+        qs_flush();
+    };
+    send(QEvent::MouseButtonPress, start, 0);
+    for (int i = 1; i <= steps; ++i) send(QEvent::MouseMove, start + (end - start) * i / steps, i);
+    send(QEvent::MouseButtonRelease, end, steps + 1);
+    return 1;
 }
 int qs_click_point(QSWindow *window, int x, int y) {
     const QPoint point(x, y);

@@ -61,8 +61,11 @@ enum Part: Hashable {
         return owner
     }
     func widget(_ kind: QSKind, pressed: ((Bool) -> Void)? = nil, exitCommand: (() -> Void)? = nil,
+                drag: ((QSDragSample, UnsafeMutableRawPointer) -> Void)? = nil,
                 hover: ((Bool) -> Void)? = nil, action: ((String) -> Void)? = nil) -> UnsafeMutableRawPointer {
         let entry = host.mount(path: path + [.widget(kind.rawValue)], kind: kind, parent: parent)
+        if let drag { host.drags[entry.id] = { drag($0, entry.widget) } }
+        else { host.drags[entry.id] = nil }
         let focus = environment.focus
         let submit = environment.submit
         host.events[entry.id] = { kind, value in
@@ -115,6 +118,7 @@ enum Part: Hashable {
         if disappear[path] == nil && nextDisappear[path] == nil { afterRender.append(appear) }
         nextDisappear[path] = action
     }
+    var drags: [Int32: (QSDragSample) -> Void] = [:]
     var events: [Int32: (QSEventKind, String) -> Void] = [:]
     private let content: (Context) -> [Element]
     private(set) var window: OpaquePointer!
@@ -134,6 +138,9 @@ enum Part: Hashable {
             let string = value.map { String(cString: $0) } ?? ""
             MainActor.assumeIsolated { Unmanaged<Host>.fromOpaque(pointer!).takeUnretainedValue().events[id]?(kind, string) }
         })
+        qs_set_drag_handler(window) { pointer, id, sample in
+            MainActor.assumeIsolated { Unmanaged<Host>.fromOpaque(pointer!).takeUnretainedValue().drags[id]?(sample) }
+        }
     }
     func open(width: Int, height: Int) { qs_open(window, Int32(width), Int32(height)) }
     func close() {
@@ -143,6 +150,7 @@ enum Part: Hashable {
         observationPass.revision += 1
         mounts.removeAll()
         events.removeAll()
+        drags.removeAll()
         storage.removeAll()
     }
     func update(transaction: Transaction? = nil) {
@@ -202,6 +210,7 @@ enum Part: Hashable {
         for path in mounts.keys.filter({ !liveMounts.contains($0) }).sorted(by: { $0.count > $1.count }) {
             if let mount = mounts.removeValue(forKey: path) {
                 events[mount.id] = nil
+                drags[mount.id] = nil
                 qs_destroy(mount.widget)
             }
         }

@@ -19,20 +19,22 @@ public struct GestureMask: OptionSet, Sendable {
     public static let all: Self = [.gesture, .subviews]
 }
 
-private struct Recognizer {
+struct Recognizer {
     var taps = 0
     var movesWindow = false
+    var dragDistance: CGFloat?
+    var drag: ((QSDragSample, Context, UnsafeMutableRawPointer) -> Void)?
     var ended: () -> Void
 }
 
-@MainActor private protocol NativeGesture {
-    func recognizer(ended: @escaping (Any) -> Void) -> Recognizer
+@MainActor protocol NativeGesture {
+    func recognizer(changed: @escaping (Any) -> Void, ended: @escaping (Any) -> Void) -> Recognizer
 }
 
 extension Gesture {
-    fileprivate func resolve(ended: @escaping (Any) -> Void) -> Recognizer {
-        if let primitive = self as? any NativeGesture { return primitive.recognizer(ended: ended) }
-        return body.resolve(ended: ended)
+    func resolve(changed: @escaping (Any) -> Void, ended: @escaping (Any) -> Void) -> Recognizer {
+        if let primitive = self as? any NativeGesture { return primitive.recognizer(changed: changed, ended: ended) }
+        return body.resolve(changed: changed, ended: ended)
     }
     nonisolated public func onEnded(_ action: @escaping (Value) -> Void) -> _EndedGesture<Self> {
         _EndedGesture(content: self, action: action)
@@ -48,7 +50,7 @@ nonisolated public struct TapGesture: Gesture, NativeGesture {
     public typealias Body = Never
     public var count: Int
     public init(count: Int = 1) { self.count = count }
-    fileprivate func recognizer(ended: @escaping (Any) -> Void) -> Recognizer {
+    func recognizer(changed: @escaping (Any) -> Void, ended: @escaping (Any) -> Void) -> Recognizer {
         Recognizer(taps: count) { ended(()) }
     }
 }
@@ -56,7 +58,7 @@ nonisolated public struct TapGesture: Gesture, NativeGesture {
 private struct WindowMove: Gesture, NativeGesture {
     typealias Body = Never
     typealias Value = WindowDragGesture.Value
-    func recognizer(ended: @escaping (Any) -> Void) -> Recognizer {
+    func recognizer(changed: @escaping (Any) -> Void, ended: @escaping (Any) -> Void) -> Recognizer {
         Recognizer(movesWindow: true) { ended(Value()) }
     }
 }
@@ -72,8 +74,8 @@ nonisolated public struct _EndedGesture<Content: Gesture>: Gesture, NativeGestur
     public typealias Value = Content.Value
     fileprivate let content: Content
     fileprivate let action: (Value) -> Void
-    @MainActor fileprivate func recognizer(ended: @escaping (Any) -> Void) -> Recognizer {
-        content.resolve { value in
+    @MainActor func recognizer(changed: @escaping (Any) -> Void, ended: @escaping (Any) -> Void) -> Recognizer {
+        content.resolve(changed: changed) { value in
             if let typed = value as? Value { action(typed) }
             ended(value)
         }
@@ -94,9 +96,11 @@ extension View {
         Transform(content: self) { view, ctx in
             let inner = ctx.with(\.gesturesEnabled, ctx.environment.gesturesEnabled && mask.contains(.subviews))
             let enabled = ctx.environment.gesturesEnabled && mask.contains(.gesture)
-            let recognizer = enabled ? gesture.resolve { _ in } : nil
-            let group = ctx.widget(QSGroup, action: { _ in recognizer?.ended() })
-            qs_group_gesture(group, Int32(clamping: recognizer?.taps ?? 0), recognizer?.movesWindow == true ? 1 : 0, simultaneous ? 1 : 0)
+            let recognizer = enabled ? gesture.resolve(changed: { _ in }, ended: { _ in }) : nil
+            let group = ctx.widget(QSGroup, drag: recognizer?.drag.map { callback in { sample, widget in callback(sample, ctx, widget) } },
+                                   action: { _ in recognizer?.ended() })
+            qs_group_gesture(group, Int32(clamping: recognizer?.taps ?? 0), recognizer?.movesWindow == true ? 1 : 0,
+                             simultaneous ? 1 : 0, recognizer?.dragDistance ?? -1)
             return inner.children(of: view, inside: group)
         }
     }
