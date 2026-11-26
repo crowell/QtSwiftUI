@@ -155,6 +155,11 @@ public struct ScrollView<Content: View>: Primitive {
         let widget = context.widget(QSScroll)
         var inner = context.descending(.position(0))
         inner.parent = qs_scroll_content(widget)
+        let origin = NamedOrigin()
+        inner.spaces[ScrollSpace.nearest] = origin
+        for axis in Axis.allCases where axes.contains(axis == .vertical ? .vertical : .horizontal) {
+            inner.spaces[ScrollSpace.axis(axis)] = origin
+        }
         var geometry: ScrollGeometry?
         inner.publish(FirstScrollGeometry.self) { geometry }
         let view = stacked(content.resolve(inner), axis: .vertical, alignment: .center, spacing: 8)
@@ -168,6 +173,8 @@ public struct ScrollView<Content: View>: Primitive {
                           height: vertical ? (p.height ?? ideal.height) : ideal.height)
         } place: { bounds, _ in
             qs_place(widget, bounds.minX, bounds.minY, bounds.width, bounds.height)
+            let position = qs_origin(widget)
+            origin.point = CGPoint(x: position.width, y: position.height)
             let proposal = offer(ProposedViewSize(bounds.size))
             let size = view.measure(proposal)
             let contentSize = CGSize(width: max(bounds.width, size.width), height: max(bounds.height, size.height))

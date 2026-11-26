@@ -8,15 +8,13 @@ public struct SafeAreaRegions: OptionSet, Sendable {
     public static let all = Self(rawValue: .max)
 }
 
-public enum CoordinateSpace: Hashable {
-    case local, global, named(AnyHashable)
-}
 public struct GeometryProxy {
     public let size: CGSize
     let globalOrigin: CGPoint
     let origins: [AnyHashable: CGPoint]
     public var safeAreaInsets: EdgeInsets { EdgeInsets() }
-    public func frame(in coordinateSpace: CoordinateSpace) -> CGRect {
+    public func frame(in coordinateSpace: some CoordinateSpaceProtocol) -> CGRect { frame(in: coordinateSpace.coordinateSpace) }
+    @_disfavoredOverload public func frame(in coordinateSpace: CoordinateSpace) -> CGRect {
         switch coordinateSpace {
         case .local: return CGRect(origin: .zero, size: size)
         case .global: return CGRect(origin: globalOrigin, size: size)
@@ -26,14 +24,19 @@ public struct GeometryProxy {
         }
     }
 }
+extension Context {
+    func geometry(in bounds: CGRect) -> GeometryProxy {
+        let offset = windowOffset
+        return GeometryProxy(size: bounds.size, globalOrigin: CGPoint(x: bounds.minX + offset.x, y: bounds.minY + offset.y),
+                             origins: spaces.mapValues(\.point))
+    }
+}
 public struct GeometryReader<Content: View>: Primitive {
     let content: (GeometryProxy) -> Content
     public init(@ViewBuilder content: @escaping (GeometryProxy) -> Content) { self.content = content }
     func elements(in context: Context) -> [Element] {
         [Element { $0.replacingUnspecifiedDimensions() } place: { bounds, _ in
-            let offset = context.windowOffset
-            let origin = CGPoint(x: bounds.minX + offset.x, y: bounds.minY + offset.y)
-            let proxy = GeometryProxy(size: bounds.size, globalOrigin: origin, origins: context.spaces.mapValues(\.point))
+            let proxy = context.geometry(in: bounds)
             let proposal = ProposedViewSize(bounds.size)
             for child in content(proxy).resolve(context) {
                 child.place(CGRect(origin: bounds.origin, size: child.measure(proposal)), proposal)
@@ -42,7 +45,44 @@ public struct GeometryReader<Content: View>: Primitive {
     }
 }
 @MainActor final class NamedOrigin { var point: CGPoint = .zero }
+@MainActor private final class GeometrySample<Value> { var value: Value? }
+
+private struct GeometryObserver<Content: View, Value: Equatable & Sendable>: Primitive {
+    let content: Content
+    let project: @Sendable (GeometryProxy) -> Value
+    let change: (Value, Value) -> Void
+
+    func elements(in context: Context) -> [Element] {
+        content.resolve(context).enumerated().map { index, child in
+            let path = context.path + [.property("geometry change"), .position(index)]
+            let sample = context.host.storage[path] as? GeometrySample<Value> ?? GeometrySample<Value>()
+            context.host.storage[path] = sample
+            context.host.liveStorage.insert(path)
+            let element = Element(size: child.measure) { bounds, proposal in
+                child.place(bounds, proposal)
+                let value = project(context.geometry(in: bounds))
+                let previous = sample.value
+                if previous != .some(value) {
+                    sample.value = value
+                    context.host.afterLayout { change(previous ?? value, value) }
+                }
+            }
+            element.priority = child.priority
+            element.values = child.values
+            return element
+        }
+    }
+}
 extension View {
+    public func onGeometryChange<T: Equatable & Sendable>(for type: T.Type, of transform: @escaping @Sendable (GeometryProxy) -> T,
+                                                         action: @escaping (_ newValue: T) -> Void) -> some View {
+        GeometryObserver(content: self, project: transform) { _, next in action(next) }
+    }
+    public func onGeometryChange<T: Equatable & Sendable>(for type: T.Type, of transform: @escaping @Sendable (GeometryProxy) -> T,
+                                                         action: @escaping (_ oldValue: T, _ newValue: T) -> Void) -> some View {
+        GeometryObserver(content: self, project: transform, change: action)
+    }
+    public func coordinateSpace(_ name: NamedCoordinateSpace) -> some View { coordinateSpace(name: name.name) }
     public func coordinateSpace<T: Hashable>(name: T) -> some View {
         Transform(content: self) { view, context in
             let origin = NamedOrigin()

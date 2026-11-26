@@ -21,10 +21,14 @@ final class ScrollGeometryTests: XCTestCase {
     }
 
     @MainActor func testNativeScrollDeliversFilteredChanges() async throws {
+        var contentPositions: [CGFloat] = []
         var thresholds: [[Bool]] = []
         var snapshots: [ScrollGeometry] = []
         let view = ScrollView {
             Color.black.frame(width: 50, height: 240)
+                .onGeometryChange(for: CGFloat.self) { $0.frame(in: .scrollView(axis: .vertical)).minY } action: {
+                    contentPositions.append($0)
+                }
         }
         .scrollIndicators(.never)
         .onScrollGeometryChange(for: ScrollGeometry.self) { $0 } action: { _, next in snapshots.append(next) }
@@ -59,6 +63,7 @@ final class ScrollGeometryTests: XCTestCase {
         scroll.reflectScrolledClipView(scroll.contentView)
         layout()
         #endif
+        XCTAssertEqual(contentPositions, [0, -160])
         XCTAssertEqual(thresholds, [[false, false], [false, true]])
         let last = try XCTUnwrap(snapshots.last)
         XCTAssertEqual(last.contentOffset.y, 160)
