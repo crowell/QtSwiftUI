@@ -14,6 +14,7 @@
 #include <QPixmapCache>
 #include "PlainTextEditor.hpp"
 #include <QClipboard>
+#include <QContextMenuEvent>
 #include "WindowShortcuts.hpp"
 #include "PathTrim.hpp"
 #include "RasterWidget.hpp"
@@ -112,6 +113,16 @@ public:
     bool directInteraction = false;
     int gestureInputs = 127;
     qint64 gestureDevice = -1;
+    QMenu *contextPopup = nullptr;
+    bool hasContextMenu() const { return contextPopup && !contextPopup->isEmpty(); }
+    void openContextMenu(QPoint global, bool keyboard) {
+        contextPopup->popup(global);
+        if (keyboard) {
+            for (auto *item : contextPopup->actions()) {
+                if (item->isEnabled() && !item->isSeparator()) { contextPopup->setActiveAction(item); break; }
+            }
+        }
+    }
     bool isImage = false;
     bool heading = false, adjustable = false;
     bool modal = false;
@@ -139,6 +150,27 @@ public:
         style()->drawPrimitive(QStyle::PE_FrameFocusRect, &focus, &painter, this);
     }
 };
+// Intercept context requests before an embedded native control opens its own menu.
+class ContextMenuFilter final : public QObject {
+public:
+    using QObject::QObject;
+    bool eventFilter(QObject *source, QEvent *event) override {
+        if (event->type() != QEvent::ContextMenu) return false;
+        auto *request = static_cast<QContextMenuEvent *>(event);
+        const bool keyboard = request->reason() == QContextMenuEvent::Keyboard;
+        for (auto *item = qobject_cast<QWidget *>(source); item && !item->isWindow(); item = item->parentWidget()) {
+            auto *group = dynamic_cast<GroupWidget *>(item);
+            if (!group || !group->hasContextMenu() || !group->isEnabled()) continue;
+            const auto local = keyboard ? group->hitBounds().center() : group->mapFromGlobal(request->globalPos());
+            if (!group->hitBounds().contains(local) || (group->contentShape && !group->contentShape->contains(local))) continue;
+            group->openContextMenu(group->mapToGlobal(local), keyboard);
+            event->accept();
+            return true;
+        }
+        return false;
+    }
+};
+
 class SwiftButton final : public QPushButton {
 public:
     using QPushButton::QPushButton;
@@ -209,6 +241,7 @@ public:
         if (!group->isEnabled() || group->accessibilityHidden) return {};
         if (group->adjustable) names << QAccessibleActionInterface::increaseAction() << QAccessibleActionInterface::decreaseAction();
         names.append(group->accessibilityActions);
+        if (group->hasContextMenu()) names.append(showMenuAction());
         if (group->tapCount == 1) names.append(QAccessibleActionInterface::pressAction());
         for (const auto &entry : combinedActions()) names.append(entry.name);
         names.removeDuplicates();
@@ -216,6 +249,10 @@ public:
     }
     void doAction(const QString &action) override {
         if (!group->isEnabled() || group->accessibilityHidden) return;
+        if (action == showMenuAction() && group->hasContextMenu()) {
+            group->openContextMenu(group->mapToGlobal(group->hitBounds().center()), true);
+            return;
+        }
         if (group->accessibilityActions.contains(action)) {
             sendAccessibleEvent(group, QSAccessibilityAction, action);
             return;
@@ -239,6 +276,7 @@ public:
     QAccessible::State state() const override {
         auto result = QAccessibleWidget::state();
         if (group->accessibilityHidden) result.invisible = true;
+        result.hasPopup = group->hasContextMenu();
         result.animated = group->updatesFrequently;
         result.modal = group->modal;
         result.linked = role() == QAccessible::Link;
@@ -527,6 +565,13 @@ struct QSWindow final : QWidget {
     QSKeyHandler keyHandler = nullptr;
     bool pending = false, framePending = false;
     WindowShortcuts shortcuts;
+
+    void connectMenu(QMenu *menu, int id) {
+        QObject::connect(menu, &QMenu::triggered, this, [this, id](QAction *item) {
+            const int action = item->data().toInt();
+            if (action >= 0) event(context, id, QSActivate, QByteArray::number(action).constData());
+        });
+    }
 
     void schedule() {
         if (pending) return;
@@ -918,10 +963,7 @@ QSWidget qs_create(QSWindow *window, QSWidget parent, QSKind kind, int id) {
         if (kind == QSMenuButton) {
             button->setProperty("qsAXMenu", true);
             button->popup = new NativeMenu(button);
-            QObject::connect(button->popup, &QMenu::triggered, window, [=](QAction *item) {
-                const int action = item->data().toInt();
-                if (action >= 0) window->event(window->context, id, QSActivate, QByteArray::number(action).constData());
-            });
+            window->connectMenu(button->popup, id);
         } else {
             QObject::connect(button, &QPushButton::clicked, window, [=] { window->event(window->context, id, QSActivate, ""); });
         }
@@ -1556,6 +1598,20 @@ void qs_plain_button(QSWidget w, int plain) {
     auto *button = static_cast<QPushButton *>(w);
     button->setFlat(plain);
 }
+QSWidget qs_context_menu(QSWidget w) {
+    auto *group = static_cast<GroupWidget *>(w);
+    if (!group->contextPopup) {
+        static QPointer<ContextMenuFilter> filter;
+        if (!filter) {
+            filter = new ContextMenuFilter(qApp);
+            qApp->installEventFilter(filter);
+        }
+        group->contextPopup = new QMenu(group);
+        auto *window = static_cast<QSWindow *>(group->window());
+        window->connectMenu(group->contextPopup, group->property("swiftId").toInt());
+    }
+    return group->contextPopup;
+}
 QSWidget qs_menu_begin(QSWidget w, int indicator) {
     auto *button = static_cast<SwiftButton *>(w);
     if (button->menuIndicator != bool(indicator)) {
@@ -1706,7 +1762,7 @@ void qs_group_finish_layout(QSWidget w, int sizeToPositionedContent) {
     group->sizedToContent = sizeToPositionedContent && !group->graphicsEffect() && !group->contentShape;
     // A frame around paint-only descendants must leave the controls underneath reachable.
     const auto children = group->findChildren<QWidget *>(QString(), Qt::FindDirectChildrenOnly);
-    if (!group->tapCount && !group->windowDrag && group->pointerDrag.threshold < 0 && group->pinch.minimum < 0 && !group->property("qsHover").toBool() &&
+    if (!group->hasContextMenu() && !group->tapCount && !group->windowDrag && group->pointerDrag.threshold < 0 && group->pinch.minimum < 0 && !group->property("qsHover").toBool() &&
         !group->testAttribute(Qt::WA_SetCursor) && !group->testAttribute(Qt::WA_Hover) &&
         std::all_of(children.begin(), children.end(), [](QWidget *child) {
             return child->isHidden() || child->testAttribute(Qt::WA_TransparentForMouseEvents);
@@ -1720,7 +1776,7 @@ void qs_group_finish_layout(QSWidget w, int sizeToPositionedContent) {
     // the native event and accessibility target to the positioned content.
     QRect paint = group->sizedToContent ? QRect() : group->rect();
     for (auto *child : children) {
-        if (child->isHidden()) continue;
+        if (child->isHidden() || child->isWindow()) continue;
         QRect footprint = child->geometry();
         if (group->sizedToContent && child->graphicsEffect())
             footprint = child->graphicsEffect()->boundingRectFor(child->rect()).translated(child->pos()).toAlignedRect();
@@ -1730,7 +1786,7 @@ void qs_group_finish_layout(QSWidget w, int sizeToPositionedContent) {
     const QPoint offset = -paint.topLeft();
     group->layoutRect.translate(offset);
     group->setGeometry(QRect(group->pos() - offset, paint.size()));
-    for (auto *child : children) child->move(child->pos() + offset);
+    for (auto *child : children) if (!child->isWindow()) child->move(child->pos() + offset);
 }
 
 int qs_accessible_value_is(QSWindow *window, const char *name, const char *value) {
@@ -1863,6 +1919,23 @@ int qs_drag_pointer(QSWindow *window, int x1, int y1, int x2, int y2, int steps)
     for (int i = 1; i <= steps; ++i) send(QEvent::MouseMove, start + (end - start) * i / steps, i);
     send(QEvent::MouseButtonRelease, end, steps + 1);
     return 1;
+}
+int qs_open_context_menu(QSWindow *window, int x, int y, int keyboard) {
+    const QPoint point(x, y);
+    auto *target = keyboard ? window->focusWidget() : window->childAt(point);
+    if (!target) return 0;
+    const QPoint local = target->mapFrom(window, point), global = window->mapToGlobal(point);
+    if (!keyboard) {
+        // The offscreen platform does not synthesize a context request after the secondary click.
+        QMouseEvent press(QEvent::MouseButtonPress, local, global, Qt::RightButton, Qt::RightButton, Qt::NoModifier);
+        QApplication::sendEvent(target, &press);
+        QMouseEvent release(QEvent::MouseButtonRelease, local, global, Qt::RightButton, Qt::NoButton, Qt::NoModifier);
+        QApplication::sendEvent(target, &release);
+    }
+    QContextMenuEvent request(keyboard ? QContextMenuEvent::Keyboard : QContextMenuEvent::Mouse, local, global);
+    QApplication::sendEvent(target, &request);
+    qs_flush();
+    return qobject_cast<QMenu *>(QApplication::activePopupWidget()) != nullptr;
 }
 static QAction *popupItem(QSWindow *window, const char *title) {
     auto *menu = qobject_cast<QMenu *>(QApplication::activePopupWidget());

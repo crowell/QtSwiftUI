@@ -142,6 +142,8 @@ void qs_help(QSWidget, const char *text);
 unsigned qs_pixel(QSWindow *, int x, int y);
 void qs_plain_button(QSWidget, int);
 QSWidget qs_menu_begin(QSWidget button, int indicator);
+QSWidget qs_context_menu(QSWidget group);
+int qs_open_context_menu(QSWindow *, int x, int y, int keyboard);
 int qs_menu_indicator_width(QSWidget button);
 QSWidget qs_menu_item(QSWidget menu, int index, const char *title, int enabled, int checked, int separator, int submenu, int action);
 void qs_menu_finish(QSWidget menu, int count);

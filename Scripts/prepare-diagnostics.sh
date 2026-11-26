@@ -97,6 +97,28 @@ if [ ! -f "$photo" ]; then photo="$checkout/Packages/SignalUI/Tests/SignalUITest
 cp "$photo" "$target_dir/Media/cat-screenshot-3x4.png"
 lighthouse="$checkout/Signal-Desktop/fixtures/tina-rolf-269345-unsplash.jpg"
 if [ -f "$lighthouse" ]; then cp "$lighthouse" "$target_dir/Media/"; fi
+cp "$source_dir/Components/Stickers/StickerManager.swift" "$source_dir/Axo/AxoModalStack.swift" "$target_dir/"
+# Keep the pack preview's native clipboard operation on each desktop.
+awk '/^import AppKit$/ { print "#if os(Linux)\nimport QtBridge\n#else\nimport AppKit\n#endif"; next }
+     /NSPasteboard.general.clearContents/ { print "#if os(Linux)\n        qs_clipboard_text(Self.link(packId: pack.id, packKey: pack.key))\n#else" }
+     { print } /NSPasteboard.general.setString/ { print "#endif"; count++ }
+     END { if (count != 1) exit 1 }' "$source_dir/Components/Stickers/StickerPreviewModal.swift" > "$target_dir/StickerPreviewModal.swift"
+# The shared CSSText adapter shapes the two-line caption. Keep the actual stacked button and its two Layout types.
+awk '/^struct LineClampText:/ { found=1; exit }
+     /^import CoreText$/ {next}
+     /LineClampText\(label,/ {print "                    CSSText(label, style: CSSTextStyle(AxoType.caption.weight(500)), alignment: .center).lineLimit(2)"; count++; next}
+     {print} END {if (!found || count != 1) exit 1}' "$source_dir/Axo/AxoStackedButton.swift" > "$target_dir/AxoStackedButton.swift"
+{
+    echo 'import SwiftUI'
+    declarations '^public struct OfficialChatInlineBadge:' 1 "$source_dir/Components/ConversationList/BaseConversationListItem.swift"
+    echo 'extension StickerSamples {'
+    awk '/^    static func pack\(/ {found=1} /^    static var stories:/ {exit} found {print}
+         END {if (!found) exit 1}' "$checkout/Packages/SignalUI/Tests/SignalUITests/Components/Stickers/StickerManagerTests.swift"
+    echo '}'
+} > "$target_dir/StickerManagerSamples.swift"
+for cover in kitten-1-64-64.jpg kitten-2-64-64.jpg kitten-3-64-64.jpg; do
+    if [ -f "$checkout/Signal-Desktop/fixtures/$cover" ]; then cp "$checkout/Signal-Desktop/fixtures/$cover" "$target_dir/Media/"; fi
+done
 cp "$source_dir/Components/LightboxZoom.swift" "$target_dir/"
 # Assemble the photo viewer from the original screen. The live video branch uses
 # the app’s Metal and AVFAudio playback engine and is outside this photo fixture.

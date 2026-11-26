@@ -42,6 +42,27 @@ import QtBridge
     }
 }
 
+@MainActor final class MenuActions {
+    private var callbacks: [() -> Void] = []
+
+    func perform(_ value: String) {
+        if let index = Int(value), callbacks.indices.contains(index) { callbacks[index]() }
+    }
+
+    func configure<Items: View>(_ content: Items?, in context: Context, on popup: UnsafeMutableRawPointer) {
+        var items = context.descending(.property("menu content"))
+        // Resolve composite labels offscreen so their widgets do not participate in layout or hit testing.
+        let container = items.widget(QSGroup)
+        qs_drawing_only(container)
+        items.parent = container
+        items.environment.label = ""
+        items.environment.focus = nil
+        let entries = content.map { MenuEntries.read($0, in: items) } ?? MenuEntries()
+        callbacks.removeAll(keepingCapacity: true)
+        entries.install(on: popup, actions: &callbacks)
+    }
+}
+
 extension Button: MenuEntrySource {
     func collect(in context: Context, into entries: MenuEntries) {
         entries.rows.append(.init(title: MenuEntries.title(label, in: context), enabled: context.environment.isEnabled, action: action))
@@ -89,21 +110,11 @@ public struct Menu<Label: View, Content: View>: Primitive, MenuEntrySource {
             let configuration = MenuStyleConfiguration(label: .init(view: AnyView(label)), content: .init(view: AnyView(content)))
             return style(configuration).resolve(context.with(\.menuStyle, nil))
         }
-        var actions: [() -> Void] = []
+        let actions = MenuActions()
         let button = Button(action: {}) { label }
-        return button.buttonElements(in: context, kind: QSMenuButton) { raw in
-            if let index = Int(raw), actions.indices.contains(index) { actions[index]() }
-        } configure: { button in
-            var items = context.descending(.property("menu content"))
-            // Menu labels can be composed from arbitrary views. Keep their backing widgets outside the window layout.
-            let container = items.widget(QSGroup)
-            qs_drawing_only(container)
-            items.parent = container
-            items.environment.label = ""
-            items.environment.focus = nil
-            let rows = MenuEntries.read(content, in: items)
+        return button.buttonElements(in: context, kind: QSMenuButton, activate: actions.perform) { button in
             let popup = qs_menu_begin(button, context.environment.menuIndicator == .hidden ? 0 : 1)!
-            rows.install(on: popup, actions: &actions)
+            actions.configure(content, in: context, on: popup)
         }
     }
 }

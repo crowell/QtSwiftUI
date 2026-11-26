@@ -63,4 +63,5 @@ void qs_menu_finish(QSWidget handle, int count) {
     auto *menu = static_cast<QMenu *>(handle);
     auto items = menu->actions();
     while (items.size() > count) removeItem(menu, items.takeLast());
+    if (!count && menu->isVisible()) menu->hide();
 }
