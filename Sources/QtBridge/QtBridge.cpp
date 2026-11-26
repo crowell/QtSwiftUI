@@ -778,8 +778,12 @@ struct QSWindow final : QWidget {
             }
         }
         if (input->type() == QEvent::FocusIn || input->type() == QEvent::FocusOut) {
-            event(context, source->property("swiftId").toInt(), QSFocusChanged,
-                  input->type() == QEvent::FocusIn ? "1" : "0");
+            const auto reason = static_cast<QFocusEvent *>(input)->reason();
+            const char *value = "1";
+            if (input->type() == QEvent::FocusOut) value = "0";
+            else if (reason == Qt::MouseFocusReason) value = "mouse";
+            else if (reason == Qt::TabFocusReason || reason == Qt::BacktabFocusReason) value = "tab";
+            event(context, source->property("swiftId").toInt(), QSFocusChanged, value);
         }
         return false;
     }

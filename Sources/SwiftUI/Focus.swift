@@ -8,6 +8,7 @@ public struct FocusInteractions: OptionSet, Sendable {
 }
 
 struct FocusLink {
+    var target: FocusTarget
     var active: () -> Bool
     var change: (Bool) -> Void
 }
@@ -19,6 +20,7 @@ struct FocusLink {
             nonmutating set { state.wrappedValue = newValue }
         }
         public var projectedValue: Self { self }
+        func target(for value: Value) -> FocusTarget { FocusTarget(state: state.identity, value: AnyHashable(value)) }
     }
     private var state: State<Value>
     public init() where Value == Bool { state = State(wrappedValue: false) }
@@ -51,12 +53,12 @@ extension View {
         }
     }
     public func focused(_ condition: FocusState<Bool>.Binding) -> some View {
-        environment(\.focus, FocusLink(active: { condition.wrappedValue }, change: {
+        environment(\.focus, FocusLink(target: condition.target(for: true), active: { condition.wrappedValue }, change: {
             if condition.wrappedValue != $0 { condition.wrappedValue = $0 }
         }))
     }
     public func focused<T>(_ binding: FocusState<T?>.Binding, equals value: T) -> some View {
-        environment(\.focus, FocusLink(active: { binding.wrappedValue == value }, change: { active in
+        environment(\.focus, FocusLink(target: binding.target(for: value), active: { binding.wrappedValue == value }, change: { active in
             if active && binding.wrappedValue != value { binding.wrappedValue = value }
             if !active && binding.wrappedValue == value { binding.wrappedValue = nil }
         }))

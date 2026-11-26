@@ -17,6 +17,7 @@ enum Part: Hashable {
     var isScrollTargetLayout = false
     var scrollConfiguration = ScrollConfiguration()
     var collectingPickerLabels = false
+    var defaultFocusRegions: [DefaultFocusRegion] = []
     var menuEntries: MenuEntries?
     var windowValue: Binding<AnyHashable?>?
     var environment = EnvironmentValues()
@@ -88,8 +89,9 @@ enum Part: Hashable {
         else { host.drags[entry.id] = nil }
         if !host.isMeasuringAlternative { host.focusScopes.include(entry.widget, environment: environment) }
         let focus = environment.focus
+        if !host.isMeasuringAlternative { host.defaultFocus.include(id: entry.id, widget: entry.widget, regions: defaultFocusRegions, focus: focus) }
         let submit = environment.submit
-        host.events[entry.id] = { kind, value in
+        host.events[entry.id] = { [weak host] kind, value in
             switch kind {
             case QSActivate:
                 tap?(entry.widget)
@@ -98,7 +100,9 @@ enum Part: Hashable {
             case QSAccessibilityAction: accessibilityAction?(value)
             case QSIncrement: adjustment?(.increment)
             case QSDecrement: adjustment?(.decrement)
-            case QSFocusChanged: focus?.change(value == "1")
+            case QSFocusChanged:
+                if value != "0", let host, host.defaultFocus.entered(id: entry.id, reason: value) { host.update() }
+                focus?.change(value != "0")
             case QSSubmit: submit?()
             case QSMagnified: magnify?(qs_magnify_sample(entry.widget))
             case QSGestureCancelled: cancelGesture?()
@@ -168,6 +172,7 @@ enum Part: Hashable {
         nextDisappear[path] = action
     }
     let focusScopes = WindowFocusScopes()
+    let defaultFocus = WindowDefaultFocus()
     let keys = WindowKeyPresses()
     var transfers: [Int32: TransferAction] = [:]
     var drags: [Int32: (QSDragSample) -> Void] = [:]
@@ -262,6 +267,7 @@ enum Part: Hashable {
     func render(proposal: ProposedViewSize, viewport: CGSize?, scale: CGFloat) -> CGSize {
         frameTime = animationClock()
         transitions.begin()
+        defaultFocus.begin()
         focusScopes.begin()
         liveMounts.removeAll(keepingCapacity: true)
         liveStorage.removeAll(keepingCapacity: true)
@@ -283,7 +289,10 @@ enum Part: Hashable {
         let ended = disappear.filter { nextDisappear[$0.key] == nil }
         disappear = nextDisappear
         for action in ended.values { action() }
-        if viewport != nil { focusScopes.finish(window: window) }
+        if viewport != nil {
+            focusScopes.finish(window: window)
+            defaultFocus.finish(window: window)
+        }
         let pending = afterRender
         afterRender.removeAll(keepingCapacity: true)
         for action in pending { action() }
@@ -427,6 +436,7 @@ protocol MountedProperty: DynamicProperty {
         func attach(to host: Host) { lock.withLock { self.host = host } }
     }
     private var cell: Cell
+    var identity: ObjectIdentifier { ObjectIdentifier(cell) }
     public init(wrappedValue: Value) { cell = Cell(wrappedValue) }
     public init(initialValue: Value) { self.init(wrappedValue: initialValue) }
     public var wrappedValue: Value {
