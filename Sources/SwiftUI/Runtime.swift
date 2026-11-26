@@ -11,6 +11,7 @@ enum Part: Hashable {
     var path: [Part] = []
     var parent: UnsafeMutableRawPointer?
     var environment = EnvironmentValues()
+    var preferences: [ObjectIdentifier: any PreferenceScope] = [:]
     var animation: Animation?
     var spaces: [AnyHashable: NamedOrigin] = [:]
     var windowOffset: CGPoint {
@@ -97,6 +98,7 @@ enum Part: Hashable {
     private var disappear: [[Part]: () -> Void] = [:]
     private var nextDisappear: [[Part]: () -> Void] = [:]
     private var afterRender: [() -> Void] = []
+    func afterLayout(_ action: @escaping () -> Void) { afterRender.append(action) }
     func lifetime(at path: [Part], appear: @escaping () -> Void, disappear action: @escaping () -> Void) {
         if disappear[path] == nil && nextDisappear[path] == nil { afterRender.append(appear) }
         nextDisappear[path] = action

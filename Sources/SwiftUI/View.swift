@@ -48,7 +48,7 @@ public struct TupleView<T>: Primitive {
     public init(_ value: T) { self.value = value }
     func elements(in context: Context) -> [Element] {
         Mirror(reflecting: value).children.enumerated().flatMap { index, child in
-            (child.value as? any View)?.resolve(context.descending(.position(index))) ?? []
+            (child.value as? any View)?.resolve(context.descending(.position(index)).preferenceBranch()) ?? []
         }
     }
 }
@@ -93,6 +93,6 @@ public struct ForEach<Data: RandomAccessCollection, ID: Hashable, Content: View>
         self.init(data, id: \.self, content: content)
     }
     func elements(in context: Context) -> [Element] {
-        data.flatMap { item in content(item).resolve(context.descending(.id(AnyHashable(item[keyPath: key])))) }
+        data.flatMap { item in content(item).resolve(context.descending(.id(AnyHashable(item[keyPath: key]))).preferenceBranch()) }
     }
 }
