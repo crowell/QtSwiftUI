@@ -57,6 +57,13 @@ private struct SizeProbe: Layout {
         #endif
     }
 
+    func testMagnificationResolvesOriginalImagePixels() throws {
+        let photo = Image(decorative: try image(), scale: 1).resizable().interpolation(.none)
+            .frame(width: 1, height: 2).scaleEffect(x: 3, y: 1)
+        let points = (0..<2).flatMap { row in (0..<3).map { ($0, row) } }
+        XCTAssertEqual(try sample(photo, width: 3, height: 2, points: points), colors)
+    }
+
     func testPaddedRGBAInEveryImageOrientation() async throws {
         let cg = try image()
         let expected = [[0,1,2,3,4,5], [2,1,0,5,4,3], [5,4,3,2,1,0], [3,4,5,0,1,2],

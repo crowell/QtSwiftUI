@@ -64,8 +64,12 @@ void qs_raster_resize(QSWidget w, double left, double top, double right, double 
 }
 
 void RasterWidget::paintEvent(QPaintEvent *) {
-    if (image.isNull()) return;
     QPainter painter(this);
+    draw(painter);
+}
+
+void RasterWidget::draw(QPainter &painter) const {
+    if (image.isNull()) return;
     painter.translate(property("qsFraction").toPointF());
     painter.setRenderHint(QPainter::SmoothPixmapTransform, smooth);
     const auto size = property("qsSize").toSizeF();

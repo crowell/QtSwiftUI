@@ -1,6 +1,17 @@
 import QtBridge
 
 extension View {
+    nonisolated public func shadow(color: Color = Color(.sRGBLinear, white: 0, opacity: 0.33),
+                                   radius: CGFloat, x: CGFloat = 0, y: CGFloat = 0) -> some View {
+        Transform(content: self) { view, context in
+            let group = context.widget(QSGroup)
+            qs_view_shadow(group, color.argb(context.environment.colorScheme),
+                           context.interpolated(radius, key: "shadow radius"),
+                           context.interpolated(x, key: "shadow x"), context.interpolated(y, key: "shadow y"))
+            return context.children(of: view, inside: group)
+        }
+    }
+
     nonisolated public func blur(radius: CGFloat, opaque: Bool = false) -> some View {
         Transform(content: self) { view, ctx in
             let group = ctx.widget(QSGroup)

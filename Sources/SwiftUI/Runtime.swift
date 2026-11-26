@@ -69,6 +69,7 @@ enum Part: Hashable {
                 tap: ((UnsafeMutableRawPointer) -> Void)? = nil,
                 adjustment: ((AccessibilityAdjustmentDirection) -> Void)? = nil,
                 drag: ((QSDragSample, UnsafeMutableRawPointer) -> Void)? = nil,
+                magnify: ((QSMagnifySample) -> Void)? = nil,
                 accessibilityAction: ((String) -> Void)? = nil, cancelGesture: (() -> Void)? = nil, hover: ((Bool) -> Void)? = nil,
                 continuousHover: ((UnsafeMutableRawPointer, Bool) -> Void)? = nil, action: ((String) -> Void)? = nil) -> UnsafeMutableRawPointer {
         let entry = host.mount(path: path + [.widget(kind.rawValue)], kind: kind, parent: parent)
@@ -87,6 +88,7 @@ enum Part: Hashable {
             case QSDecrement: adjustment?(.decrement)
             case QSFocusChanged: focus?.change(value == "1")
             case QSSubmit: submit?()
+            case QSMagnified: magnify?(qs_magnify_sample(entry.widget))
             case QSGestureCancelled: cancelGesture?()
             case QSExitCommand: exitCommand?()
             case QSHoverChanged: hover?(value == "1")
@@ -230,6 +232,7 @@ enum Part: Hashable {
         default: context.environment.scenePhase = .background
         }
         context.environment.displayScale = qs_window_scale(window)
+        context.environment.accessibilityReduceMotion = qs_reduce_motion(window) != 0
         context.environment.closePresentation = { [weak self] in
             if let window = self?.window { qs_request_close(window) }
         }

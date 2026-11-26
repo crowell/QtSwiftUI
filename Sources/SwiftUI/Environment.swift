@@ -51,6 +51,7 @@ public struct EnvironmentValues {
     public var verticalScrollIndicatorVisibility = ScrollIndicatorVisibility.automatic
     public var horizontalScrollIndicatorVisibility = ScrollIndicatorVisibility.automatic
     var selectableText = false
+    public internal(set) var accessibilityReduceMotion = false
     public var displayScale: CGFloat = 1
     var tracking: CGFloat = 0
     var foregroundPaint = ResolvedPaint.color(.primary)

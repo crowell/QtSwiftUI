@@ -22,14 +22,16 @@ struct DiagnosticPreview: App {
         let survey = CommandLine.arguments.contains("--call-survey")
         let colorPicker = CommandLine.arguments.contains("--color-picker")
         let colorEditor = CommandLine.arguments.contains("--color-editor")
+        let photoViewer = CommandLine.arguments.contains("--lightbox")
         let populatedGallery = CommandLine.arguments.contains("--gallery-media")
         let gallery = populatedGallery || CommandLine.arguments.contains("--gallery")
         let draft = CommandLine.arguments.contains("--recording-draft")
         let recording = CommandLine.arguments.contains("--recording")
         let discard = CommandLine.arguments.contains("--discard-recording")
         let arabic = CommandLine.arguments.contains("--arabic")
-        WindowGroup(callsTab ? "Calls" : inbox ? "Inbox" : appAbout ? "About" : about ? "About contact" : note ? "Contact note" : request ? "Request to join" : linkDetails ? "Call link" : nickname ? "Edit nickname and note" : history ? "Call history" : settings ? (calls ? "Calls" : "Data usage") : survey ? "Call quality" : colorPicker ? "Chat color" : colorEditor ? "Custom chat color" : recording || draft || discard ? "Voice message" : gallery ? "All media" : clearing ? "Clearing data" : linking ? "Link device" : leaveCall ? "Leave current call" : "Call diagnostics") {
-            if callsTab { CallsTabPreview() }
+        WindowGroup(photoViewer ? "Photo" : callsTab ? "Calls" : inbox ? "Inbox" : appAbout ? "About" : about ? "About contact" : note ? "Contact note" : request ? "Request to join" : linkDetails ? "Call link" : nickname ? "Edit nickname and note" : history ? "Call history" : settings ? (calls ? "Calls" : "Data usage") : survey ? "Call quality" : colorPicker ? "Chat color" : colorEditor ? "Custom chat color" : recording || draft || discard ? "Voice message" : gallery ? "All media" : clearing ? "Clearing data" : linking ? "Link device" : leaveCall ? "Leave current call" : "Call diagnostics") {
+            if photoViewer { PhotoPreview() }
+            else if callsTab { CallsTabPreview() }
             else if inbox { InboxPreview() }
             else if request || about || note { ContactFlowPreview(model: .init(start: request ? .request : about ? .about : .note)) }
             else if appAbout { AppAboutPreview() }
@@ -53,8 +55,8 @@ struct DiagnosticPreview: App {
             else if leaveCall { LeaveCallPreview() }
             else { DiagnosticContent() }
         }
-        .defaultSize(width: callsTab ? 760 : inbox ? 840 : linkDetails ? 620 : nickname ? 520 : history ? 360 : settings ? 640 : colorPicker ? 780 : recording || draft ? 640 : linking || clearing ? 680 : 520,
-                     height: callsTab || inbox ? 520 : about ? 620 : note ? 380 : request ? 510 : linkDetails ? 620 : nickname ? 560 : history ? 418 : settings ? 567 : survey ? 600 : colorPicker ? 720 : colorEditor ? 620 : recording || draft ? 84 : discard ? 280 : linking || clearing ? 420 : 440)
+        .defaultSize(width: photoViewer ? 760 : callsTab ? 760 : inbox ? 840 : linkDetails ? 620 : nickname ? 520 : history ? 360 : settings ? 640 : colorPicker ? 780 : recording || draft ? 640 : linking || clearing ? 680 : 520,
+                     height: photoViewer ? 560 : callsTab || inbox ? 520 : about ? 620 : note ? 380 : request ? 510 : linkDetails ? 620 : nickname ? 560 : history ? 418 : settings ? 567 : survey ? 600 : colorPicker ? 720 : colorEditor ? 620 : recording || draft ? 84 : discard ? 280 : linking || clearing ? 420 : 440)
     }
 }
 
@@ -131,19 +133,22 @@ struct RecordingPreview: View {
 struct GalleryPreview: View {
     var populated = false
     @State private var attachments = GalleryMediaSample.attachments
-    @State private var opened: RGBAImage?
+    @State private var opened: PhotoPreviewModel?
     @State private var tab: MediaGalleryTab = .media
     @State private var order: MediaSortOrder = .date
     @Environment(\.dismiss) var dismiss
     var body: some View {
         if let opened {
-            ConversationPanel(onBack: { self.opened = nil }) { EmptyView() } content: {
-                PixelImage(opened, fit: .contain)
-            }
+            PhotoPreview(model: opened, close: { self.opened = nil })
         } else {
             GalleryPanel(tab: $tab, order: $order, onBack: { dismiss() }, attachments: populated ? attachments : []) { index in
                 switch attachments[index].status {
-                case .readyToShow: opened = attachments[index].image
+                case .readyToShow:
+                    let available = attachments.indices.filter { attachments[$0].image != nil }
+                    if let selected = available.firstIndex(of: index) {
+                        let media = available.map { LightboxMediaItem(kind: .image, image: attachments[$0].image, thumbnail: attachments[$0].image) }
+                        opened = PhotoPreviewModel(media: media, selected: selected)
+                    }
                 case .needsDownload, .downloading: attachments[index].pending.toggle()
                 }
             }

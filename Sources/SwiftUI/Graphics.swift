@@ -47,7 +47,9 @@ public struct Color: ShapeStyle, Primitive, Hashable, Sendable {
         let rgba = byte(opacity) << 24 | byte(r) << 16 | byte(g) << 8 | byte(b)
         self.init(light: rgba, dark: rgba)
     }
-    public nonisolated init(white: Double, opacity: Double = 1) { self.init(red: white, green: white, blue: white, opacity: opacity) }
+    public nonisolated init(_ colorSpace: RGBColorSpace = .sRGB, white: Double, opacity: Double = 1) {
+        self.init(colorSpace, red: white, green: white, blue: white, opacity: opacity)
+    }
     public nonisolated func opacity(_ opacity: Double) -> Color {
         func faded(_ argb: UInt32) -> UInt32 {
             UInt32((Double(argb >> 24) * min(1, max(0, opacity))).rounded()) << 24 | (argb & 0xffffff)

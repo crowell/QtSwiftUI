@@ -11,6 +11,7 @@ public:
     double scale = 1;
     bool tile = false;
     bool smooth = true;
+    void draw(QPainter &painter) const;
 protected:
     void paintEvent(QPaintEvent *) override;
 };

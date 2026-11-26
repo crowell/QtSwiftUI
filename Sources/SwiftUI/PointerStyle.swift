@@ -8,6 +8,8 @@ public struct PointerStyle: Sendable {
     public static let grabIdle = Self(cursor: QSPointerOpenHand)
     public static let grabActive = Self(cursor: QSPointerClosedHand)
     public static let link = Self(cursor: QSPointerLink)
+    public static let zoomIn = Self(cursor: QSPointerZoomIn)
+    public static let zoomOut = Self(cursor: QSPointerZoomOut)
     public static let columnResize = Self(cursor: QSPointerColumn)
     public static let rowResize = Self(cursor: QSPointerRow)
 }

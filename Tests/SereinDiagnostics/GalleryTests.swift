@@ -73,7 +73,7 @@ final class GalleryTests: XCTestCase {
             XCTAssertEqual(qs_click_named_button(host.window, strings("icu:cancelDownload")), 1)
             XCTAssertEqual(qs_click_named_button(host.window, strings("icu:imageOpenAlt")), 1)
             XCTAssertEqual(qs_read_text(host.window, nil, "Today"), 0)
-            XCTAssertEqual(qs_click_named_button(host.window, strings("icu:goBack")), 1)
+            XCTAssertEqual(qs_click_named_button(host.window, strings("icu:close")), 1)
             XCTAssertEqual(qs_read_text(host.window, nil, "Today"), 1)
             XCTAssertEqual(qs_click_named_button(host.window, strings("icu:MediaGallery__sort")), 1)
             XCTAssertEqual(qs_click_point(host.window, Int32(width-100), 123), 1)

@@ -85,6 +85,22 @@ mkdir -p "$target_dir/Media"
 photo="$checkout/Signal-Desktop/fixtures/cat-screenshot-3x4.png"
 if [ ! -f "$photo" ]; then photo="$checkout/Packages/SignalUI/Tests/SignalUITests/Fixtures/cat-gif-frame0.png"; fi
 cp "$photo" "$target_dir/Media/cat-screenshot-3x4.png"
+lighthouse="$checkout/Signal-Desktop/fixtures/tina-rolf-269345-unsplash.jpg"
+if [ -f "$lighthouse" ]; then cp "$lighthouse" "$target_dir/Media/"; fi
+cp "$source_dir/Components/LightboxZoom.swift" "$target_dir/"
+# Assemble the photo viewer from the original screen. The live video branch uses
+# the app’s Metal and AVFAudio playback engine and is outside this photo fixture.
+awk '
+    /^\/\/\/ Chromium.s native media controls/ {exit}
+    /public var player: VideoPlaybackEngine/ || /self.player = player/ {next}
+    {sub(/, player: VideoPlaybackEngine\? = nil/, "")}
+    /^            case \.video:$/ {video=1; next}
+    video && /^            case \.unsupportedImage:/ {print "            case .video: unsupported(\"movie\", label: i18n(\"icu:unsupportedAttachment\"))"; video=0; branches++}
+    /if isViewOnce, current\?\.kind == \.video, let player/ {time=1; next}
+    time && /^            }/ {time=0; timers++; next}
+    !video && !time {print}
+    END {if (branches!=1 || timers!=1) exit 1}
+' "$source_dir/Components/Lightbox.swift" > "$target_dir/Lightbox.swift"
 # Serein observes AppKit's app-deactivation notification to save the recording draft.
 # The Linux scene supplies the same transition from Qt window and application events.
 awk '/^public struct CompositionRecording: View/ { print; print "#if os(Linux)\n    @Environment(\\.scenePhase) var phase\n#endif"; next }
@@ -260,7 +276,7 @@ import PackageDescription
 var packages: [Package.Dependency] = [.package(path: "SignalI18n"), .package(path: "SignalText"), .package(path: "SignalCodecs")]
 var dependencies: [Target.Dependency] = [.product(name: "SignalI18n", package: "SignalI18n"),
     .product(name: "SignalText", package: "SignalText"), .product(name: "CodecCore", package: "SignalCodecs"), .product(name: "ImagePNG", package: "SignalCodecs"),
-    .product(name: "ImageBMP", package: "SignalCodecs")]
+    .product(name: "ImageBMP", package: "SignalCodecs"), .product(name: "ImageJPEG", package: "SignalCodecs")]
 #if os(Linux)
 packages.append(.package(name: "QtSwiftUI", path: "/src"))
 dependencies.append(.product(name: "SwiftUI", package: "QtSwiftUI"))

@@ -381,12 +381,22 @@ public struct ZStack<Content: View>: Primitive {
         let children = content.resolve(context)
         if children.count == 1 { return children }
         func extents(_ p: ProposedViewSize) -> CGRect {
-            children.reduce(CGRect.null) { extent, child in
+            var extent = CGRect.null
+            var unboundedWidth = false, unboundedHeight = false
+            for child in children {
                 let size = child.measure(p)
-                let origin = CGPoint(x: -child.coordinate(alignment.horizontal.key, p, size),
-                                     y: -child.coordinate(alignment.vertical.key, p, size))
-                return extent.union(CGRect(origin: origin, size: size))
+                // Alignment on an infinite axis can give an origin of -infinity.
+                // Union only finite intervals and preserve unbounded axes for the parent’s sizing probe.
+                unboundedWidth = unboundedWidth || size.width.isInfinite
+                unboundedHeight = unboundedHeight || size.height.isInfinite
+                let x = size.width.isInfinite ? 0 : -child.coordinate(alignment.horizontal.key, p, size)
+                let y = size.height.isInfinite ? 0 : -child.coordinate(alignment.vertical.key, p, size)
+                extent = extent.union(CGRect(x: x, y: y, width: size.width.isInfinite ? 0 : size.width,
+                                             height: size.height.isInfinite ? 0 : size.height))
             }
+            if unboundedWidth { extent.size.width = .infinity }
+            if unboundedHeight { extent.size.height = .infinity }
+            return extent
         }
         func placements(_ bounds: CGRect, _ p: ProposedViewSize) -> [Placement] {
             let extent = extents(p)

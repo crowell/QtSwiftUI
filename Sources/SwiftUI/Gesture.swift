@@ -34,6 +34,8 @@ struct Recognizer {
     var movesWindow = false
     var dragDistance: CGFloat?
     var drag: ((QSDragSample, Context, UnsafeMutableRawPointer) -> Void)?
+    var magnifyDelta: CGFloat?
+    var magnify: ((QSMagnifySample) -> Void)?
     var reset: (() -> Void)?
     var ended: () -> Void
 }
@@ -119,10 +121,13 @@ extension View {
                                    drag: recognizer?.drag.map { callback in { sample, widget in
                                        callback(sample, ctx, widget)
                                        if sample.ended != 0 { reset?() }
+                                   } }, magnify: recognizer?.magnify.map { callback in { sample in
+                                       callback(sample)
+                                       if sample.ended != 0 { reset?() }
                                    } }, cancelGesture: reset,
                                    action: { _ in recognizer?.ended(); reset?() })
             qs_group_gesture(group, Int32(clamping: recognizer?.taps ?? 0), recognizer?.movesWindow == true ? 1 : 0,
-                             simultaneous ? 1 : 0, recognizer?.dragDistance ?? -1, Int32(recognizer?.inputs.rawValue ?? 0))
+                             simultaneous ? 1 : 0, recognizer?.dragDistance ?? -1, recognizer?.magnifyDelta ?? -1, Int32(recognizer?.inputs.rawValue ?? 0))
             return inner.children(of: view, inside: group)
         }
     }

@@ -2,10 +2,15 @@
 #include "AlphaMask.hpp"
 #include "BusyIndicator.hpp"
 #include "ViewBlur.hpp"
+#include "ViewShadow.hpp"
 #include "ScrollInput.hpp"
 #include "AttributedLabel.hpp"
 #include "CanvasBlur.hpp"
 #include "PointerDrag.hpp"
+#include "Magnification.hpp"
+#include <QGestureEvent>
+#include <QNativeGestureEvent>
+#include <QPixmapCache>
 #include "PlainTextEditor.hpp"
 #include <QClipboard>
 #include "WindowShortcuts.hpp"
@@ -102,6 +107,8 @@ public:
     bool windowDrag = false, trackingDrag = false, simultaneous = false;
     QPointF dragOrigin;
     PointerDrag pointerDrag;
+    Magnification pinch;
+    bool directInteraction = false;
     int gestureInputs = 127;
     qint64 gestureDevice = -1;
     bool isImage = false;
@@ -315,15 +322,43 @@ public:
     QRectF boundingRectFor(const QRectF &source) const override { return matrix(source).mapRect(source); }
 protected:
     void draw(QPainter *painter) override {
-        QPoint offset;
-        const auto source = sourcePixmap(Qt::LogicalCoordinates, &offset, NoPad);
+        auto *root = static_cast<QWidget *>(parent());
+        QRect clip = root->rect();
+        auto *image = singleRaster(root, clip);
         painter->save();
-        painter->setRenderHint(QPainter::SmoothPixmapTransform);
         painter->setTransform(matrix(sourceBoundingRect(Qt::LogicalCoordinates)), true);
-        painter->drawPixmap(offset, source);
+        if (image) {
+            // Scaling a widget-sized pixmap discards image detail before magnification.
+            painter->setClipRect(clip, Qt::IntersectClip);
+            painter->translate(image->mapTo(root, QPoint()));
+            image->draw(*painter);
+        } else {
+            QPoint offset;
+            const auto source = sourcePixmap(Qt::LogicalCoordinates, &offset, NoPad);
+            painter->setRenderHint(QPainter::SmoothPixmapTransform);
+            painter->drawPixmap(offset, source);
+        }
         painter->restore();
     }
 private:
+    static RasterWidget *singleRaster(QWidget *root, QRect &clip) {
+        QWidget *node = root;
+        while (auto *group = dynamic_cast<GroupWidget *>(node)) {
+            if (group->autoFillBackground() || group->testAttribute(Qt::WA_StyledBackground) ||
+                (group->hasFocus() && group->property("qsFocusable").toBool())) return nullptr;
+            QWidget *only = nullptr;
+            for (auto *object : group->children()) {
+                auto *child = qobject_cast<QWidget *>(object);
+                if (!child || child->isHidden()) continue;
+                if (only || child->graphicsEffect() || !child->mask().isEmpty()) return nullptr;
+                only = child;
+            }
+            if (!only) return nullptr;
+            clip &= QRect(only->mapTo(root, QPoint()), only->size());
+            node = only;
+        }
+        return dynamic_cast<RasterWidget *>(node);
+    }
     double degrees = 0;
     QPointF scale{1, 1};
     QPointF anchor;
@@ -492,6 +527,13 @@ struct QSWindow final : QWidget {
             event(context, source->property("swiftId").toInt(), QSHoverChanged, input->type() == QEvent::Enter ? "1" : "0");
         }
         auto *group = dynamic_cast<GroupWidget *>(source);
+        if (group && group->pinch.minimum >= 0 && group->isEnabled()) {
+            if (input->type() == QEvent::NativeGesture && nativePinch(group, static_cast<QNativeGestureEvent *>(input))) {
+                input->accept();
+                return true;
+            }
+            if (input->type() == QEvent::Gesture && touchPinch(group, static_cast<QGestureEvent *>(input))) return true;
+        }
         if (group && group->testAttribute(Qt::WA_Hover) &&
             (input->type() == QEvent::HoverEnter || input->type() == QEvent::HoverMove || input->type() == QEvent::HoverLeave)) {
             std::optional<QPointF> point;
@@ -552,6 +594,41 @@ struct QSWindow final : QWidget {
                   input->type() == QEvent::FocusIn ? "1" : "0");
         }
         return false;
+    }
+    void magnified(GroupWidget *group, double factor, QPointF local, quint64 tick, bool ended) {
+        const auto bounds = group->layoutRect;
+        if (group->pinch.update(factor, local - bounds.topLeft(), bounds.size(), tick, ended))
+            event(context, group->property("swiftId").toInt(), QSMagnified, "");
+    }
+    bool nativePinch(GroupWidget *group, QNativeGestureEvent *input) {
+        const int kind = input->pointingDevice()->type() == QInputDevice::DeviceType::TouchScreen ? 1 : 2;
+        if (!(group->gestureInputs & kind)) return false;
+        const auto type = input->gestureType();
+        const auto tick = input->timestamp() ? input->timestamp() : Magnification::now();
+        auto &pinch = group->pinch;
+        if (type == Qt::BeginNativeGesture) { pinch.begin(tick); return true; }
+        if (type != Qt::ZoomNativeGesture && type != Qt::EndNativeGesture) return false;
+        if (!pinch.tracking) {
+            if (type == Qt::EndNativeGesture) return false;
+            pinch.begin(tick);
+        }
+        const double next = type == Qt::ZoomNativeGesture ? pinch.factor * (1 + input->value()) : pinch.factor;
+        magnified(group, next, group->mapFrom(this, input->scenePosition()), tick, type == Qt::EndNativeGesture);
+        return true;
+    }
+    bool touchPinch(GroupWidget *group, QGestureEvent *input) {
+        auto *gesture = static_cast<QPinchGesture *>(input->gesture(Qt::PinchGesture));
+        if (!gesture || !(group->gestureInputs & 1)) return false;
+        const auto state = gesture->state();
+        if (state == Qt::GestureCanceled) {
+            cancelGesture(group);
+        } else {
+            const auto tick = Magnification::now();
+            if (state == Qt::GestureStarted) group->pinch.begin(tick);
+            magnified(group, gesture->totalScaleFactor(), group->mapFromGlobal(gesture->centerPoint()), tick, state == Qt::GestureFinished);
+        }
+        input->accept(gesture);
+        return true;
     }
     bool recognize(GroupWidget *group, QMouseEvent *mouse) {
         if (!group->tapCount && !group->windowDrag && group->pointerDrag.threshold < 0) return false;
@@ -624,7 +701,8 @@ struct QSWindow final : QWidget {
         return true;
     }
     void cancelGesture(GroupWidget *group) {
-        const bool active = group->pointerDrag.tracking && group->pointerDrag.recognized;
+        const bool active = (group->pointerDrag.tracking && group->pointerDrag.recognized) || (group->pinch.tracking && group->pinch.recognized);
+        group->pinch.tracking = false;
         group->cancelPointer();
         if (active) event(context, group->property("swiftId").toInt(), QSGestureCancelled, "");
     }
@@ -744,18 +822,31 @@ void qs_minimize(QSWindow *window, int minimized) {
     else { window->showNormal(); window->activateWindow(); }
     qs_flush();
 }
+int qs_reduce_motion(QSWindow *window) {
+    return window->style()->styleHint(QStyle::SH_Widget_Animation_Duration, nullptr, window) == 0 ||
+           !QApplication::isEffectEnabled(Qt::UI_General);
+}
 double qs_window_scale(QSWindow *window) { return window->devicePixelRatioF(); }
 void qs_set_key_handler(QSWindow *window, QSKeyHandler handler) { window->keyHandler = handler; }
 void qs_set_drag_handler(QSWindow *window, QSDragHandler handler) { window->dragHandler = handler; }
-void qs_group_gesture(QSWidget w, int taps, int drag, int simultaneous, double dragDistance, int inputs) {
+void qs_group_gesture(QSWidget w, int taps, int drag, int simultaneous, double dragDistance, double magnifyDelta, int inputs) {
     auto *group = static_cast<GroupWidget *>(w);
     group->tapCount = taps;
     group->windowDrag = drag;
     group->simultaneous = simultaneous;
+    const bool touch = magnifyDelta >= 0 && (inputs & 1);
+    if (touch != (group->pinch.minimum >= 0 && (group->gestureInputs & 1))) {
+        if (touch) group->grabGesture(Qt::PinchGesture);
+        else group->ungrabGesture(Qt::PinchGesture);
+    }
+    group->pinch.minimum = magnifyDelta;
+    if (magnifyDelta < 0) group->pinch.tracking = false;
     group->gestureInputs = inputs;
+    group->setAttribute(Qt::WA_AcceptTouchEvents, touch || group->directInteraction);
     group->pointerDrag.threshold = dragDistance;
     if (dragDistance < 0) group->pointerDrag.tracking = false;
 }
+QSMagnifySample qs_magnify_sample(QSWidget w) { return static_cast<GroupWidget *>(w)->pinch.sample; }
 void qs_close(QSWindow *window) {
     delete window;
     if (--liveWindows == 0) {
@@ -1186,9 +1277,36 @@ void qs_canvas_gradient(QSWidget w, double x1, double y1, double x2, double y2, 
 }
 void qs_direction(QSWidget w, int rtl) { widget(w)->setLayoutDirection(rtl ? Qt::RightToLeft : Qt::LeftToRight); }
 void qs_direct_touch(QSWidget w, int enabled) {
-    widget(w)->setAttribute(Qt::WA_AcceptTouchEvents, enabled);
+    auto *group = static_cast<GroupWidget *>(w);
+    group->directInteraction = enabled;
+    group->setAttribute(Qt::WA_AcceptTouchEvents, enabled || (group->pinch.minimum >= 0 && (group->gestureInputs & 1)));
 }
-static Qt::CursorShape cursorShape(QSPointer style) {
+// Qt 6.4 has no standard zoom cursors. Cache a high-contrast glyph at the window's display scale.
+static QCursor zoomCursor(bool zoomIn, qreal scale) {
+    const QString key = QStringLiteral("qtswiftui-zoom-%1-%2").arg(zoomIn).arg(scale);
+    QPixmap pixmap;
+    if (!QPixmapCache::find(key, &pixmap)) {
+        pixmap = QPixmap(qCeil(24 * scale), qCeil(24 * scale));
+        pixmap.setDevicePixelRatio(scale);
+        pixmap.fill(Qt::transparent);
+        QPainter painter(&pixmap);
+        painter.setRenderHint(QPainter::Antialiasing);
+        QPainterPath glass;
+        glass.addEllipse(QPointF(9, 9), 6.5, 6.5);
+        glass.moveTo(14, 14);
+        glass.lineTo(21, 21);
+        glass.moveTo(6.5, 9);
+        glass.lineTo(11.5, 9);
+        if (zoomIn) { glass.moveTo(9, 6.5); glass.lineTo(9, 11.5); }
+        painter.strokePath(glass, QPen(Qt::white, 4, Qt::SolidLine, Qt::RoundCap));
+        painter.strokePath(glass, QPen(Qt::black, 1.5, Qt::SolidLine, Qt::RoundCap));
+        painter.end();
+        QPixmapCache::insert(key, pixmap);
+    }
+    return QCursor(pixmap, 9, 9);
+}
+
+static QCursor pointerCursor(QSPointer style, qreal scale) {
     switch (style) {
     case QSPointerAutomatic: return Qt::ArrowCursor;
     case QSPointerArrow: return Qt::ArrowCursor;
@@ -1199,16 +1317,22 @@ static Qt::CursorShape cursorShape(QSPointer style) {
     case QSPointerLink: return Qt::PointingHandCursor;
     case QSPointerColumn: return Qt::SplitHCursor;
     case QSPointerRow: return Qt::SplitVCursor;
+    case QSPointerZoomIn: case QSPointerZoomOut: return zoomCursor(style == QSPointerZoomIn, scale);
     }
     return Qt::ArrowCursor;
 }
 void qs_pointer_style(QSWidget w, QSPointer style) {
     if (style == QSPointerAutomatic) widget(w)->unsetCursor();
-    else widget(w)->setCursor(cursorShape(style));
+    else widget(w)->setCursor(pointerCursor(style, widget(w)->devicePixelRatioF()));
 }
 int qs_has_pointer_style(QSWindow *window, int x, int y, QSPointer style) {
     auto *target = window->childAt(QPoint(x, y));
-    return target && target->cursor().shape() == cursorShape(style);
+    if (!target) return 0;
+    const auto expected = pointerCursor(style, target->devicePixelRatioF());
+    const auto actual = target->cursor();
+    if (actual.shape() != expected.shape()) return 0;
+    return expected.shape() != Qt::BitmapCursor || (actual.hotSpot() == expected.hotSpot() &&
+        actual.pixmap().toImage() == expected.pixmap().toImage());
 }
 int qs_direct_adjust(QSWindow *window, const char *value, int increment) {
     for (auto *target : window->findChildren<QWidget *>()) {
@@ -1335,6 +1459,16 @@ void qs_drawing_only(QSWidget w) {
     auto *item = widget(w);
     item->setProperty("qsDrawingOnly", true);
     item->hide();
+}
+void qs_view_shadow(QSWidget w, unsigned argb, double radius, double x, double y) {
+    auto *item = widget(w);
+    if (!qAlpha(argb) || !std::isfinite(radius) || !std::isfinite(x) || !std::isfinite(y)) {
+        if (item->graphicsEffect()) item->setGraphicsEffect(nullptr);
+        return;
+    }
+    auto *effect = dynamic_cast<ViewShadow *>(item->graphicsEffect());
+    if (!effect) { effect = new ViewShadow; item->setGraphicsEffect(effect); }
+    effect->configure(QColor::fromRgba(argb), qMax(0.0, radius), QPointF(x, y));
 }
 void qs_view_blur(QSWidget w, double radius, int opaque) {
     auto *item = widget(w);
@@ -1508,7 +1642,7 @@ void qs_group_finish_layout(QSWidget w, int sizeToPositionedContent) {
     group->sizedToContent = sizeToPositionedContent && !group->graphicsEffect() && !group->contentShape;
     // A frame around paint-only descendants must leave the controls underneath reachable.
     const auto children = group->findChildren<QWidget *>(QString(), Qt::FindDirectChildrenOnly);
-    if (!group->tapCount && !group->windowDrag && group->pointerDrag.threshold < 0 && !group->property("qsHover").toBool() &&
+    if (!group->tapCount && !group->windowDrag && group->pointerDrag.threshold < 0 && group->pinch.minimum < 0 && !group->property("qsHover").toBool() &&
         !group->testAttribute(Qt::WA_SetCursor) && !group->testAttribute(Qt::WA_Hover) &&
         std::all_of(children.begin(), children.end(), [](QWidget *child) {
             return child->isHidden() || child->testAttribute(Qt::WA_TransparentForMouseEvents);
@@ -1721,6 +1855,16 @@ int qs_mouse_button(QSWindow *window, const char *id, int down) {
 }
 int qs_mouse_click(QSWindow *window, const char *id) {
     return qs_mouse_button(window, id, 1) && qs_mouse_button(window, id, 0);
+}
+void qs_native_pinch(QSWindow *window, int phase, double x, double y, double delta, unsigned long timestamp) {
+    const QPointF point(x, y);
+    auto type = phase == 0 ? Qt::BeginNativeGesture : phase == 1 ? Qt::ZoomNativeGesture : Qt::EndNativeGesture;
+    static const QPointingDevice pad("Test touchpad", 46, QInputDevice::DeviceType::TouchPad, QPointingDevice::PointerType::Finger,
+                                     QInputDevice::Capability::Position, 5, 1);
+    QNativeGestureEvent input(type, &pad, 2, point, point, window->mapToGlobal(point), delta, {});
+    input.setTimestamp(timestamp);
+    QApplication::sendEvent(window->windowHandle(), &input);
+    qs_flush();
 }
 void qs_move_pointer(QSWindow *window, double x, double y) {
     const QPointF local(x, y);
