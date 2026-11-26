@@ -81,9 +81,7 @@ extension InsettableShape {
         inset(by: style.lineWidth / 2).stroke(content, style: style, antialiased: antialiased)
     }
     public func strokeBorder(style: StrokeStyle, antialiased: Bool = true) -> some View {
-        Canvas { context, size in
-            let outline = inset(by: style.lineWidth / 2).path(in: CGRect(origin: .zero, size: size)).strokedPath(style)
-            context.fill(outline, with: .color(context.environment.foreground), style: FillStyle(antialiased: antialiased))
-        }
+        FilledShape(shape: inset(by: style.lineWidth / 2).stroke(style: style), style: nil as Color?,
+                    fill: FillStyle(antialiased: antialiased))
     }
 }

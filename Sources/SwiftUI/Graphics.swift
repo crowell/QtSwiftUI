@@ -179,7 +179,7 @@ public protocol InsettableShape: Shape {
     associatedtype InsetShape: InsettableShape
     nonisolated func inset(by amount: CGFloat) -> InsetShape
 }
-public protocol Shape: View, Sendable {
+public nonisolated protocol Shape: View, Sendable, Animatable {
     nonisolated func path(in rect: CGRect) -> Path
 }
 protocol AnimatedShape: Shape {
@@ -187,14 +187,18 @@ protocol AnimatedShape: Shape {
 }
 extension Shape {
     @MainActor func path(in rect: CGRect, context: Context) -> Path {
-        (self as? any AnimatedShape)?.renderedPath(in: rect, context: context) ?? path(in: rect)
+        if let shape = self as? any AnimatedShape { return shape.renderedPath(in: rect, context: context) }
+        if AnimatableData.self == EmptyAnimatableData.self { return path(in: rect) }
+        var shape = self
+        shape.animatableData = context.interpolated(animatableData, key: "shape data")
+        return shape.path(in: rect)
     }
     public var body: some View { FilledShape(shape: self, style: nil as Color?) }
     public func fill<S: ShapeStyle>(_ content: S, style: FillStyle = FillStyle()) -> some View {
         FilledShape(shape: self, style: content, fill: style)
     }
 }
-private struct FilledShape<S: Shape, Style: ShapeStyle>: Primitive {
+struct FilledShape<S: Shape, Style: ShapeStyle>: Primitive {
     let shape: S, style: Style?
     var fill = FillStyle()
     func elements(in context: Context) -> [Element] {

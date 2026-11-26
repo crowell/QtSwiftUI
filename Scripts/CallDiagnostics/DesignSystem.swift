@@ -31,7 +31,7 @@ enum AxoFonts {
 }
 
 extension View {
-    func cssTextColor(_ color: AxoColor) -> some View { foregroundStyle(color) }
+    func cssTextColor(_ color: AxoColor) -> some View { environment(\.cssTextColor, color).foregroundStyle(color) }
 }
 
 public struct CSSTextRun {
@@ -43,6 +43,7 @@ struct CSSTextStyle {
     init(_ type: AxoType) { self.type = type }
 }
 extension EnvironmentValues {
+    @Entry var cssTextColor: AxoColor = .labelPrimary
     @Entry var cssTextWrapWidth: CGFloat? = nil
     @Entry var axoInheritedTextSize: (size: CGFloat, lineHeight: CGFloat) = (14, 20)
 }

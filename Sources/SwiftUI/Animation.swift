@@ -34,16 +34,16 @@ public struct Animation: Equatable, Sendable {
     }
 }
 
-private final class AnimatedValue {
-    var from: Double, to: Double
+private final class AnimatedValue<Value: VectorArithmetic> {
+    var from: Value, to: Value
     var start: TimeInterval = 0
     var animation: Animation?
-    init(_ value: Double) { from = value; to = value }
-    func sample(at time: TimeInterval) -> Double {
+    init(_ value: Value) { from = value; to = value }
+    func sample(at time: TimeInterval) -> Value {
         guard let animation else { return to }
         let elapsed = time - start
         if elapsed >= animation.duration { self.animation = nil; return to }
-        return from + (to - from) * animation.fraction(at: elapsed)
+        return from.interpolated(towards: to, amount: animation.fraction(at: elapsed))
     }
 }
 
@@ -53,9 +53,9 @@ private final class AnimationTrigger<Value> {
 }
 
 extension Context {
-    func interpolated(_ value: CGFloat, key: String) -> CGFloat {
+    func interpolated<Value: VectorArithmetic>(_ value: Value, key: String) -> Value {
         let id = path + [.property(key)]
-        let slot = host.storage[id] as? AnimatedValue ?? AnimatedValue(value)
+        let slot = host.storage[id] as? AnimatedValue<Value> ?? AnimatedValue(value)
         host.storage[id] = slot
         host.liveStorage.insert(id)
         let now = host.frameTime
