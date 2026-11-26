@@ -44,7 +44,11 @@ public struct EnvironmentValues {
     var selectableText = false
     public var displayScale: CGFloat = 1
     var tracking: CGFloat = 0
-    var foreground = Color.primary
+    var foregroundPaint = ResolvedPaint.color(.primary)
+    var foreground: Color {
+        get { foregroundPaint.representativeColor }
+        set { foregroundPaint = .color(newValue) }
+    }
 
     public internal(set) var keyboardShortcut: KeyboardShortcut?
     var buttonStyle: ((ButtonStyleConfiguration, Context) -> AnyView)?

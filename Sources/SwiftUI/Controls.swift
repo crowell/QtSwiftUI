@@ -17,7 +17,7 @@ extension Context {
     }
 }
 public struct Text: Primitive {
-    var string: String
+    nonisolated let string: String
     private var attributes: [(inout EnvironmentValues) -> Void] = []
     public nonisolated init<S: StringProtocol>(_ content: S) { string = String(content) }
     public nonisolated init(verbatim content: String) { string = content }

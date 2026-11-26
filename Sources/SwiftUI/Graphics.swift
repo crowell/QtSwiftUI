@@ -5,10 +5,22 @@ public protocol ShapeStyle: Sendable {
     func resolve(in environment: EnvironmentValues) -> Resolved
 }
 extension ShapeStyle {
-    func color(in environment: EnvironmentValues) -> Color {
-        if let color = self as? Color { return color }
-        if let components = self as? Color.Resolved { return components.color }
-        return resolve(in: environment).color(in: environment)
+    func paint(in environment: EnvironmentValues) -> ResolvedPaint {
+        if let color = self as? Color { return .color(color) }
+        if let components = self as? Color.Resolved { return .color(components.color) }
+        if let gradient = self as? LinearGradient { return .linear(gradient) }
+        return resolve(in: environment).paint(in: environment)
+    }
+}
+
+enum ResolvedPaint: Sendable {
+    case color(Color), linear(LinearGradient)
+
+    var representativeColor: Color {
+        switch self {
+        case .color(let color): color
+        case .linear(let style): style.gradient.stops.first?.color ?? .clear
+        }
     }
 }
 public struct Color: ShapeStyle, Primitive, Hashable, Sendable {
@@ -209,15 +221,30 @@ struct FilledShape<S: Shape, Style: ShapeStyle>: Primitive {
     let shape: S, style: Style?
     var fill = FillStyle()
     func elements(in context: Context) -> [Element] {
-        let widget = context.widget(QSSurface)
-        qs_surface(widget, (style?.color(in: context.environment) ?? context.environment.foreground).hex(context.environment.colorScheme), 0)
+        let paint = style?.paint(in: context.environment) ?? context.environment.foregroundPaint
+        let widget: UnsafeMutableRawPointer
+        switch paint {
+        case .color(let color):
+            widget = context.widget(QSSurface)
+            qs_surface(widget, color.hex(context.environment.colorScheme), 0)
+        case .linear:
+            widget = context.widget(QSCanvas)
+        }
         return [Element { p in
             let size = p.replacingUnspecifiedDimensions()
             if shape is Circle { let side = min(size.width, size.height); return CGSize(width: side, height: side) }
             return size
         } place: { rect, _ in
-            shape.displayPath(in: CGRect(origin: .zero, size: rect.size), context: context).withNativePath {
-                qs_surface_path(widget, $0, fill.isEOFilled ? 1 : 0, fill.isAntialiased ? 1 : 0)
+            let bounds = CGRect(origin: .zero, size: rect.size)
+            shape.displayPath(in: bounds, context: context).withNativePath { path in
+                switch paint {
+                case .color:
+                    qs_surface_path(widget, path, fill.isEOFilled ? 1 : 0, fill.isAntialiased ? 1 : 0)
+                case .linear(let gradient):
+                    qs_canvas_clear(widget)
+                    qs_canvas_path(widget, path, CGAffineTransform.identity.native, 1, -1, fill.isEOFilled ? 1 : 0, fill.isAntialiased ? 1 : 0)
+                    gradient.shade(widget, bounds: bounds, environment: context.environment)
+                }
             }
             qs_place(widget, rect.minX, rect.minY, rect.width, rect.height)
         }]

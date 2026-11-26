@@ -131,10 +131,13 @@ public struct GraphicsContext {
             }
             let environment = drawing.environment
             switch drawing.shading.paint {
-            case .style(let style): qs_canvas_color(widget, style.color(in: environment).hex(environment.colorScheme))
+            case .style(let style):
+                switch style.paint(in: environment) {
+                case .color(let color): qs_canvas_color(widget, color.hex(environment.colorScheme))
+                case .linear(let gradient): gradient.shade(widget, bounds: drawing.path.boundingRect, environment: environment)
+                }
             case .linear(let gradient, let start, let end):
-                qs_canvas_gradient(widget, start.x, start.y, end.x, end.y)
-                for stop in gradient.stops { qs_canvas_stop(widget, stop.location, stop.color.hex(environment.colorScheme)) }
+                gradient.shade(widget, from: start, to: end, scheme: environment.colorScheme)
             }
         }
     }

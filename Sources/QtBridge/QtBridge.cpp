@@ -3,6 +3,7 @@
 #include "PointerDrag.hpp"
 #include "WindowShortcuts.hpp"
 #include "PathTrim.hpp"
+#include "RasterWidget.hpp"
 #include <QApplication>
 #include <QAccessibleWidget>
 #include <QCheckBox>
@@ -713,6 +714,11 @@ QSWidget qs_create(QSWindow *window, QSWidget parent, QSKind kind, int id) {
         QObject::connect(edit, &QLineEdit::returnPressed, window, [=] { window->event(window->context, id, QSSubmit, ""); });
         return edit;
     }
+    case QSRaster: {
+        auto *raster = new RasterWidget(container);
+        raster->setAttribute(Qt::WA_TransparentForMouseEvents);
+        return raster;
+    }
     case QSCanvas: {
         auto *canvas = new CanvasWidget(container);
         canvas->setAttribute(Qt::WA_TransparentForMouseEvents);
@@ -1107,14 +1113,14 @@ void qs_place(QSWidget w, double x, double y, double width, double height) {
     const QPointF origin(x + parentFraction.x(), y + parentFraction.y());
     // Keep fractional placement through grouping widgets. QPainter can retain it
     // when a SwiftUI drawing falls between Qt's integer widget coordinates.
-    const bool vector = dynamic_cast<Surface *>(item) || dynamic_cast<CanvasWidget *>(item);
-    const bool enclose = vector || dynamic_cast<GroupWidget *>(item);
+    const bool painted = dynamic_cast<Surface *>(item) || dynamic_cast<CanvasWidget *>(item) || dynamic_cast<RasterWidget *>(item);
+    const bool enclose = painted || dynamic_cast<GroupWidget *>(item);
     const int left = enclose ? qFloor(origin.x()) : qRound(origin.x());
     const int top = enclose ? qFloor(origin.y()) : qRound(origin.y());
     const int right = enclose ? qCeil(origin.x() + width) : qRound(origin.x() + width);
     const int bottom = enclose ? qCeil(origin.y() + height) : qRound(origin.y() + height);
     item->setProperty("qsFraction", origin - QPointF(left, top));
-    if (vector) item->setProperty("qsSize", QSizeF(width, height));
+    if (painted) item->setProperty("qsSize", QSizeF(width, height));
     QRect geometry(left, top, width > 0 ? qMax(0, right - left) : 0, height > 0 ? qMax(0, bottom - top) : 0);
     if (auto *surface = dynamic_cast<Surface *>(item); surface && surface->customPath && !geometry.isEmpty()) {
         // A negative inset or a centered stroke can draw outside a shape's layout frame.

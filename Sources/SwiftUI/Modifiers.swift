@@ -66,7 +66,7 @@ extension View {
     public func bold(_ active: Bool = true) -> some View { fontWeight(active ? .bold : nil) }
     public func foregroundColor(_ color: Color?) -> some View { environment(\.foreground, color ?? .primary) }
     public func foregroundStyle<S: ShapeStyle>(_ style: S) -> some View {
-        Transform(content: self) { view, ctx in view.resolve(ctx.with(\.foreground, style.color(in: ctx.environment))) }
+        Transform(content: self) { view, ctx in view.resolve(ctx.with(\.foregroundPaint, style.paint(in: ctx.environment))) }
     }
     public func multilineTextAlignment(_ alignment: TextAlignment) -> some View { environment(\.multilineTextAlignment, alignment) }
     public func lineLimit(_ number: Int?) -> some View { environment(\.lineLimit, number) }

@@ -13,7 +13,7 @@ typedef struct QSPath QSPath;
 typedef void (*QSRender)(void *context, int width, int height);
 enum QSEventKind { QSActivate, QSFocusChanged, QSSubmit, QSPressedChanged, QSExitCommand, QSHoverChanged, QSIncrement, QSDecrement };
 typedef void (*QSEvent)(void *context, int id, enum QSEventKind kind, const char *value);
-enum QSKind { QSLabel, QSButton, QSToggle, QSEdit, QSSecureEdit, QSSurface, QSScroll, QSSlider, QSProgress, QSGroup, QSCanvas, QSLink };
+enum QSKind { QSLabel, QSButton, QSToggle, QSEdit, QSSecureEdit, QSSurface, QSScroll, QSSlider, QSProgress, QSGroup, QSCanvas, QSLink, QSRaster };
 
 QSWindow *qs_window(const char *title, void *context, QSRender render, QSEvent event);
 void qs_open(QSWindow *, int width, int height);
@@ -45,6 +45,9 @@ void qs_shortcut_begin(QSWindow *);
 void qs_shortcut_finish(QSWindow *);
 void qs_button_shortcut(QSWindow *, QSWidget, const char *key, int flags, int automatic);
 int qs_open_url(const char *url);
+void qs_raster_image(QSWidget, const unsigned char *bytes, int width, int height, size_t stride,
+                     int alpha, int little, int orientation, double scale, int smooth);
+void qs_raster_resize(QSWidget, double left, double top, double right, double bottom, int tile);
 void qs_surface(QSWidget, const char *color, double radius);
 QSPath *qs_path_new(void);
 void qs_path_delete(QSPath *);
