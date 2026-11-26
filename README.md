@@ -6,9 +6,13 @@ Serein’s production `SignalSafe` executable builds on Ubuntu ARM64 and opens i
 
 ![Serein’s production device-link window on Ubuntu ARM64](Screenshots/serein-linux.png)
 
-The release-optimized executable also passed this first-launch check. Choosing Help → About in the desktop app opens Serein’s own About view in a second Qt window. Escape closes About and leaves the installer running. `WindowGroup` also accepts typed presentation values. Opening an existing value activates its window, and changing the binding updates which value will find that window.
+The entry point and all eight worker executables in this Docker package were built in release configuration. Choosing Help → About in the desktop app opens Serein’s own About view in a second Qt window. Escape closes About and leaves the installer running. `WindowGroup` also accepts typed presentation values. Opening an existing value activates its window, and changing the binding updates which value will find that window.
 
 ![Serein’s About window opened from the Linux desktop menu](Screenshots/serein-linux-about.png)
+
+Ctrl+/ opens the application’s keyboard shortcut guide with Linux key bindings. The capture check sends the shortcut over X11 and verifies that Escape dismisses the guide.
+
+![Keyboard Shortcuts in the running Serein Linux release](Screenshots/serein-linux-shortcuts.png)
 
 ## Run the examples
 
