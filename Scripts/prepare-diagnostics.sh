@@ -164,7 +164,6 @@ cp "$source_dir/Components/Avatar.swift" "$source_dir/Theme/StaticAwareScrollVie
 {
     echo 'import SwiftUI'
     echo 'import SignalI18n'
-    declarations '^public struct CallsListItem:|^public enum CallsTabSelectedView:|^public struct CallsNewCallButton:|^struct CallsListTile<|^public struct CallsList:|^struct CallsListTimestamp:|^struct MissedFilterToggle:' 7 "$source_dir/Calling/CallsTab.swift"
     declarations '^public struct CallingConversation:' 1 "$source_dir/Calling/CallingModels.swift"
     declarations '^public struct ConversationAvatarData |^struct ListAvatar:' 2 "$source_dir/Components/ConversationList/BaseConversationListItem.swift"
     awk '/^public enum Call(Type|Direction):/ { print; count++ } END { if (count!=2) exit 1 }' "$source_dir/Components/Conversation/Notifications/CallingNotification.swift"
@@ -173,8 +172,6 @@ cp "$source_dir/Components/Avatar.swift" "$source_dir/Theme/StaticAwareScrollVie
     declarations '^public struct ComposeStepButton:' 1 "$source_dir/Components/ConversationList/ComposeRows.swift"
     declarations '^struct ClearFilterButton:' 1 "$source_dir/Components/ConversationList/ConversationList.swift"
     declarations '^public struct I18n:' 1 "$source_dir/Components/SmallDialogs.swift"
-    declarations '^public struct NavSidebar(SearchHeader<|Empty:)|^public enum WidthBreakpoint:' 3 "$source_dir/Components/NavSidebar.swift"
-    awk '/^[ ]+@Entry public var navSidebarWidthBreakpoint:/ { print "extension EnvironmentValues {\n" $0 "\n}"; count++ } END { if (count!=1) exit 1 }' "$source_dir/Components/NavSidebar.swift"
     declarations '^public struct SearchInput<|^extension EnvironmentValues |^extension SearchInput where' 3 "$source_dir/Components/SearchInput.swift"
     declarations '^public struct ListTile<|^extension EnvironmentValues ' 2 "$source_dir/Components/ListTile.swift"
 } > "$target_dir/CallsHistory.swift"
@@ -240,6 +237,7 @@ cp "$source_dir/Components/Inbox.swift" "$source_dir/Components/NavTabs.swift" "
     echo '    }'
     echo '}'
 } > "$target_dir/EmptyChats.swift"
+cp "$source_dir/Calling/CallsTab.swift" "$source_dir/Components/NavSidebar.swift" "$target_dir/"
 # Keep all original item slots and use portable font metrics for the icon baseline.
 awk '!/^import CoreText$/ {
          if (/let font = CSSTextStyle.*\.ctFont/) { print "            let font = AxoFonts.interMetrics(size: size)"; metrics++; next }

@@ -1171,6 +1171,45 @@ void qs_canvas_gradient(QSWidget w, double x1, double y1, double x2, double y2, 
     gradient.setStops(colors);
 }
 void qs_direction(QSWidget w, int rtl) { widget(w)->setLayoutDirection(rtl ? Qt::RightToLeft : Qt::LeftToRight); }
+void qs_direct_touch(QSWidget w, int enabled) {
+    widget(w)->setAttribute(Qt::WA_AcceptTouchEvents, enabled);
+}
+static Qt::CursorShape cursorShape(QSPointer style) {
+    switch (style) {
+    case QSPointerAutomatic: return Qt::ArrowCursor;
+    case QSPointerArrow: return Qt::ArrowCursor;
+    case QSPointerText: return Qt::IBeamCursor;
+    case QSPointerCross: return Qt::CrossCursor;
+    case QSPointerOpenHand: return Qt::OpenHandCursor;
+    case QSPointerClosedHand: return Qt::ClosedHandCursor;
+    case QSPointerLink: return Qt::PointingHandCursor;
+    case QSPointerColumn: return Qt::SplitHCursor;
+    case QSPointerRow: return Qt::SplitVCursor;
+    }
+    return Qt::ArrowCursor;
+}
+void qs_pointer_style(QSWidget w, QSPointer style) {
+    if (style == QSPointerAutomatic) widget(w)->unsetCursor();
+    else widget(w)->setCursor(cursorShape(style));
+}
+int qs_has_pointer_style(QSWindow *window, int x, int y, QSPointer style) {
+    auto *target = window->childAt(QPoint(x, y));
+    return target && target->cursor().shape() == cursorShape(style);
+}
+int qs_direct_adjust(QSWindow *window, const char *value, int increment) {
+    for (auto *target : window->findChildren<QWidget *>()) {
+        if (!target->testAttribute(Qt::WA_AcceptTouchEvents)) continue;
+        auto *element = QAccessible::queryAccessibleInterface(target);
+        if (!element || element->role() != QAccessible::Slider || element->text(QAccessible::Value) != QString::fromUtf8(value)) continue;
+        const auto action = increment ? QAccessibleActionInterface::increaseAction() : QAccessibleActionInterface::decreaseAction();
+        auto *actions = element->actionInterface();
+        if (!actions || !actions->actionNames().contains(action)) continue;
+        actions->doAction(action);
+        qs_flush();
+        return 1;
+    }
+    return 0;
+}
 void qs_hit_testing(QSWidget w, int enabled) { widget(w)->setAttribute(Qt::WA_TransparentForMouseEvents, !enabled); }
 void qs_path_step(QSPath *target, int op, double x, double y, double a, double b, double c, double d) {
     auto &path = *target;
@@ -1451,6 +1490,7 @@ void qs_group_finish_layout(QSWidget w, int sizeToPositionedContent) {
     // A frame around paint-only descendants must leave the controls underneath reachable.
     const auto children = group->findChildren<QWidget *>(QString(), Qt::FindDirectChildrenOnly);
     if (!group->tapCount && !group->windowDrag && group->pointerDrag.threshold < 0 && !group->property("qsHover").toBool() &&
+        !group->testAttribute(Qt::WA_SetCursor) &&
         std::all_of(children.begin(), children.end(), [](QWidget *child) {
             return child->isHidden() || child->testAttribute(Qt::WA_TransparentForMouseEvents);
         })) group->setAttribute(Qt::WA_TransparentForMouseEvents);

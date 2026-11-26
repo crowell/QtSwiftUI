@@ -97,7 +97,6 @@ public struct CSSTextStyle {
     }
 }
 extension EnvironmentValues {
-    @Entry var titleBarDragAreaHeight: CGFloat = 0
     @Entry var cssTextColor: AxoColor = .labelPrimary
     @Entry var cssTextWrapWidth: CGFloat? = nil
 }

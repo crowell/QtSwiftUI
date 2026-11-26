@@ -100,6 +100,7 @@ enum Part: Hashable {
                          environment.accessibilityTraits.contains(.isSearchField) ? 1 : 0)
         if kind == QSGroup || kind == QSButton || kind == QSLink {
             let traits = environment.accessibilityTraits
+            if kind == QSGroup { qs_direct_touch(entry.widget, traits.contains(.allowsDirectInteraction) ? 1 : 0) }
             qs_accessible_control(entry.widget, traits.contains(.isSelected) ? 1 : 0,
                                   traits.contains(.isButton) ? 1 : 0, traits.contains(.isToggle) ? 1 : 0,
                                   traits.contains(.isLink) || (kind == QSLink && !environment.removedAccessibilityTraits.contains(.isLink)) ? 1 : 0)

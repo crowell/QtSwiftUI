@@ -78,6 +78,28 @@ import AppKit
         #endif
     }
 
+    func drag(from start: CGPoint, to end: CGPoint, steps: Int = 6) async throws {
+        #if os(Linux)
+        XCTAssertEqual(qs_drag_pointer(host.window, Int32(start.x), Int32(start.y), Int32(end.x), Int32(end.y), Int32(steps)), 1)
+        #else
+        func send(_ type: NSEvent.EventType, at point: CGPoint) throws {
+            tick += 1
+            let event = try XCTUnwrap(NSEvent.mouseEvent(with: type, location: CGPoint(x: point.x, y: CGFloat(height) - point.y),
+                modifierFlags: [], timestamp: ProcessInfo.processInfo.systemUptime + Double(tick) * 0.016, windowNumber: window.windowNumber,
+                context: nil, eventNumber: tick, clickCount: 1, pressure: type == .leftMouseUp ? 0 : 1))
+            window.sendEvent(event)
+        }
+        try send(.leftMouseDown, at: start)
+        for step in 1...steps {
+            let fraction = CGFloat(step) / CGFloat(steps)
+            try send(.leftMouseDragged, at: CGPoint(x: start.x + (end.x - start.x) * fraction, y: start.y + (end.y - start.y) * fraction))
+            try await Task.sleep(for: .milliseconds(12))
+        }
+        try send(.leftMouseUp, at: end)
+        #endif
+        try await settle()
+    }
+
     func pointer(_ x: Int, _ y: Int, down: Bool) async throws {
         #if os(Linux)
         XCTAssertEqual(qs_pointer_button(host.window, Int32(x), Int32(y), down ? 1 : 0), 1)

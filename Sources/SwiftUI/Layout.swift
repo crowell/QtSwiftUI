@@ -236,6 +236,11 @@ public struct LayoutSubview: Equatable {
         entry.element.values[ObjectIdentifier(key)] as? K.Value ?? K.defaultValue
     }
     @MainActor public var priority: Double { entry.element.priority }
+    @MainActor func stackElement() -> Element {
+        entry.element.wrapping(size: entry.element.measure) { rect, offer in
+            self.place(at: rect.origin, proposal: offer)
+        }
+    }
     @MainActor public func place(at position: CGPoint, anchor: UnitPoint = .topLeading, proposal: ProposedViewSize) {
         let size = sizeThatFits(proposal)
         entry.place(CGRect(x: position.x - size.width * anchor.x, y: position.y - size.height * anchor.y,
@@ -279,10 +284,17 @@ public struct LayoutSubviews: Equatable, RandomAccessCollection, Sendable {
         lhs.source === rhs.source && lhs.layoutDirection == rhs.layoutDirection && lhs.selection == rhs.selection
     }
 }
+public struct LayoutProperties: Sendable {
+    public var stackOrientation: Axis?
+    public init() {}
+}
+
 @MainActor public protocol Layout {
+    static var layoutProperties: LayoutProperties { get }
     typealias Subviews = LayoutSubviews
     associatedtype Cache = Void
     func makeCache(subviews: Subviews) -> Cache
+    func updateCache(_ cache: inout Cache, subviews: Subviews)
     func sizeThatFits(proposal: ProposedViewSize, subviews: Subviews, cache: inout Cache) -> CGSize
     func placeSubviews(in bounds: CGRect, proposal: ProposedViewSize, subviews: Subviews, cache: inout Cache)
 }
@@ -290,15 +302,28 @@ extension Layout where Cache == Void {
     public func makeCache(subviews: Subviews) {}
 }
 extension Layout {
+    public static var layoutProperties: LayoutProperties { .init() }
+    public func updateCache(_ cache: inout Cache, subviews: Subviews) { cache = makeCache(subviews: subviews) }
     public func callAsFunction<V: View>(@ViewBuilder _ content: () -> V) -> some View {
         LayoutContainer(layout: self, content: content())
     }
 }
+@MainActor private final class MountedLayoutCache<L: Layout> {
+    var value: L.Cache
+    init(_ value: L.Cache) { self.value = value }
+}
+
 private struct LayoutContainer<L: Layout, Content: View>: Primitive {
     let layout: L
     let content: Content
     func elements(in context: Context) -> [Element] {
-        let children = content.resolve(context)
+        let stack = (layout as? any StackLayoutSource)?.stackConfiguration
+        let axis = stack?.axis ?? (layout as? AnyLayout)?.orientation ?? L.layoutProperties.stackOrientation
+        let children = content.resolve(axis.map { context.with(\.stackAxis, $0) } ?? context)
+        if let stack {
+            return [stacked(children, axis: stack.axis, alignment: stack.alignment, spacing: stack.spacing ?? 8,
+                            direction: context.environment.layoutDirection)]
+        }
         var placements = [Placement?](repeating: nil, count: children.count)
         var layoutBounds = CGRect.zero
         let direction = context.environment.layoutDirection
@@ -308,12 +333,20 @@ private struct LayoutContainer<L: Layout, Content: View>: Primitive {
             }
         }
         let subviews = LayoutSubviews(layoutDirection: direction, source: .init(entries))
-        var cache = layout.makeCache(subviews: subviews)
-        return [Element { layout.sizeThatFits(proposal: $0, subviews: subviews, cache: &cache) }
+        let cache: MountedLayoutCache<L>
+        context.host.liveStorage.insert(context.path)
+        if let existing = context.host.storage[context.path] as? MountedLayoutCache<L> {
+            cache = existing
+            layout.updateCache(&cache.value, subviews: subviews)
+        } else {
+            cache = MountedLayoutCache(layout.makeCache(subviews: subviews))
+            context.host.storage[context.path] = cache
+        }
+        return [Element { layout.sizeThatFits(proposal: $0, subviews: subviews, cache: &cache.value) }
                 place: { bounds, proposal in
                     for index in placements.indices { placements[index] = nil }
                     layoutBounds = bounds
-                    layout.placeSubviews(in: bounds, proposal: proposal, subviews: subviews, cache: &cache)
+                    layout.placeSubviews(in: bounds, proposal: proposal, subviews: subviews, cache: &cache.value)
                     for i in subviews.indices where placements[i] == nil {
                         subviews[i].place(at: CGPoint(x: bounds.midX, y: bounds.midY), anchor: .center, proposal: proposal)
                     }

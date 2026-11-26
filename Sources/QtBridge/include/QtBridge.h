@@ -114,6 +114,12 @@ void qs_group_clip(QSWidget, const QSPath *, int evenOdd, int antialias);
 void qs_group_semantics(QSWidget, int heading, int modal);
 void qs_group_finish_layout(QSWidget, int sizeToPositionedContent);
 void qs_match_place(QSWidget drawing, QSWidget marker, double x, double y, double width, double height);
+typedef enum { QSPointerAutomatic, QSPointerArrow, QSPointerText, QSPointerCross, QSPointerOpenHand,
+               QSPointerClosedHand, QSPointerLink, QSPointerColumn, QSPointerRow } QSPointer;
+void qs_pointer_style(QSWidget, QSPointer);
+int qs_has_pointer_style(QSWindow *, int x, int y, QSPointer);
+int qs_direct_adjust(QSWindow *, const char *value, int increment);
+void qs_direct_touch(QSWidget, int enabled);
 void qs_group_focus(QSWidget, int enabled, int interactions);
 void qs_focus_effect(QSWidget, int enabled);
 void qs_help(QSWidget, const char *text);

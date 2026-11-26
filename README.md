@@ -12,7 +12,7 @@ From a checkout with Docker running, this command builds the Ubuntu 24.04 image,
 ./Scripts/verify-linux.sh
 ```
 
-Pass a Serein checkout to render its inbox, call history, call-link details, participant approval, contact details and note, About window, nickname editor, call settings, data usage settings, call-quality survey, chat-color picker and custom editor, media gallery, voice-note controls, data-clearing and device-link screens, leave-call dialog, call diagnostics window, device card and artwork.
+Pass a Serein checkout to render its inbox, Calls tab, New Call picker, call history, call-link details, participant approval, contact details and note, About window, nickname editor, call settings, data usage settings, call-quality survey, chat-color picker and custom editor, media gallery, voice-note controls, data-clearing and device-link screens, leave-call dialog, call diagnostics window, device card and artwork.
 
 ```sh
 ./Scripts/verify-linux.sh ../serein
@@ -78,7 +78,15 @@ The call-history preview compiles Serein’s `CallsList`, search field, avatars,
 
 ![Serein call history on Ubuntu](Screenshots/call-history.png)
 
-The `--inbox` example runs Serein’s `Inbox` and `NavTabs` with the call history, empty chat list and call settings panels. Its unread badge uses Serein’s own horizontal and vertical alignment guides. Shared tests switch tabs, collapse and restore the rail, and open the call-link manager. Layout tests check explicit guide propagation, custom alignment IDs, and badge placement in both writing directions. At 560 × 520 the mean absolute RGB difference from Apple was 1.52/255. Set `QTSWIFTUI_INBOX_REFERENCE` to an existing directory to capture the Apple rendering.
+The `--calls-tab` example runs the complete Serein `CallsTab` and `NavSidebar`. Drag the divider to resize the sidebar, select a missed call to mark it as read, or open New Call to search the sample contact directory. Starting a call displays the contact and call type locally. The More menu opens Serein’s clear-history confirmation. Clear removes the sample history and its call links. Cancel preserves them and invokes the environment dismiss action, closing the standalone window.
+
+![Serein Calls tab on Ubuntu](Screenshots/calls-tab.png)
+
+[New Call picker](Screenshots/new-call.png) · [More menu](Screenshots/calls-menu.png) · [Clear-history confirmation](Screenshots/clear-call-history.png)
+
+Shared tests exercise mouse resizing, keyboard resizing in both writing directions, call selection, contact search, and both confirmation actions. Qt tests also check the divider cursor and the accessible increment action. Layout tests switch between horizontal, vertical and custom layouts, verify child state survives each switch, and check that copies of a type-erased layout cache update independently. Set `QTSWIFTUI_CALLS_REFERENCE` to an existing directory to capture the same four screens with `Scripts/check-apple.sh ../serein`. The mean absolute RGB difference from Apple was 2.41/255 for Calls and 0.68/255 for New Call at 760 × 520.
+
+The `--inbox` example runs Serein’s `Inbox` and `NavTabs` with the Calls tab, empty chat list and call settings panels. Its unread badge uses Serein’s own horizontal and vertical alignment guides. Shared tests switch tabs, collapse and restore the rail, and open the call-link manager. Layout tests check explicit guide propagation, custom alignment IDs, and badge placement in both writing directions. At 840 × 520 the mean absolute RGB difference from Apple was 2.20/255. Set `QTSWIFTUI_INBOX_REFERENCE` to an existing directory to capture the Apple rendering.
 
 ![Serein inbox and navigation rail on Ubuntu](Screenshots/inbox.png)
 
@@ -154,7 +162,7 @@ The target is source compatibility with Apple's public SwiftUI APIs. The impleme
 
 `./Scripts/check-apple.sh ../serein` type-checks the example source with Apple's SwiftUI module on a Mac with Xcode. `./Scripts/check-api.sh` extracts public symbol graphs from Xcode and the Linux image. Pass `--missing` to list missing declaration paths. The inventory groups declarations by symbol kind and path, counts overload spellings separately, and excludes underscored and synthesized members. A shared name alone cannot establish matching signatures, constraints, availability or behavior.
 
-The inventory against the macOS 27.2 SDK found 1,197 shared declaration paths out of 7,627 and 756 identical declaration spellings out of 8,735. The examples exercise a smaller set at runtime. Navigation, multiwindow scenes, broader animation support, text shaping parity, gestures and platform integration remain substantial gaps. Font metrics, control appearance and several layout behaviors differ from Apple's implementation.
+The inventory against the macOS 27.2 SDK found 1,228 shared declaration paths out of 7,627 and 771 identical declaration spellings out of 8,735. The examples exercise a smaller set at runtime. Navigation, multiwindow scenes, broader animation support, text shaping parity, gestures and platform integration remain substantial gaps. Font metrics, control appearance and several layout behaviors differ from Apple's implementation.
 
 After capturing the Linux examples, run `./Scripts/compare-artwork.sh ../serein` on macOS to render both illustrations with Apple's `ImageRenderer`. At a threshold of 8/255 in any RGB channel, 101 of 119,680 account artwork pixels (0.084%) and 91 of 49,928 key transparency pixels (0.182%) differed. The mean absolute channel differences were 0.104/255 and 0.095/255 respectively. Both reference images are saved in `.build/artwork/`.
 
