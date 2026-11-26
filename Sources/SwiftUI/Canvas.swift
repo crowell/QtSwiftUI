@@ -27,16 +27,24 @@ public struct Gradient: Hashable, Sendable {
 }
 
 public struct GraphicsContext {
+    public struct GradientOptions: OptionSet, Sendable {
+        public let rawValue: UInt32
+        public init(rawValue: UInt32) { self.rawValue = rawValue }
+        public static let `repeat` = Self(rawValue: 1), mirror = Self(rawValue: 2), linearColor = Self(rawValue: 4)
+    }
     public struct Shading {
         fileprivate enum Paint {
             case style(any ShapeStyle)
-            case linear(Gradient, CGPoint, CGPoint)
+            case linear(AnyGradient, CGPoint, CGPoint, GradientOptions)
         }
         fileprivate let paint: Paint
         public static func color(_ color: Color) -> Self { Self(paint: .style(color)) }
         public static func style<S: ShapeStyle>(_ style: S) -> Self { Self(paint: .style(style)) }
-        public static func linearGradient(_ gradient: Gradient, startPoint: CGPoint, endPoint: CGPoint) -> Self {
-            Self(paint: .linear(gradient, startPoint, endPoint))
+        public static func linearGradient(_ gradient: Gradient, startPoint: CGPoint, endPoint: CGPoint, options: GradientOptions = []) -> Self {
+            Self(paint: .linear(gradient.colorSpace(.device), startPoint, endPoint, options))
+        }
+        public static func linearGradient(_ gradient: AnyGradient, startPoint: CGPoint, endPoint: CGPoint, options: GradientOptions = []) -> Self {
+            Self(paint: .linear(gradient, startPoint, endPoint, options))
         }
     }
     public struct BlurOptions: OptionSet, Sendable {
@@ -136,8 +144,8 @@ public struct GraphicsContext {
                 case .color(let color): qs_canvas_color(widget, color.hex(environment.colorScheme))
                 case .linear(let gradient): gradient.shade(widget, bounds: drawing.path.boundingRect, environment: environment)
                 }
-            case .linear(let gradient, let start, let end):
-                gradient.shade(widget, from: start, to: end, scheme: environment.colorScheme)
+            case .linear(let gradient, let start, let end, let options):
+                gradient.shade(widget, from: start, to: end, scheme: environment.colorScheme, options: options)
             }
         }
     }

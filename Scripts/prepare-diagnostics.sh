@@ -42,7 +42,7 @@ awk 'BEGIN { print "extension AxoSymbol {" }
      /^    public static func (icon|inlineGlyph)\(/ { inside=1; count++ }
      inside { print } /^    }$/ { inside=0 } END { print "}"; if (count!=2) exit 1 }' \
     "$source_dir/Axo/AxoSymbol.swift" > "$target_dir/SymbolLookup.swift"
-cp "$source_dir/Axo/Chat/AxoChatDateSection.swift" "$target_dir/"
+cp "$source_dir/Axo/Chat/AxoChatDateSection.swift" "$source_dir/Axo/AxoColorSlider.swift" "$target_dir/"
 cp "$source_dir/Calling/CallingAudioIndicator.swift" "$source_dir/Theme/SignalIcon.swift" \
    "$source_dir/Axo/SVGPathData.swift" "$source_dir/Tokens/SignalIcons.generated.swift" \
    "$source_dir/Tokens/LegacyColors.generated.swift" "$target_dir/"

@@ -9,6 +9,7 @@ extension ShapeStyle {
         if let color = self as? Color { return .color(color) }
         if let components = self as? Color.Resolved { return .color(components.color) }
         if let gradient = self as? LinearGradient { return .linear(gradient) }
+        if let erased = self as? AnyShapeStyle { return erased.resolvedPaint(in: environment) }
         return resolve(in: environment).paint(in: environment)
     }
 }
@@ -19,7 +20,7 @@ enum ResolvedPaint: Sendable {
     var representativeColor: Color {
         switch self {
         case .color(let color): color
-        case .linear(let style): style.gradient.stops.first?.color ?? .clear
+        case .linear(let style): style.gradient.gradient.stops.first?.color ?? .clear
         }
     }
 }
@@ -53,7 +54,8 @@ public struct Color: ShapeStyle, Primitive, Hashable, Sendable {
         }
         return Color(light: faded(light), dark: faded(dark))
     }
-    func hex(_ scheme: ColorScheme) -> String { String(format: "#%08x", scheme == .dark ? dark : light) }
+    nonisolated func argb(_ scheme: ColorScheme) -> UInt32 { scheme == .dark ? dark : light }
+    func hex(_ scheme: ColorScheme) -> String { String(format: "#%08x", argb(scheme)) }
     public struct Resolved: ShapeStyle, Hashable, Sendable {
         public var red, green, blue, opacity: Float
         public init(red: Float, green: Float, blue: Float, opacity: Float = 1) {

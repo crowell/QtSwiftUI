@@ -104,6 +104,41 @@ private struct SizeProbe: Layout {
                   expecting: [CGSize(width: 10, height: 10), wide, tall, tall, .zero])
     }
 
+    func testGradientInterpolationAndSpread() async throws {
+        let red = Color(.sRGB, red: 1, green: 0, blue: 0), blue = Color(.sRGB, red: 0, green: 0, blue: 1)
+        let gradient = Gradient(colors: [red, blue])
+        let device = AnyShapeStyle(.linearGradient(gradient.colorSpace(.device), startPoint: .leading, endPoint: .trailing))
+        let perceptual = AnyShapeStyle(LinearGradient(gradient: gradient, startPoint: .leading, endPoint: .trailing))
+        func channels(_ rgb: UInt32, near expected: [Int], tolerance: Double = 3) {
+            for (index, shift) in [16, 8, 0].enumerated() {
+                XCTAssertEqual(Double(rgb >> shift & 255), Double(expected[index]), accuracy: tolerance)
+            }
+        }
+        for (style, mid) in [(device, [128,0,128]), (perceptual, [141,83,163])] {
+            let rgb = try sample(Rectangle().fill(style), width: 101, height: 10, points: [(50,5)])
+            channels(rgb[0], near: mid)
+        }
+        let start = CGPoint(x: 25, y: 0), end = CGPoint(x: 75, y: 0)
+        for (options, left, middle) in [(GraphicsContext.GradientOptions(), [255,0,0], [125,0,130]),
+                                          (.repeat, [74,0,181], [125,0,130]),
+                                          (.mirror, [182,0,74], [125,0,130]),
+                                          (.linearColor, [255,0,0], [186,0,190])] {
+            let canvas = Canvas { context, size in
+                context.fill(Path(CGRect(origin: .zero, size: size)),
+                             with: .linearGradient(gradient, startPoint: start, endPoint: end, options: options))
+            }
+            let rgb = try sample(canvas, width: 101, height: 10, points: [(10,5),(50,5)])
+            channels(rgb[0], near: left)
+            channels(rgb[1], near: middle)
+        }
+        let typed = Canvas { context, size in
+            context.fill(Path(CGRect(origin: .zero, size: size)), with: .linearGradient(AnyGradient(gradient), startPoint: start, endPoint: end))
+        }
+        channels(try sample(typed, width: 101, height: 10, points: [(50,5)])[0], near: [138,83,164])
+        let vertical = try sample(Rectangle().foregroundStyle(gradient), width: 101, height: 101, points: [(20,50),(80,50)])
+        for value in vertical { channels(value, near: [141,83,163]) }
+    }
+
     func testGradientAsViewShapeStyleAndCanvasShading() async throws {
         let gradient = LinearGradient(stops: [.init(color: .clear, location: 0), .init(color: .black.opacity(0.6), location: 1)],
                                       startPoint: .leading, endPoint: .trailing)

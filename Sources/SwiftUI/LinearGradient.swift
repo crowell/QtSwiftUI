@@ -1,10 +1,14 @@
 import QtBridge
 
 public struct LinearGradient: View, ShapeStyle, Sendable {
-    let gradient: Gradient
+    let gradient: AnyGradient
     let startPoint, endPoint: UnitPoint
 
     public nonisolated init(gradient: Gradient, startPoint: UnitPoint, endPoint: UnitPoint) {
+        self.init(AnyGradient(gradient), startPoint: startPoint, endPoint: endPoint)
+    }
+
+    nonisolated init(_ gradient: AnyGradient, startPoint: UnitPoint, endPoint: UnitPoint) {
         self.gradient = gradient
         self.startPoint = startPoint
         self.endPoint = endPoint
@@ -31,6 +35,9 @@ public struct LinearGradient: View, ShapeStyle, Sendable {
 }
 
 extension ShapeStyle where Self == LinearGradient {
+    public static func linearGradient(_ gradient: AnyGradient, startPoint: UnitPoint, endPoint: UnitPoint) -> some ShapeStyle {
+        LinearGradient(gradient, startPoint: startPoint, endPoint: endPoint)
+    }
     public static func linearGradient(_ gradient: Gradient, startPoint: UnitPoint, endPoint: UnitPoint) -> LinearGradient {
         LinearGradient(gradient: gradient, startPoint: startPoint, endPoint: endPoint)
     }
@@ -39,16 +46,5 @@ extension ShapeStyle where Self == LinearGradient {
     }
     public static func linearGradient(stops: [Gradient.Stop], startPoint: UnitPoint, endPoint: UnitPoint) -> LinearGradient {
         LinearGradient(stops: stops, startPoint: startPoint, endPoint: endPoint)
-    }
-}
-
-extension Gradient {
-    @MainActor func shade(_ widget: UnsafeMutableRawPointer, from start: CGPoint, to end: CGPoint, scheme: ColorScheme) {
-        guard stops.count > 1 else {
-            qs_canvas_color(widget, (stops.first?.color ?? .clear).hex(scheme))
-            return
-        }
-        qs_canvas_gradient(widget, start.x, start.y, end.x, end.y)
-        for stop in stops { qs_canvas_stop(widget, stop.location, stop.color.hex(scheme)) }
     }
 }

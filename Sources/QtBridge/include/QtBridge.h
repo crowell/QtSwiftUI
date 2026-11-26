@@ -66,8 +66,9 @@ void qs_surface_path(QSWidget, const QSPath *, int evenOdd, int antialias);
 void qs_canvas_clear(QSWidget);
 void qs_canvas_path(QSWidget, const QSPath *, QSAffine, double opacity, double lineWidth, int evenOdd, int antialias);
 void qs_canvas_color(QSWidget, const char *color);
-void qs_canvas_gradient(QSWidget, double x1, double y1, double x2, double y2);
-void qs_canvas_stop(QSWidget, double location, const char *color);
+typedef struct { double location; unsigned int argb; } QSGradientStop;
+void qs_canvas_gradient(QSWidget, double x1, double y1, double x2, double y2, unsigned options,
+                        const QSGradientStop *stops, size_t count);
 void qs_hit_testing(QSWidget, int enabled);
 void qs_direction(QSWidget, int rtl);
 void qs_group(QSWidget, int behavior, int isImage, int updatesFrequently, const char *value);

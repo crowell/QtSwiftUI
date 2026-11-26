@@ -938,11 +938,14 @@ void qs_canvas_blur(QSWidget w, double radius, unsigned blurOptions, unsigned fi
 void qs_canvas_color(QSWidget w, const char *color) {
     static_cast<CanvasWidget *>(w)->drawings.back().color = QColor(QString::fromUtf8(color));
 }
-void qs_canvas_gradient(QSWidget w, double x1, double y1, double x2, double y2) {
-    static_cast<CanvasWidget *>(w)->drawings.back().gradient.emplace(x1, y1, x2, y2);
-}
-void qs_canvas_stop(QSWidget w, double location, const char *color) {
-    static_cast<CanvasWidget *>(w)->drawings.back().gradient->setColorAt(location, QColor(QString::fromUtf8(color)));
+void qs_canvas_gradient(QSWidget w, double x1, double y1, double x2, double y2, unsigned options,
+                        const QSGradientStop *stops, size_t count) {
+    auto &gradient = static_cast<CanvasWidget *>(w)->drawings.back().gradient.emplace(x1, y1, x2, y2);
+    gradient.setSpread((options & 2) ? QGradient::ReflectSpread : (options & 1) ? QGradient::RepeatSpread : QGradient::PadSpread);
+    QGradientStops colors;
+    colors.reserve(count);
+    for (size_t i = 0; i < count; ++i) colors.append({stops[i].location, QColor::fromRgba(stops[i].argb)});
+    gradient.setStops(colors);
 }
 void qs_direction(QSWidget w, int rtl) { widget(w)->setLayoutDirection(rtl ? Qt::RightToLeft : Qt::LeftToRight); }
 void qs_hit_testing(QSWidget w, int enabled) { widget(w)->setAttribute(Qt::WA_TransparentForMouseEvents, !enabled); }
