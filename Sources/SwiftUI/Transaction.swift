@@ -36,6 +36,7 @@ extension View {
         Transform(content: self) { view, ctx in
             var inner = ctx
             transform(&inner.transaction)
+            if !ctx.host.isMeasuringAlternative { ctx.host.transitions.record(inner.transaction, at: ctx.path) }
             return view.resolve(inner)
         }
     }

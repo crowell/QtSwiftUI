@@ -153,6 +153,7 @@ extension View {
                 trigger.value = value
                 if !inner.transaction.disablesAnimations { inner.animation = animation }
             }
+            if !ctx.host.isMeasuringAlternative { ctx.host.transitions.record(inner.transaction, at: ctx.path) }
             ctx.host.storage[key] = trigger
             ctx.host.liveStorage.insert(key)
             return view.resolve(inner)

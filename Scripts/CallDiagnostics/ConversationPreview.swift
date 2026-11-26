@@ -9,10 +9,16 @@ import SwiftUI
     var panel = Panel.messages
     var tab = MediaGalleryTab.media
     var order = MediaSortOrder.date
+    var selectedTypist: TypingContact?
     var onAudioCall: () -> Void = {}
     var onVideoCall: () -> Void = {}
 
-    init() {
+    init(groupTyping: Bool = false) {
+        if groupTyping {
+            conversation = ConversationHeaderModel(id: "ferry", type: .group, title: "Ferry crew")
+            timeline.typingContacts = TimelinePreviewModel.contacts([0, 1, 2, 3])
+            return
+        }
         var person = ConversationHeaderModel(id: "nyah", type: .direct, title: "Nyah Stroman")
         person.avatar = StickerSamples.fixtureImage("kitten-2-64-64.jpg")
         person.hasAvatar = person.avatar != nil
@@ -27,6 +33,11 @@ import SwiftUI
     }
 
     var contact: AboutContactModal.Contact {
+        if let selectedTypist {
+            var person = AboutContactModal.Contact(id: selectedTypist.id, title: selectedTypist.title)
+            person.color = selectedTypist.color
+            return person
+        }
         var person = AboutContactModal.Contact(id: conversation.id, title: conversation.title)
         person.avatar = conversation.avatar
         person.hasAvatar = conversation.hasAvatar
@@ -42,7 +53,7 @@ import SwiftUI
     var actions: ConversationHeaderActions {
         var actions = ConversationHeaderActions()
         actions.onSearchInConversation = { self.searching.toggle() }
-        actions.onViewConversationDetails = { self.panel = .contact }
+        actions.onViewConversationDetails = { self.selectedTypist = nil; self.panel = .contact }
         actions.onOutgoingAudioCall = onAudioCall
         actions.onOutgoingVideoCall = onVideoCall
         actions.onViewAllMedia = { self.panel = .media }
@@ -68,7 +79,10 @@ struct ConversationPreview: View {
                     SearchInput(value: $model.query, placeholder: "Search in conversation", focusesOnAppear: true,
                                 onClear: { model.query = ""; model.searching = false }, onEnter: model.findMessage)
                 }
-                TimelinePreview(model: model.timeline)
+                TimelinePreview(model: model.timeline) { id in
+                    model.selectedTypist = model.timeline.typingContacts.first { $0.id == id }
+                    model.panel = .contact
+                }
             }
             .background(AxoColor.surfacePrimary)
             .axoLayerHost()

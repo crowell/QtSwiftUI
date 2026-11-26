@@ -22,7 +22,8 @@ struct DiagnosticPreview: App {
         let survey = CommandLine.arguments.contains("--call-survey")
         let colorPicker = CommandLine.arguments.contains("--color-picker")
         let colorEditor = CommandLine.arguments.contains("--color-editor")
-        let conversation = CommandLine.arguments.contains("--conversation")
+        let typing = CommandLine.arguments.contains("--typing")
+        let conversation = typing || CommandLine.arguments.contains("--conversation")
         let timeline = CommandLine.arguments.contains("--timeline")
         let muteUntil = CommandLine.arguments.contains("--mute-until")
         let usernameEditor = CommandLine.arguments.contains("--username-link")
@@ -37,8 +38,11 @@ struct DiagnosticPreview: App {
         let recording = CommandLine.arguments.contains("--recording")
         let discard = CommandLine.arguments.contains("--discard-recording")
         let arabic = CommandLine.arguments.contains("--arabic")
-        WindowGroup(conversation ? "Nyah Stroman" : timeline ? "Conversation timeline" : muteUntil ? "Mute until" : usernameEditor ? "Username link" : usernameCard ? "Username QR card" : screenShare ? "Share your screen" : stickers ? "Stickers" : timer ? "Disappearing messages" : photoViewer ? "Photo" : callsTab ? "Calls" : inbox ? "Inbox" : appAbout ? "About" : about ? "About contact" : note ? "Contact note" : request ? "Request to join" : linkDetails ? "Call link" : nickname ? "Edit nickname and note" : history ? "Call history" : settings ? (calls ? "Calls" : "Data usage") : survey ? "Call quality" : colorPicker ? "Chat color" : colorEditor ? "Custom chat color" : recording || draft || discard ? "Voice message" : gallery ? "All media" : clearing ? "Clearing data" : linking ? "Link device" : leaveCall ? "Leave current call" : "Call diagnostics") {
-            if conversation { ConversationPreview() }
+        WindowGroup(typing ? "Ferry crew" : conversation ? "Nyah Stroman" : timeline ? "Conversation timeline" : muteUntil ? "Mute until" : usernameEditor ? "Username link" : usernameCard ? "Username QR card" : screenShare ? "Share your screen" : stickers ? "Stickers" : timer ? "Disappearing messages" : photoViewer ? "Photo" : callsTab ? "Calls" : inbox ? "Inbox" : appAbout ? "About" : about ? "About contact" : note ? "Contact note" : request ? "Request to join" : linkDetails ? "Call link" : nickname ? "Edit nickname and note" : history ? "Call history" : settings ? (calls ? "Calls" : "Data usage") : survey ? "Call quality" : colorPicker ? "Chat color" : colorEditor ? "Custom chat color" : recording || draft || discard ? "Voice message" : gallery ? "All media" : clearing ? "Clearing data" : linking ? "Link device" : leaveCall ? "Leave current call" : "Call diagnostics") {
+            if conversation {
+                ConversationPreview(model: .init(groupTyping: typing))
+                    .environment(\.axoAnimationsDisabled, CommandLine.arguments.contains("--still"))
+            }
             else if timeline { TimelinePreview() }
             else if muteUntil { MuteUntilPreview() }
             else if usernameEditor { UsernameLinkPreview() }

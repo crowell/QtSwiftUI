@@ -72,6 +72,12 @@ The `--username-card` example displays Serein’s branded username QR card for i
 
 The integration tests write the production PNG when `QTSWIFTUI_USERNAME_REFERENCE` names an existing directory. The Apple check also scans the Ubuntu export in `Screenshots/` when present.
 
+The `--typing` example opens the group conversation with Serein’s `TypingBubble` and `TypingAnimation`. Four contacts from its upstream story are typing. The newest three avatars and a +1 overflow badge appear beside the animated dots. Selecting an avatar opens that person’s local contact dialog. `--still` freezes the dots for repeatable captures.
+
+![Serein group typing indicator in the Ubuntu conversation example](Screenshots/conversation-typing.png)
+
+Apple and Ubuntu tests click all three avatars and check the IDs passed by Serein. Opacity transition tests sample the fade in both directions. A deterministic Qt clock also checks reinsertion halfway through removal. Qt retains the departing view’s clipped pixels while its native input controls are removed. Overlapping removal layers and content that changes during its exit still need parity work.
+
 The `--conversation` example adds Serein’s production `ConversationHeader` to the message timeline. It uses the Nyah Stroman contact and kitten avatar from Serein’s header stories. Search for “tickets” and press Return to jump to that message. The contact name opens Serein’s contact dialog. The overflow menu supports local pinning, muting, changing the disappearing-message duration and opening the media panel. Call buttons dispatch local callbacks.
 
 ![Serein conversation with the header menu open on Ubuntu](Screenshots/conversation-header-menu.png)
@@ -231,7 +237,7 @@ The target is source compatibility with Apple's public SwiftUI APIs. The impleme
 
 `./Scripts/check-apple.sh ../serein` type-checks the example source with Apple's SwiftUI module on a Mac with Xcode. `./Scripts/check-api.sh` extracts public symbol graphs from Xcode and the Linux image. Pass `--missing` to list missing declaration paths. The inventory groups declarations by symbol kind and path, counts overload spellings separately, and excludes underscored and synthesized members. A shared name alone cannot establish matching signatures, constraints, availability or behavior.
 
-The inventory against the macOS 27.2 SDK found 1,376 shared declaration paths out of 7,627 and 881 identical declaration spellings out of 8,735. The examples exercise a smaller set at runtime. Navigation, multiwindow scenes, broader animation support, text shaping parity, gestures and platform integration remain substantial gaps. Font metrics, control appearance and several layout behaviors differ from Apple's implementation.
+The inventory against the macOS 27.2 SDK found 1,382 shared declaration paths out of 7,627 and 885 identical declaration spellings out of 8,735. The examples exercise a smaller set at runtime. Navigation, multiwindow scenes, broader animation support, text shaping parity, gestures and platform integration remain substantial gaps. Font metrics, control appearance and several layout behaviors differ from Apple's implementation.
 
 After capturing the Linux examples, run `./Scripts/compare-artwork.sh ../serein` on macOS to render both illustrations with Apple's `ImageRenderer`. At a threshold of 8/255 in any RGB channel, 101 of 119,680 account artwork pixels (0.084%) and 91 of 49,928 key transparency pixels (0.182%) differed. The mean absolute channel differences were 0.104/255 and 0.095/255 respectively. Both reference images are saved in `.build/artwork/`.
 

@@ -59,6 +59,8 @@ void qs_scroll_input(QSWidget, int enabled);
 void qs_scroll_bounce(QSWidget, int horizontal, int vertical);
 void qs_scroll_axes(QSWidget, int horizontal, int vertical, int dark);
 void qs_destroy(QSWidget);
+QSWidget qs_transition_snapshot(QSWindow *, QSWidget);
+void qs_transition_front(QSWidget);
 void qs_text(QSWidget, const char *);
 void qs_hint(QSWidget, const char *);
 enum QSTextTruncation { QSTruncateHead, QSTruncateMiddle, QSTruncateTail };

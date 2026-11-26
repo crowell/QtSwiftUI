@@ -32,6 +32,7 @@ fi
 diagnostics="$preview/diagnostics"
 sh /src/Scripts/prepare-diagnostics.sh "$checkout" "$diagnostics"
 if [ -n "${QTSWIFTUI_SCREENSHOT:-}" ]; then
+    export QTSWIFTUI_TYPING_REFERENCE="$(dirname "$QTSWIFTUI_SCREENSHOT")"
     export QTSWIFTUI_HEADER_REFERENCE="$(dirname "$QTSWIFTUI_SCREENSHOT")"
     export QTSWIFTUI_TIMELINE_REFERENCE="$(dirname "$QTSWIFTUI_SCREENSHOT")"
     export QTSWIFTUI_MUTE_REFERENCE="$(dirname "$QTSWIFTUI_SCREENSHOT")"
@@ -55,6 +56,7 @@ if [ -n "${QTSWIFTUI_SCREENSHOT:-}" ]; then
     QTSWIFTUI_SCREENSHOT="$(dirname "$QTSWIFTUI_SCREENSHOT")/voice-recording.png" "$binary" --recording
     QTSWIFTUI_SCREENSHOT="$(dirname "$QTSWIFTUI_SCREENSHOT")/discard-recording.png" "$binary" --discard-recording
     QTSWIFTUI_SCREENSHOT="$(dirname "$QTSWIFTUI_SCREENSHOT")/data-usage-settings.png" "$binary" --data-usage-settings
+    QTSWIFTUI_SCREENSHOT="$(dirname "$QTSWIFTUI_SCREENSHOT")/conversation-typing.png" "$binary" --typing --still
     QTSWIFTUI_SCREENSHOT="$(dirname "$QTSWIFTUI_SCREENSHOT")/conversation-header.png" "$binary" --conversation
     QTSWIFTUI_SCREENSHOT="$(dirname "$QTSWIFTUI_SCREENSHOT")/conversation-timeline.png" "$binary" --timeline
     QTSWIFTUI_SCREENSHOT="$(dirname "$QTSWIFTUI_SCREENSHOT")/mute-until.png" "$binary" --mute-until

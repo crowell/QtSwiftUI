@@ -137,6 +137,7 @@ enum Part: Hashable {
     private var disappear: [[Part]: () -> Void] = [:]
     private var nextDisappear: [[Part]: () -> Void] = [:]
     let matches = GeometryMatches()
+    let transitions = ViewTransitions()
     private var pendingTransaction: Transaction?
     private var afterRender: [() -> Void] = []
     // Fitting a candidate may need Qt font and control metrics. Only the chosen
@@ -221,6 +222,7 @@ enum Part: Hashable {
 
     func render(proposal: ProposedViewSize, viewport: CGSize?, scale: CGFloat) -> CGSize {
         frameTime = animationClock()
+        transitions.begin()
         liveMounts.removeAll(keepingCapacity: true)
         liveStorage.removeAll(keepingCapacity: true)
         nextDisappear.removeAll(keepingCapacity: true)
@@ -273,6 +275,7 @@ enum Part: Hashable {
                               width: size.width, height: size.height), proposal)
             matches.place(at: frameTime, window: window)
         }
+        transitions.finish(host: self, transaction: context.transaction)
         // Qt owns descendant widgets. Release stale descendants before their scroll area.
         for path in mounts.keys.filter({ !liveMounts.contains($0) }).sorted(by: { $0.count > $1.count }) {
             if let mount = mounts.removeValue(forKey: path) {

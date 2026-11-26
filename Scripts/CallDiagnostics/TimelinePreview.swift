@@ -15,6 +15,7 @@ import SwiftUI
     var newestRead: String?
     var targetIndex: Int?
     var jumpCount = 0
+    var typingContacts: [TypingContact] = []
 
     init() {
         let messages: [(MessageDirection, String)] = [
@@ -44,6 +45,7 @@ import SwiftUI
 
 struct TimelinePreview: View {
     @State var model = TimelinePreviewModel()
+    var showTypingContact: (String) -> Void = { _ in }
 
     var body: some View {
         Timeline(id: "ferry", items: model.rows.map(\.id), haveNewest: true, haveOldest: true,
@@ -57,7 +59,9 @@ struct TimelinePreview: View {
         } renderHeroRow: {
             TimelineDateHeader(timestamp: TimelinePreviewModel.now)
         } renderTypingBubble: {
-            EmptyView()
+            if !model.typingContacts.isEmpty {
+                TypingBubble(conversationType: .group, typingContacts: model.typingContacts, showContactModal: showTypingContact)
+            }
         } setIsNearBottom: { _, near in model.nearBottom = near }
           scrollToOldestUnreadMention: { _ in model.jump(to: model.firstUnread) }
           markMessageRead: { model.newestRead = $0 }

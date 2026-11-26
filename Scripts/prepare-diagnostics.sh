@@ -101,7 +101,15 @@ if [ -f "$lighthouse" ]; then cp "$lighthouse" "$target_dir/Media/"; fi
 # pixel reader. Substitute the portable font shaper for CoreText and bridge CFData on Linux.
 qr="$source_dir/Components/QRCode"
 timeline="$source_dir/Components/Conversation"
-cp "$timeline/ConversationHeader.swift" "$target_dir/"
+cp "$timeline/ConversationHeader.swift" "$timeline/TypingBubble.swift" "$target_dir/"
+{
+    echo 'import SwiftUI'
+    declarations '^public struct TypingAnimation:' 1 "$source_dir/Components/ConversationList/BaseConversationListItem.swift"
+    echo 'extension TimelinePreviewModel {'
+    awk '/^    static func contacts\(/ {inside=1; count++} inside {print} /^    }$/ {inside=0}
+         END {if (count!=1 || inside) exit 1}' "$checkout/Packages/SignalUI/Tests/SignalUITests/Components/TypingBubbleTests.swift"
+    echo '}'
+} > "$target_dir/TypingSupport.swift"
 {
     echo 'import SwiftUI'
     echo 'import SignalI18n'

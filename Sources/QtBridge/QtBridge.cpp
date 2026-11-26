@@ -1677,6 +1677,31 @@ void qs_alpha_mask(QSWidget w, QSWidget stencil) {
     if (auto *effect = dynamic_cast<AlphaMaskEffect *>(item->graphicsEffect())) effect->update();
     else item->setGraphicsEffect(new AlphaMaskEffect(widget(stencil)));
 }
+void qs_transition_front(QSWidget w) { widget(w)->raise(); }
+
+QSWidget qs_transition_snapshot(QSWindow *window, QSWidget w) {
+    auto *source = widget(w);
+    if (!source->isVisibleTo(window) || source->window() != window) return nullptr;
+    QRect clip = source->rect();
+    for (auto *ancestor = source->parentWidget(); ancestor; ancestor = ancestor->parentWidget()) {
+        clip &= QRect(source->mapFrom(ancestor, QPoint()), ancestor->size());
+        if (ancestor == window) break;
+    }
+    if (clip.isEmpty()) return nullptr;
+    // Keep the final visible pixels after Swift removes the view and its event handlers.
+    qs_group_opacity(w, 1);
+    const QPixmap pixels = source->grab(clip);
+    if (pixels.isNull()) return nullptr;
+    auto *layer = new QLabel(window);
+    layer->setAttribute(Qt::WA_TransparentForMouseEvents);
+    layer->setAttribute(Qt::WA_NoSystemBackground);
+    layer->setFocusPolicy(Qt::NoFocus);
+    layer->setPixmap(pixels);
+    layer->setGeometry(QRect(source->mapTo(window, clip.topLeft()), clip.size()));
+    layer->show();
+    return layer;
+}
+
 void qs_group_opacity(QSWidget w, double value) {
     auto *item = widget(w);
     value = qBound(0.0, value, 1.0);
