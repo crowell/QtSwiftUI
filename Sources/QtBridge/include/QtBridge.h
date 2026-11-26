@@ -1,5 +1,6 @@
 #pragma once
 #include <stddef.h>
+#include <stdint.h>
 #ifdef __cplusplus
 extern "C" {
 #endif
@@ -37,6 +38,7 @@ QSRect qs_present_popover(QSWidget popup, QSWindow *, QSWidget parent, QSRect an
 QSWidget qs_scroll_content(QSWidget);
 QSRect qs_scroll_viewport(QSWidget);
 void qs_scroll_set_offset(QSWidget, double x, double y);
+uint64_t qs_scroll_user_revision(QSWidget);
 void qs_scroll_refining(QSWidget);
 void qs_scroll_size(QSWidget, int width, int height);
 void qs_drawing_only(QSWidget);

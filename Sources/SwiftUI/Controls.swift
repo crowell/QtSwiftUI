@@ -269,11 +269,25 @@ public struct ScrollView<Content: View>: Primitive {
                              context.environment.colorScheme == .dark ? 1 : 0)
         var inner = context.descending(.position(0))
         inner.parent = qs_scroll_content(widget)
-        if !context.registerScrollArea.isEmpty {
+        let config = context.scrollConfiguration
+        inner.scrollConfiguration = ScrollConfiguration()
+        inner.isScrollTargetLayout = false
+        inner.scrollTargets = nil
+        let observesTargets = context.preferences[ObjectIdentifier(FirstScrollVisibility.self)] != nil
+        if !context.registerScrollArea.isEmpty || config.active || observesTargets {
             let targets = ScrollAreaTargets(widget, axes: axes, direction: context.environment.layoutDirection)
             inner.scrollTargets = targets
             for register in context.registerScrollArea { register(targets) }
         }
+        let mount: MountedScrollPosition?
+        if config.active {
+            let path = context.path + [.property("scroll position")]
+            mount = context.host.storage[path] as? MountedScrollPosition ?? MountedScrollPosition()
+            context.host.storage[path] = mount
+            context.host.liveStorage.insert(path)
+        } else { mount = nil }
+        var visibility: ScrollVisibilitySnapshot?
+        inner.publish(FirstScrollVisibility.self) { visibility }
         if axes.contains(.vertical) { inner.verticalViewport = widget }
         let origin = NamedOrigin()
         inner.spaces[ScrollSpace.nearest] = origin
@@ -302,10 +316,23 @@ public struct ScrollView<Content: View>: Primitive {
             let proposal = offer(ProposedViewSize(bounds.size))
             let size = view.measure(proposal)
             let contentSize = CGSize(width: max(bounds.width, size.width), height: max(bounds.height, size.height))
+            let prior = qs_scroll_viewport(widget)
             qs_scroll_size(widget, Int32(contentSize.width.rounded(.up)), Int32(contentSize.height.rounded(.up)))
-            view.place(Alignment.top.rect(size, in: CGRect(origin: .zero, size: contentSize)), proposal)
+            var rect = Alignment.top.rect(size, in: CGRect(origin: .zero, size: contentSize))
+            var shift = CGPoint.zero
+            if let mount {
+                shift = mount.prepare(widget: widget, config: config, axes: axes, direction: context.environment.layoutDirection,
+                                      size: size, viewport: qs_scroll_viewport(widget), prior: prior)
+                if horizontal { rect.origin.x = shift.x }
+                if vertical { rect.origin.y = shift.y }
+            }
+            view.place(rect, proposal)
+            if let area = inner.scrollTargets { mount?.finish(area: area, config: config, host: context.host) }
             let viewport = qs_scroll_viewport(widget)
-            geometry = ScrollGeometry(contentOffset: CGPoint(x: viewport.x, y: viewport.y), contentSize: size,
+            if observesTargets {
+                visibility = inner.scrollTargets?.snapshot(in: CGRect(x: viewport.x, y: viewport.y, width: viewport.width, height: viewport.height))
+            }
+            geometry = ScrollGeometry(contentOffset: CGPoint(x: viewport.x - shift.x, y: viewport.y - shift.y), contentSize: size,
                                       contentInsets: EdgeInsets(), containerSize: CGSize(width: viewport.width, height: viewport.height))
         }]
     }

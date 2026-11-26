@@ -11,6 +11,8 @@ import QtBridge
     let axes: Axis.Set
     let direction: LayoutDirection
     private var targets: [AnyHashable: Target] = [:]
+    private var marked = Set<AnyHashable>()
+    private var markedOrder: [AnyHashable] = []
     private var lazyIDs: [(name: @MainActor () -> AnyHashable?, target: Target)] = []
 
     init(_ widget: UnsafeMutableRawPointer, axes: Axis.Set, direction: LayoutDirection) {
@@ -22,6 +24,7 @@ import QtBridge
     func record(_ id: AnyHashable, bounds: CGRect, context: Context, path: [Part], estimated: Bool = false) {
         let origin = qs_origin(qs_scroll_content(widget)), parent = context.windowOffset
         let rect = bounds.offsetBy(dx: parent.x - origin.width, dy: parent.y - origin.height)
+        if context.isScrollTargetLayout, !estimated, marked.insert(id).inserted { markedOrder.append(id) }
         if var previous = targets[id] {
             guard previous.path == path else { return }
             if previous.estimated != estimated {
@@ -39,6 +42,11 @@ import QtBridge
         let origin = qs_origin(qs_scroll_content(widget)), parent = context.windowOffset
         let rect = bounds.offsetBy(dx: parent.x - origin.width, dy: parent.y - origin.height)
         lazyIDs.append((name, Target(rect: rect, path: path, estimated: true)))
+    }
+
+    func snapshot(in viewport: CGRect) -> ScrollVisibilitySnapshot {
+        let entries = markedOrder.compactMap { id in targets[id].map { ScrollVisibilitySnapshot.Entry(id: id, rect: $0.rect) } }
+        return ScrollVisibilitySnapshot(entries: entries, viewport: viewport)
     }
 
     func target(for id: AnyHashable) -> Target? {

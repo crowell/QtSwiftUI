@@ -12,7 +12,13 @@ public:
                                  static_cast<QWidget *>(area->horizontalScrollBar()),
                                  static_cast<QWidget *>(area->verticalScrollBar())}) target->installEventFilter(this);
         QScroller::grabGesture(area->viewport(), QScroller::TouchGesture);
+        for (auto *bar : {area->horizontalScrollBar(), area->verticalScrollBar()}) {
+            connect(bar, &QScrollBar::actionTriggered, this, [this] { if (enabled) ++revision; });
+            connect(bar, &QScrollBar::sliderMoved, this, [this] { if (enabled) ++revision; });
+        }
     }
+
+    quint64 revision = 0;
 
     void setEnabled(bool value) {
         if (enabled == value) return;
@@ -26,7 +32,10 @@ public:
 
 protected:
     bool eventFilter(QObject *target, QEvent *event) override {
-        if (enabled) return false;
+        if (enabled) {
+            if (event->type() == QEvent::Wheel || event->type() == QEvent::Scroll) ++revision;
+            return false;
+        }
         switch (event->type()) {
         case QEvent::Wheel:
         case QEvent::ScrollPrepare:

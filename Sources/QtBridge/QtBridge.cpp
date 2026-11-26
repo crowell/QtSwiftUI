@@ -1114,6 +1114,9 @@ void qs_scroll_set_offset(QSWidget w, double x, double y) {
     set(area->horizontalScrollBar(), x);
     set(area->verticalScrollBar(), y);
 }
+uint64_t qs_scroll_user_revision(QSWidget w) {
+    return static_cast<ScrollInput *>(widget(w)->property("qsScrollInput").value<QObject *>())->revision;
+}
 void qs_scroll_input(QSWidget w, int enabled) {
     auto *input = static_cast<ScrollInput *>(widget(w)->property("qsScrollInput").value<QObject *>());
     input->setEnabled(enabled);

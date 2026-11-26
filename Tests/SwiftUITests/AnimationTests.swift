@@ -3,6 +3,20 @@ import QtBridge
 @testable import SwiftUI
 
 final class AnimationTests: XCTestCase {
+    func testDelayedMovementWaitsThenRunsForItsFullDuration() {
+        let base = Animation.linear(duration: 1)
+        let delayed = base.delay(0.25).delay(0.5)
+        XCTAssertNotEqual(base, base.delay(0))
+        XCTAssertNotEqual(delayed, base.delay(0.75))
+        let value = AnimatedValue(0.0)
+        value.update(to: 1, at: 10, animation: delayed)
+        XCTAssertEqual(value.sample(at: 10.7), 0)
+        XCTAssertTrue(value.isAnimating)
+        XCTAssertEqual(value.sample(at: 11.25), 0.5, accuracy: 0.001)
+        XCTAssertEqual(value.sample(at: 11.75), 1)
+        XCTAssertFalse(value.isAnimating)
+    }
+
     @MainActor func testInterruptedOpacityAnimationStartsAtDisplayedValue() async {
         var target = 0.0
         var time = 100.0

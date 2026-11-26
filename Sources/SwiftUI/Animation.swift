@@ -3,6 +3,16 @@ import QtBridge
 public struct Animation: Equatable, Sendable {
     private let x1, y1, x2, y2: Double
     let duration: TimeInterval
+    private var delays: [TimeInterval] = []
+    fileprivate var totalDuration: TimeInterval {
+        delays.reduce(duration) { max(0, $0 + $1) }
+    }
+
+    public func delay(_ delay: TimeInterval) -> Self {
+        var copy = self
+        copy.delays.append(delay)
+        return copy
+    }
     private var oscillator: DampedSpring?
 
     public static func interpolatingSpring(mass: Double = 1, stiffness: Double, damping: Double, initialVelocity: Double = 0) -> Self {
@@ -36,7 +46,12 @@ public struct Animation: Equatable, Sendable {
     public static func easeOut(duration: TimeInterval) -> Self { .timingCurve(0, 0, 0.58, 1, duration: duration) }
     public static func easeInOut(duration: TimeInterval) -> Self { .timingCurve(0.42, 0, 0.58, 1, duration: duration) }
 
-    func fraction(at elapsed: TimeInterval) -> Double {
+    func fraction(at time: TimeInterval) -> Double {
+        var elapsed = time
+        for delay in delays.reversed() {
+            if elapsed < delay { return 0 }
+            elapsed -= delay
+        }
         guard duration > 0 && elapsed < duration else { return 1 }
         if let oscillator { return oscillator.fraction(at: max(0, elapsed)) }
         let x = max(0, elapsed / duration)
@@ -103,7 +118,7 @@ final class AnimatedValue<Value: VectorArithmetic> {
         target = value
     }
     func sample(at time: TimeInterval) -> Value {
-        movements.removeAll { time - $0.start >= $0.animation.duration }
+        movements.removeAll { time - $0.start >= $0.animation.totalDuration }
         return movements.reduce(target) { current, movement in
             current + movement.delta.scaled(by: movement.animation.fraction(at: time - movement.start) - 1)
         }

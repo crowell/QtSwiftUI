@@ -13,6 +13,8 @@ enum Part: Hashable {
     var verticalViewport: UnsafeMutableRawPointer?
     var registerScrollArea: [(ScrollAreaTargets) -> Void] = []
     var scrollTargets: ScrollAreaTargets?
+    var isScrollTargetLayout = false
+    var scrollConfiguration = ScrollConfiguration()
     var menuEntries: MenuEntries?
     var environment = EnvironmentValues()
     var preferences: [ObjectIdentifier: any PreferenceScope] = [:]
