@@ -3,6 +3,21 @@ public protocol EnvironmentKey {
     static var defaultValue: Value { get }
 }
 public enum ColorScheme: Sendable, Hashable { case light, dark }
+public enum LayoutDirection: Hashable, CaseIterable, Sendable {
+    case leftToRight, rightToLeft
+
+    func position(_ rect: CGRect, in bounds: CGRect) -> CGRect {
+        guard self == .rightToLeft else { return rect }
+        return CGRect(x: bounds.minX + (bounds.maxX - rect.maxX), y: rect.minY, width: rect.width, height: rect.height)
+    }
+    func horizontalOffset(_ value: CGFloat) -> CGFloat { self == .rightToLeft ? -value : value }
+}
+
+public enum LayoutDirectionBehavior: Hashable, Sendable {
+    case fixed
+    case mirrors(in: LayoutDirection)
+    public static var mirrors: Self { .mirrors(in: .rightToLeft) }
+}
 public enum TextAlignment: Sendable, Hashable { case leading, center, trailing }
 public struct EnvironmentValues {
     private var custom: [ObjectIdentifier: Any] = [:]
@@ -13,6 +28,7 @@ public struct EnvironmentValues {
         set { custom[ObjectIdentifier(key)] = newValue }
     }
     public var colorScheme: ColorScheme = .light
+    public var layoutDirection: LayoutDirection = Locale.current.language.characterDirection == .rightToLeft ? .rightToLeft : .leftToRight
     public var isEnabled = true
     var allowsHits = true
     var gesturesEnabled = true

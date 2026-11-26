@@ -49,7 +49,7 @@ public:
         if (flags & 8) modifiers |= Qt::AltModifier;
         if (flags & 16) modifiers |= Qt::MetaModifier;
         if (flags & 32) modifiers |= Qt::KeypadModifier;
-        auto key = specialKey(scalars.first(), automatic && window->isRightToLeft());
+        auto key = specialKey(scalars.first(), automatic && button->isRightToLeft());
         const QKeySequence sequence(QKeyCombination(modifiers, key));
         auto it = bindings.find(sequence);
         if (it == bindings.end()) {

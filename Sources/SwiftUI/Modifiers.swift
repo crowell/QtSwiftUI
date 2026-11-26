@@ -87,6 +87,7 @@ extension View {
     }
     public func padding(_ insets: EdgeInsets) -> some View {
         Transform(content: self) { view, ctx in
+            let left = ctx.environment.layoutDirection == .rightToLeft ? insets.trailing : insets.leading
             let w = insets.leading + insets.trailing, h = insets.top + insets.bottom
             func inner(_ p: ProposedViewSize) -> ProposedViewSize {
                 .init(width: p.width.map { max(0, $0 - w) }, height: p.height.map { max(0, $0 - h) })
@@ -96,7 +97,7 @@ extension View {
                     let size = child.measure(inner(p))
                     return CGSize(width: size.width + w, height: size.height + h)
                 } place: { rect, p in
-                    child.place(CGRect(origin: CGPoint(x: rect.minX + insets.leading, y: rect.minY + insets.top),
+                    child.place(CGRect(origin: CGPoint(x: rect.minX + left, y: rect.minY + insets.top),
                                        size: child.measure(inner(p))), inner(p))
                 }
             }
@@ -126,7 +127,7 @@ extension View {
                                   height: dimension(size.height, offer.height, minHeight, maxHeight))
                 } place: { bounds, p in
                     let offer = proposed(p)
-                    child.place(alignment.rect(child.measure(offer), in: bounds), offer)
+                    child.place(alignment.rect(child.measure(offer), in: bounds, direction: ctx.environment.layoutDirection), offer)
                 }
             }
         }
@@ -157,7 +158,7 @@ extension View {
                 return child.wrapping(size: child.measure) { bounds, p in
                     let proposal = ProposedViewSize(bounds.size)
                     if above { child.place(bounds, p) }
-                    for d in decorations { d.place(alignment.rect(d.measure(proposal), in: bounds), proposal) }
+                    for d in decorations { d.place(alignment.rect(d.measure(proposal), in: bounds, direction: ctx.environment.layoutDirection), proposal) }
                     if !above { child.place(bounds, p) }
                 }
             }

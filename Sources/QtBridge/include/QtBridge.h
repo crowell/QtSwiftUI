@@ -63,6 +63,7 @@ void qs_canvas_color(QSWidget, const char *color);
 void qs_canvas_gradient(QSWidget, double x1, double y1, double x2, double y2);
 void qs_canvas_stop(QSWidget, double location, const char *color);
 void qs_hit_testing(QSWidget, int enabled);
+void qs_direction(QSWidget, int rtl);
 void qs_group(QSWidget, int behavior, int isImage, int updatesFrequently, const char *value);
 void qs_group_hidden(QSWidget, int hidden);
 void qs_group_hover(QSWidget, int enabled);

@@ -22,6 +22,7 @@ cp "$source_dir/Calling/CallingAudioIndicator.swift" "$source_dir/Theme/SignalIc
 cp "$source_dir/Calling/ConfirmLeaveCallModal.swift" "$source_dir/Axo/AxoAlertDialog.swift" \
    "$source_dir/Axo/AxoConfirmDialog.swift" "$source_dir/Theme/CSSShapes.swift" \
    "$source_dir/Axo/AxoPopper.swift" "$target_dir/"
+cp "$source_dir/Components/ClearingData.swift" "$source_dir/Components/ProgressBar.swift" "$target_dir/"
 cp "$source_dir/Axo/AxoBrand.swift" "$source_dir/Axo/AxoDragRegion.swift" \
    "$source_dir/Components/Button.swift" "$source_dir/Components/Spinner.swift" \
    "$source_dir/Components/LegacyType.swift" "$source_dir/Components/LegacyIcon.swift" "$target_dir/"

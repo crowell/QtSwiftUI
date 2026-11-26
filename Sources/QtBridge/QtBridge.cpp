@@ -672,7 +672,7 @@ void qs_style(QSWidget w, const char *family, double points, int weight, int ita
     item->setPalette(palette);
     if (auto *label = qobject_cast<QLabel *>(item)) {
         label->setWordWrap(wrap);
-        label->setAlignment(Qt::AlignVCenter | (alignment < 0 ? Qt::AlignLeft : alignment > 0 ? Qt::AlignRight : Qt::AlignHCenter));
+        label->setAlignment(Qt::AlignAbsolute | Qt::AlignVCenter | (alignment < 0 ? Qt::AlignLeft : alignment > 0 ? Qt::AlignRight : Qt::AlignHCenter));
     }
 }
 void qs_surface(QSWidget w, const char *color, double radius) {
@@ -783,6 +783,7 @@ void qs_canvas_gradient(QSWidget w, double x1, double y1, double x2, double y2) 
 void qs_canvas_stop(QSWidget w, double location, const char *color) {
     static_cast<CanvasWidget *>(w)->drawings.back().gradient->setColorAt(location, QColor(QString::fromUtf8(color)));
 }
+void qs_direction(QSWidget w, int rtl) { widget(w)->setLayoutDirection(rtl ? Qt::RightToLeft : Qt::LeftToRight); }
 void qs_hit_testing(QSWidget w, int enabled) { widget(w)->setAttribute(Qt::WA_TransparentForMouseEvents, !enabled); }
 void qs_path_step(QSPath *target, int op, double x, double y, double a, double b, double c, double d) {
     auto &path = *target;

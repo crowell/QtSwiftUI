@@ -39,7 +39,7 @@ public struct GeometryReader<Content: View>: Primitive {
             let proxy = context.geometry(in: bounds)
             let proposal = ProposedViewSize(bounds.size)
             for child in content(proxy).resolve(context) {
-                child.place(CGRect(origin: bounds.origin, size: child.measure(proposal)), proposal)
+                child.place(Alignment.topLeading.rect(child.measure(proposal), in: bounds, direction: context.environment.layoutDirection), proposal)
             }
         }]
     }
@@ -103,7 +103,7 @@ extension View {
         Transform(content: self) { view, ctx in
             let group = ctx.widget(QSGroup)
             return ctx.children(of: view, inside: group) { size in
-                shape.path(in: CGRect(origin: .zero, size: size)).withNativePath {
+                shape.displayPath(in: CGRect(origin: .zero, size: size), context: ctx).withNativePath {
                     qs_group_clip(group, $0, style.isEOFilled ? 1 : 0, style.isAntialiased ? 1 : 0)
                 }
             }
@@ -134,13 +134,17 @@ extension View {
     public func rotationEffect(_ angle: Angle, anchor: UnitPoint = .center) -> some View {
         Transform(content: self) { view, ctx in
             let group = ctx.widget(QSGroup)
-            qs_group_rotation(group, ctx.interpolated(angle.degrees, key: "rotation"), anchor.x, anchor.y)
+            let direction = ctx.environment.layoutDirection
+            let degrees = ctx.interpolated(angle.degrees, key: "rotation")
+            let anchorX = direction == .rightToLeft ? 1 - anchor.x : anchor.x
+            qs_group_rotation(group, direction == .rightToLeft ? -degrees : degrees, anchorX, anchor.y)
             return ctx.children(of: view, inside: group)
         }
     }
     public func offset(x: CGFloat = 0, y: CGFloat = 0) -> some View {
         Transform(content: self) { view, ctx in
-            let dx = ctx.interpolated(x, key: "offset x"), dy = ctx.interpolated(y, key: "offset y")
+            let dx = ctx.environment.layoutDirection.horizontalOffset(ctx.interpolated(x, key: "offset x"))
+            let dy = ctx.interpolated(y, key: "offset y")
             return view.resolve(ctx).map { child in child.wrapping(size: child.measure) { child.place($0.offsetBy(dx: dx, dy: dy), $1) } }
         }
     }

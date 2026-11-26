@@ -167,6 +167,7 @@ extension InsettableShape {
     public func strokeBorder(lineWidth: CGFloat = 1) -> some View { inset(by: lineWidth / 2).stroke(lineWidth: lineWidth) }
 }
 private struct InsetGeometry<Base: Shape>: InsettableShape {
+    nonisolated var layoutDirectionBehavior: LayoutDirectionBehavior { base.layoutDirectionBehavior }
     let base: Base
     let amount: CGFloat
     public nonisolated func path(in rect: CGRect) -> Path { base.path(in: rect.insetBy(dx: amount, dy: amount)) }

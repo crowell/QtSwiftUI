@@ -38,6 +38,8 @@ if [ -n "${QTSWIFTUI_SCREENSHOT:-}" ]; then
     QTSWIFTUI_SCREENSHOT="$(dirname "$QTSWIFTUI_SCREENSHOT")/confirm-leave-call.png" "$binary" --leave-call
     QTSWIFTUI_SCREENSHOT="$(dirname "$QTSWIFTUI_SCREENSHOT")/link-device.png" "$binary" --link-device
     QTSWIFTUI_SCREENSHOT="$(dirname "$QTSWIFTUI_SCREENSHOT")/link-error.png" "$binary" --link-error
+    QTSWIFTUI_SCREENSHOT="$(dirname "$QTSWIFTUI_SCREENSHOT")/clearing-data.png" "$binary" --clearing-data --still
+    QTSWIFTUI_SCREENSHOT="$(dirname "$QTSWIFTUI_SCREENSHOT")/clearing-data-ar.png" "$binary" --clearing-data --arabic --still
 else
     "$binary"
 fi

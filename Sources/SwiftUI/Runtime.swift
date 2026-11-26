@@ -73,6 +73,7 @@ enum Part: Hashable {
             }
         }
         if kind != QSSurface && kind != QSCanvas { qs_hit_testing(entry.widget, environment.allowsHits ? 1 : 0) }
+        qs_direction(entry.widget, environment.layoutDirection == .rightToLeft ? 1 : 0)
         qs_enabled(entry.widget, environment.isEnabled ? 1 : 0)
         qs_accessibility(entry.widget, environment.label, environment.identifier)
         qs_help(entry.widget, environment.helpText)

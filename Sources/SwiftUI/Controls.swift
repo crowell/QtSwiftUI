@@ -4,8 +4,9 @@ extension Context {
     func style(_ widget: UnsafeMutableRawPointer) {
         let font = environment.font ?? .body
         let alignment = environment.multilineTextAlignment
+        let leading: Int32 = environment.layoutDirection == .rightToLeft ? 1 : -1
         qs_style(widget, font.qtFamily, font.size, font.weight.value, font.slanted ? 1 : 0, environment.tracking, environment.foreground.hex(environment.colorScheme),
-                 alignment == .leading ? -1 : alignment == .center ? 0 : 1, environment.lineLimit == 1 ? 0 : 1)
+                 alignment == .leading ? leading : alignment == .center ? 0 : -leading, environment.lineLimit == 1 ? 0 : 1)
     }
     func control(_ widget: UnsafeMutableRawPointer, expands: Bool = false) -> Element {
         style(widget)
@@ -70,7 +71,7 @@ public struct Button<Label: View>: Primitive {
         ctx.environment.isLink = false
         ctx.environment.focus = nil
         let configured = style?(.init(label: .init(content: AnyView(label)), isPressed: qs_button_down(widget) != 0), context)
-        let child = stacked((configured ?? AnyView(label)).resolve(ctx.descending(.position(0))), axis: .horizontal, alignment: .center, spacing: 4)
+        let child = stacked((configured ?? AnyView(label)).resolve(ctx.descending(.position(0))), axis: .horizontal, alignment: .center, spacing: 4, direction: ctx.environment.layoutDirection)
         let dx: CGFloat = style == nil ? 8 : 0, dy: CGFloat = style == nil ? 5 : 0
         func inner(_ p: ProposedViewSize) -> ProposedViewSize {
             .init(width: p.width.map { max(0, $0 - 2 * dx) }, height: p.height.map { max(0, $0 - 2 * dy) })
@@ -98,7 +99,7 @@ public struct Toggle<Label: View>: Primitive {
             qs_text(widget, text.string)
             return [text.styled(context).control(widget)]
         }
-        return [stacked([context.control(widget)] + label.resolve(context.descending(.position(0))), axis: .horizontal, alignment: .center, spacing: 4)]
+        return [stacked([context.control(widget)] + label.resolve(context.descending(.position(0))), axis: .horizontal, alignment: .center, spacing: 4, direction: context.environment.layoutDirection)]
     }
 }
 @MainActor private func field(_ title: String, text: Binding<String>, secure: Bool, in context: Context) -> Element {

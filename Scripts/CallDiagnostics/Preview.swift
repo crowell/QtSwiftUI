@@ -1,4 +1,5 @@
 import SwiftUI
+import SignalI18n
 
 @main
 struct DiagnosticPreview: App {
@@ -6,12 +7,20 @@ struct DiagnosticPreview: App {
         let linkError = CommandLine.arguments.contains("--link-error")
         let linking = linkError || CommandLine.arguments.contains("--link-device")
         let leaveCall = CommandLine.arguments.contains("--leave-call")
-        WindowGroup(linking ? "Link device" : leaveCall ? "Leave current call" : "Call diagnostics") {
-            if linking { DeviceLinkPreview(showError: linkError) }
+        let clearing = CommandLine.arguments.contains("--clearing-data")
+        let arabic = CommandLine.arguments.contains("--arabic")
+        WindowGroup(clearing ? "Clearing data" : linking ? "Link device" : leaveCall ? "Leave current call" : "Call diagnostics") {
+            if clearing {
+                ClearingData(step: .deletingData)
+                    .background(AxoColor.surfacePrimary)
+                    .environment(\.layoutDirection, arabic ? .rightToLeft : .leftToRight)
+                    .environment(\.i18n, Localizer(locale: arabic ? "ar" : "en"))
+                    .environment(\.axoAnimationsDisabled, CommandLine.arguments.contains("--still"))
+            } else if linking { DeviceLinkPreview(showError: linkError) }
             else if leaveCall { LeaveCallPreview() }
             else { DiagnosticContent() }
         }
-        .defaultSize(width: linking ? 680 : 520, height: linking ? 420 : 440)
+        .defaultSize(width: linking || clearing ? 680 : 520, height: linking || clearing ? 420 : 440)
     }
 }
 

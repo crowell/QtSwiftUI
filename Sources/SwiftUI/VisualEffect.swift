@@ -42,7 +42,7 @@ extension View {
                     result.animatableData = context.interpolated(result.animatableData, key: "visual effect")
                     let offset = result.translation
                     qs_group_opacity(group, result.alpha)
-                    child.place(bounds.offsetBy(dx: offset.width, dy: offset.height), proposal)
+                    child.place(bounds.offsetBy(dx: context.environment.layoutDirection.horizontalOffset(offset.width), dy: offset.height), proposal)
                 }
                 return element
             }

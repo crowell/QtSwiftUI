@@ -35,9 +35,10 @@ public struct Alignment: Hashable, Sendable {
     public static let top = Self(horizontal: .center, vertical: .top), bottom = Self(horizontal: .center, vertical: .bottom)
     public static let topLeading = Self(horizontal: .leading, vertical: .top), topTrailing = Self(horizontal: .trailing, vertical: .top)
     public static let bottomLeading = Self(horizontal: .leading, vertical: .bottom), bottomTrailing = Self(horizontal: .trailing, vertical: .bottom)
-    func rect(_ size: CGSize, in bounds: CGRect) -> CGRect {
-        CGRect(x: bounds.minX + (bounds.width - size.width) * horizontal.factor,
-               y: bounds.minY + (bounds.height - size.height) * vertical.factor, width: size.width, height: size.height)
+    func rect(_ size: CGSize, in bounds: CGRect, direction: LayoutDirection = .leftToRight) -> CGRect {
+        let rect = CGRect(x: bounds.minX + (bounds.width - size.width) * horizontal.factor,
+                          y: bounds.minY + (bounds.height - size.height) * vertical.factor, width: size.width, height: size.height)
+        return direction.position(rect, in: bounds)
     }
 }
 public enum Axis: Int8, CaseIterable, Sendable {
@@ -95,7 +96,8 @@ extension View {
 
 // Reserve children's minimum sizes, then offer the remaining space to the least flexible
 // children first. A spacer receives the space that intrinsic-size controls decline.
-@MainActor func stacked(_ children: [Element], axis: Axis, alignment: Alignment, spacing: CGFloat) -> Element {
+@MainActor func stacked(_ children: [Element], axis: Axis, alignment: Alignment, spacing: CGFloat,
+                        direction: LayoutDirection = .leftToRight) -> Element {
     if children.count == 1 { return children[0] }
     let gap = spacing * CGFloat(max(0, children.count - 1))
     func arrange(_ proposal: ProposedViewSize) -> [(CGSize, ProposedViewSize)] {
@@ -137,7 +139,7 @@ extension View {
         for (child, (size, offer)) in zip(children, arrange(p)) {
             var rect = alignment.rect(size, in: bounds)
             if axis == .horizontal { rect.origin.x = cursor } else { rect.origin.y = cursor }
-            placements.append(Placement(child: child, rect: rect, proposal: offer))
+            placements.append(Placement(child: child, rect: direction.position(rect, in: bounds), proposal: offer))
             cursor += size[keyPath: axis.main] + spacing
         }
         Placement.draw(placements)
@@ -164,6 +166,7 @@ public protocol LayoutValueKey {
 }
 public struct LayoutSubviews: RandomAccessCollection {
     public typealias Index = Int
+    public var layoutDirection: LayoutDirection
     let items: [LayoutSubview]
     public var startIndex: Int { items.startIndex }
     public var endIndex: Int { items.endIndex }
@@ -190,15 +193,18 @@ private struct LayoutContainer<L: Layout, Content: View>: Primitive {
     func elements(in context: Context) -> [Element] {
         let children = content.resolve(context)
         var placements = [Placement?](repeating: nil, count: children.count)
-        let subviews = LayoutSubviews(items: children.enumerated().map { index, child in
+        var layoutBounds = CGRect.zero
+        let direction = context.environment.layoutDirection
+        let subviews = LayoutSubviews(layoutDirection: direction, items: children.enumerated().map { index, child in
             LayoutSubview(element: child) { rect, proposal in
-                placements[index] = Placement(child: child, rect: rect, proposal: proposal)
+                placements[index] = Placement(child: child, rect: direction.position(rect, in: layoutBounds), proposal: proposal)
             }
         })
         var cache = layout.makeCache(subviews: subviews)
         return [Element { layout.sizeThatFits(proposal: $0, subviews: subviews, cache: &cache) }
                 place: { bounds, proposal in
                     for index in placements.indices { placements[index] = nil }
+                    layoutBounds = bounds
                     layout.placeSubviews(in: bounds, proposal: proposal, subviews: subviews, cache: &cache)
                     Placement.draw(placements.compactMap { $0 })
                 }]
@@ -211,7 +217,7 @@ public struct HStack<Content: View>: Primitive {
     }
     func elements(in context: Context) -> [Element] {
         [stacked(content.resolve(context.with(\.stackAxis, .horizontal)), axis: .horizontal,
-                 alignment: .init(horizontal: .leading, vertical: alignment), spacing: spacing ?? 8)]
+                 alignment: .init(horizontal: .leading, vertical: alignment), spacing: spacing ?? 8, direction: context.environment.layoutDirection)]
     }
 }
 public struct VStack<Content: View>: Primitive {
@@ -221,7 +227,7 @@ public struct VStack<Content: View>: Primitive {
     }
     func elements(in context: Context) -> [Element] {
         [stacked(content.resolve(context.with(\.stackAxis, .vertical)), axis: .vertical,
-                 alignment: .init(horizontal: alignment, vertical: .top), spacing: spacing ?? 8)]
+                 alignment: .init(horizontal: alignment, vertical: .top), spacing: spacing ?? 8, direction: context.environment.layoutDirection)]
     }
 }
 public struct ZStack<Content: View>: Primitive {
@@ -232,7 +238,7 @@ public struct ZStack<Content: View>: Primitive {
         return [Element { p in
             children.map { $0.measure(p) }.reduce(.zero) { CGSize(width: max($0.width, $1.width), height: max($0.height, $1.height)) }
         } place: { bounds, p in
-            Placement.draw(children.map { Placement(child: $0, rect: alignment.rect($0.measure(p), in: bounds), proposal: p) })
+            Placement.draw(children.map { Placement(child: $0, rect: alignment.rect($0.measure(p), in: bounds, direction: context.environment.layoutDirection), proposal: p) })
         }]
     }
 }

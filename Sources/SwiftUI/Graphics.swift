@@ -180,12 +180,19 @@ public protocol InsettableShape: Shape {
     nonisolated func inset(by amount: CGFloat) -> InsetShape
 }
 public nonisolated protocol Shape: View, Sendable, Animatable {
+    nonisolated var layoutDirectionBehavior: LayoutDirectionBehavior { get }
     nonisolated func path(in rect: CGRect) -> Path
 }
 protocol AnimatedShape: Shape {
     @MainActor func renderedPath(in rect: CGRect, context: Context) -> Path
 }
 extension Shape {
+    public nonisolated var layoutDirectionBehavior: LayoutDirectionBehavior { .mirrors }
+    @MainActor func displayPath(in rect: CGRect, context: Context) -> Path {
+        let path = self.path(in: rect, context: context)
+        guard layoutDirectionBehavior == .mirrors(in: context.environment.layoutDirection) else { return path }
+        return path.applying(CGAffineTransform(a: -1, b: 0, c: 0, d: 1, tx: rect.minX + rect.maxX, ty: 0))
+    }
     @MainActor func path(in rect: CGRect, context: Context) -> Path {
         if let shape = self as? any AnimatedShape { return shape.renderedPath(in: rect, context: context) }
         if AnimatableData.self == EmptyAnimatableData.self { return path(in: rect) }
@@ -209,7 +216,7 @@ struct FilledShape<S: Shape, Style: ShapeStyle>: Primitive {
             if shape is Circle { let side = min(size.width, size.height); return CGSize(width: side, height: side) }
             return size
         } place: { rect, _ in
-            shape.path(in: CGRect(origin: .zero, size: rect.size), context: context).withNativePath {
+            shape.displayPath(in: CGRect(origin: .zero, size: rect.size), context: context).withNativePath {
                 qs_surface_path(widget, $0, fill.isEOFilled ? 1 : 0, fill.isAntialiased ? 1 : 0)
             }
             qs_place(widget, rect.minX, rect.minY, rect.width, rect.height)
@@ -217,14 +224,17 @@ struct FilledShape<S: Shape, Style: ShapeStyle>: Primitive {
     }
 }
 public struct Rectangle: Shape {
+    public nonisolated var layoutDirectionBehavior: LayoutDirectionBehavior { .fixed }
     public nonisolated init() {}
     public nonisolated func path(in rect: CGRect) -> Path { Path(rect) }
 }
 public struct Ellipse: Shape {
+    public nonisolated var layoutDirectionBehavior: LayoutDirectionBehavior { .fixed }
     public nonisolated init() {}
     public nonisolated func path(in rect: CGRect) -> Path { Path(ellipseIn: rect) }
 }
 public struct Circle: Shape {
+    public nonisolated var layoutDirectionBehavior: LayoutDirectionBehavior { .fixed }
     public nonisolated init() {}
     public nonisolated func path(in rect: CGRect) -> Path {
         let side = min(rect.width, rect.height)
@@ -233,6 +243,7 @@ public struct Circle: Shape {
 }
 public enum RoundedCornerStyle: Sendable { case circular, continuous }
 public struct RoundedRectangle: Shape {
+    public nonisolated var layoutDirectionBehavior: LayoutDirectionBehavior { .fixed }
     public var cornerSize: CGSize
     public var style: RoundedCornerStyle
     public nonisolated init(cornerRadius: CGFloat, style: RoundedCornerStyle = .continuous) {
@@ -242,6 +253,7 @@ public struct RoundedRectangle: Shape {
     public nonisolated func path(in rect: CGRect) -> Path { var p = Path(); p.commands = [.rounded(rect, cornerSize)]; return p }
 }
 public struct Capsule: Shape {
+    public nonisolated var layoutDirectionBehavior: LayoutDirectionBehavior { .fixed }
     public nonisolated init(style: RoundedCornerStyle = .continuous) {}
     public nonisolated func path(in rect: CGRect) -> Path { RoundedRectangle(cornerRadius: min(rect.width, rect.height) / 2).path(in: rect) }
 }

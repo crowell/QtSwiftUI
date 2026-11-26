@@ -46,6 +46,7 @@ extension Path {
 }
 
 private struct StrokedShape<Base: Shape>: AnimatedShape {
+    nonisolated var layoutDirectionBehavior: LayoutDirectionBehavior { base.layoutDirectionBehavior }
     let base: Base
     let style: StrokeStyle
     nonisolated func path(in rect: CGRect) -> Path { base.path(in: rect).strokedPath(style) }
@@ -55,6 +56,7 @@ private struct StrokedShape<Base: Shape>: AnimatedShape {
 }
 
 private struct TrimmedShape<Base: Shape>: AnimatedShape {
+    nonisolated var layoutDirectionBehavior: LayoutDirectionBehavior { base.layoutDirectionBehavior }
     let base: Base
     let from: CGFloat
     let to: CGFloat

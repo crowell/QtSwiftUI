@@ -21,7 +21,7 @@ extension View {
         Transform(content: self) { view, ctx in
             let group = ctx.widget(QSGroup)
             return ctx.children(of: view, inside: group) { size in
-                shape.path(in: CGRect(origin: .zero, size: size)).withNativePath {
+                shape.displayPath(in: CGRect(origin: .zero, size: size), context: ctx).withNativePath {
                     qs_group_shape(group, $0, eoFill ? 1 : 0)
                 }
             }
