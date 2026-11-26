@@ -242,6 +242,7 @@ enum Part: Hashable {
         case 1: context.environment.scenePhase = .inactive
         default: context.environment.scenePhase = .background
         }
+        context.environment.isPresented = viewport != nil
         context.environment.displayScale = scale
         context.environment.accessibilityReduceMotion = qs_reduce_motion(window) != 0
         context.environment.closePresentation = { [weak self] in

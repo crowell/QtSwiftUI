@@ -10,6 +10,7 @@
 #include "PointerDrag.hpp"
 #include "Magnification.hpp"
 #include "NativeMenu.hpp"
+#include "NativePopover.hpp"
 #include <QGestureEvent>
 #include <QNativeGestureEvent>
 #include <QPixmapCache>
@@ -810,6 +811,7 @@ struct QSWindow final : QWidget {
         QWidget::keyPressEvent(key);
     }
     void resizeEvent(QResizeEvent *) override { schedule(); }
+    void moveEvent(QMoveEvent *) override { schedule(); }
     void changeEvent(QEvent *change) override {
         QWidget::changeEvent(change);
         if (change->type() == QEvent::WindowStateChange || change->type() == QEvent::ActivationChange) schedule();
@@ -901,8 +903,9 @@ int qs_dark_ink(QSWindow *window, int x, int y, int width, int height) {
 int qs_capture(QSWindow *window, const char *path) {
     auto pixels = window->grab();
     QPainter painter(&pixels);
-    for (auto *popup : window->findChildren<QMenu *>()) {
-        if (popup->isVisible()) painter.drawPixmap(window->mapFromGlobal(popup->mapToGlobal(QPoint())), popup->grab());
+    for (auto *popup : window->findChildren<QWidget *>()) {
+        if (popup->isVisible() && (qobject_cast<QMenu *>(popup) || dynamic_cast<NativePopover *>(popup)))
+            painter.drawPixmap(window->mapFromGlobal(popup->mapToGlobal(QPoint())), popup->grab());
     }
     painter.end();
     return pixels.save(QString::fromUtf8(path), "PNG");
@@ -956,6 +959,9 @@ void qs_group_gesture(QSWidget w, int taps, int drag, int simultaneous, double d
 }
 QSMagnifySample qs_magnify_sample(QSWidget w) { return static_cast<GroupWidget *>(w)->pinch.sample; }
 void qs_close(QSWindow *window) {
+    for (auto *child : window->findChildren<QWidget *>()) {
+        if (auto *popup = dynamic_cast<NativePopover *>(child)) popup->disconnectDismissal();
+    }
     delete window;
     if (--liveWindows == 0) {
         // Tear Qt down while the platform plugin and its font database are still alive.
@@ -967,6 +973,8 @@ void qs_close(QSWindow *window) {
 QSWidget qs_create(QSWindow *window, QSWidget parent, QSKind kind, int id) {
     QWidget *container = parent ? widget(parent) : window;
     switch (kind) {
+    case QSPopover:
+        return new NativePopover(container->window(), [window, id] { window->event(window->context, id, QSActivate, ""); });
     case QSLabel: {
         return new PlainLabel(container);
     }
@@ -1072,6 +1080,15 @@ QSWidget qs_create(QSWindow *window, QSWidget parent, QSKind kind, int id) {
     }
     return nullptr;
 }
+QSRect qs_present_popover(QSWidget w, QSWindow *window, QSWidget parent, QSRect anchor, QSSize content, QSPopoverEdge edge, int dark) {
+    if (window->snapshot) return {};
+    auto *source = parent ? widget(parent) : window;
+    const auto origin = qs_origin(source);
+    const auto point = source->window()->mapToGlobal(QPointF(origin.width + anchor.x, origin.height + anchor.y));
+    const auto rect = static_cast<NativePopover *>(w)->present(QRectF(point, QSizeF(anchor.width, anchor.height)),
+                                                               QSizeF(content.width, content.height), edge, dark);
+    return {double(rect.x()), double(rect.y()), double(rect.width()), double(rect.height())};
+}
 QSWidget qs_scroll_content(QSWidget w) { return static_cast<QScrollArea *>(w)->widget(); }
 void qs_scroll_refining(QSWidget w) { widget(w)->setProperty("qsEstimatedExtent", true); }
 void qs_scroll_size(QSWidget w, int width, int height) {
@@ -1136,7 +1153,10 @@ void qs_scroll_axes(QSWidget w, int h, int v, int dark) {
     scroll->setHorizontalScrollBarPolicy(h ? Qt::ScrollBarAsNeeded : Qt::ScrollBarAlwaysOff);
     scroll->setVerticalScrollBarPolicy(v ? Qt::ScrollBarAsNeeded : Qt::ScrollBarAlwaysOff);
 }
-void qs_destroy(QSWidget w) { delete widget(w); }
+void qs_destroy(QSWidget w) {
+    if (auto *popup = dynamic_cast<NativePopover *>(widget(w))) popup->disconnectDismissal();
+    delete widget(w);
+}
 void qs_text(QSWidget w, const char *s) {
     auto text = QString::fromUtf8(s);
     if (auto *label = dynamic_cast<PlainLabel *>(widget(w))) label->setSource(text);
@@ -2040,7 +2060,7 @@ int qs_click_popup_item(QSWindow *window, const char *title) {
     QApplication::sendEvent(menu, &release);
     return 1;
 }
-static int clickPoint(QSWindow *window, int x, int y, const QPointingDevice *device) {
+static int clickPoint(QWidget *window, int x, int y, const QPointingDevice *device) {
     const QPoint point(x, y);
     QWidget *target = window->childAt(point);
     if (!target) return 0;
@@ -2052,6 +2072,29 @@ static int clickPoint(QSWindow *window, int x, int y, const QPointingDevice *dev
     QApplication::sendEvent(window->windowHandle(), &release);
     qs_flush();
     return 1;
+}
+static NativePopover *activePopover(QSWindow *owner) {
+    auto *popup = dynamic_cast<NativePopover *>(QApplication::activePopupWidget());
+    for (auto *parent = popup ? popup->parentWidget() : nullptr; parent; parent = parent->parentWidget())
+        if (parent == owner) return popup;
+    return nullptr;
+}
+QSRect qs_active_popover_frame(QSWindow *window) {
+    auto *popup = activePopover(window);
+    if (!popup) return {};
+    const auto point = window->mapFromGlobal(popup->mapToGlobal(QPoint()));
+    return {double(point.x()), double(point.y()), double(popup->width()), double(popup->height())};
+}
+int qs_click_popover(QSWindow *window, int x, int y) {
+    auto *popup = activePopover(window);
+    return popup ? clickPoint(popup, x, y, QPointingDevice::primaryPointingDevice()) : 0;
+}
+int qs_escape_popover(QSWindow *window) {
+    auto *popup = activePopover(window);
+    if (!popup) return 0;
+    QKeyEvent escape(QEvent::KeyPress, Qt::Key_Escape, Qt::NoModifier);
+    QApplication::sendEvent(popup, &escape);
+    return escape.isAccepted();
 }
 int qs_click_point(QSWindow *window, int x, int y) {
     return clickPoint(window, x, y, QPointingDevice::primaryPointingDevice());

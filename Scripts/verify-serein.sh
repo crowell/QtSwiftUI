@@ -32,6 +32,7 @@ fi
 diagnostics="$preview/diagnostics"
 sh /src/Scripts/prepare-diagnostics.sh "$checkout" "$diagnostics"
 if [ -n "${QTSWIFTUI_SCREENSHOT:-}" ]; then
+    export QTSWIFTUI_MUTE_REFERENCE="$(dirname "$QTSWIFTUI_SCREENSHOT")"
     export QTSWIFTUI_USERNAME_REFERENCE="$(dirname "$QTSWIFTUI_SCREENSHOT")"
     export QTSWIFTUI_SHARE_REFERENCE="$(dirname "$QTSWIFTUI_SCREENSHOT")"
     export QTSWIFTUI_STICKER_REFERENCE="$(dirname "$QTSWIFTUI_SCREENSHOT")"
@@ -52,6 +53,7 @@ if [ -n "${QTSWIFTUI_SCREENSHOT:-}" ]; then
     QTSWIFTUI_SCREENSHOT="$(dirname "$QTSWIFTUI_SCREENSHOT")/voice-recording.png" "$binary" --recording
     QTSWIFTUI_SCREENSHOT="$(dirname "$QTSWIFTUI_SCREENSHOT")/discard-recording.png" "$binary" --discard-recording
     QTSWIFTUI_SCREENSHOT="$(dirname "$QTSWIFTUI_SCREENSHOT")/data-usage-settings.png" "$binary" --data-usage-settings
+    QTSWIFTUI_SCREENSHOT="$(dirname "$QTSWIFTUI_SCREENSHOT")/mute-until.png" "$binary" --mute-until
     QTSWIFTUI_SCREENSHOT="$(dirname "$QTSWIFTUI_SCREENSHOT")/username-link.png" "$binary" --username-link
     QTSWIFTUI_SCREENSHOT="$(dirname "$QTSWIFTUI_SCREENSHOT")/username-card-preview.png" "$binary" --username-card
     QTSWIFTUI_SCREENSHOT="$(dirname "$QTSWIFTUI_SCREENSHOT")/share-picker.png" "$binary" --share-picker

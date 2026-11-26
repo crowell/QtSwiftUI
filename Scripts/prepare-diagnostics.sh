@@ -100,7 +100,7 @@ if [ -f "$lighthouse" ]; then cp "$lighthouse" "$target_dir/Media/"; fi
 # The QR card's production PNG exporter uses its own encoder and MediaEditorExport's
 # pixel reader. Substitute the portable font shaper for CoreText and bridge CFData on Linux.
 qr="$source_dir/Components/QRCode"
-cp "$source_dir/Components/UsernameLinkEditor.swift" "$qr/QrCode.swift" "$qr/QRCodeGenerator.swift" "$qr/BrandedQRCode.swift" "$target_dir/"
+cp "$source_dir/Components/DateTimePickers.swift" "$source_dir/Components/UsernameLinkEditor.swift" "$qr/QrCode.swift" "$qr/QRCodeGenerator.swift" "$qr/BrandedQRCode.swift" "$target_dir/"
 awk '/CSSTextLayout.make\(runs:/ {print "        AxoFonts.width(text, style: style)"; count++; next}
      {print} END {if (count != 1) exit 1}' "$qr/UsernameLinkCard.swift" > "$target_dir/UsernameLinkCard.swift"
 {

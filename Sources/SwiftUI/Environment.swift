@@ -69,6 +69,7 @@ public struct EnvironmentValues {
     var focus: FocusLink?
     public var isFocusEffectEnabled = true
     var submit: (() -> Void)?
+    public internal(set) var isPresented = false
     var closePresentation: @MainActor () -> Void = {}
     var urlAction: OpenURLAction?
     public var calendar: Calendar = .autoupdatingCurrent
