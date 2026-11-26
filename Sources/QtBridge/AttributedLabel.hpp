@@ -1,6 +1,7 @@
 #pragma once
 #include "RegisteredFonts.hpp"
 #include "TextElision.hpp"
+#include "TextStrike.hpp"
 #include <QTextBrowser>
 #include <QPointer>
 #include <QScrollBar>
@@ -37,9 +38,10 @@ public:
         content.setDocumentMargin(0);
         content.setDefaultFont(font());
         hasLinks = false;
+        hasCustomStrikes = false;
     }
     void append(const QString &text, const char *link, const char *foreground, const char *background,
-                const char *family, double size, int weight, bool italic, int underline, const char *underlineColor) {
+                const char *family, double size, int weight, bool italic, int underline, const char *underlineColor, int strike, const char *strikeColor) {
         QTextCharFormat format;
         if (*link) {
             hasLinks = true;
@@ -53,10 +55,12 @@ public:
         if (size > 0) {
             QFont face = resolveFont(font(), QString::fromUtf8(family), weight, italic);
             face.setPixelSize(qMax(1, qRound(size)));
+            face.setLetterSpacing(font().letterSpacingType(), font().letterSpacing());
             format.setFont(face);
         }
         if (underline) format.setUnderlineStyle(static_cast<QTextCharFormat::UnderlineStyle>(underline));
         if (*underlineColor) format.setUnderlineColor(QColor(QString::fromUtf8(underlineColor)));
+        hasCustomStrikes |= setStrikeFormat(format, strike, QString::fromUtf8(strikeColor));
         pending.append({text, format});
         QTextCursor cursor(&content);
         cursor.movePosition(QTextCursor::End);
@@ -167,6 +171,15 @@ public:
     }
 
 private:
+    void paintEvent(QPaintEvent *event) override {
+        QTextBrowser::paintEvent(event);
+        if (hasCustomStrikes) {
+            QPainter painter(viewport());
+            painter.setClipRegion(event->region());
+            painter.translate(-horizontalScrollBar()->value(), -verticalScrollBar()->value());
+            drawTextStrikes(painter, *document(), palette());
+        }
+    }
     void resizeEvent(QResizeEvent *event) override {
         QTextBrowser::resizeEvent(event);
         alignDocument();
@@ -187,7 +200,7 @@ private:
     Qt::Alignment displayedAlignment;
     bool wraps = true, displayedWrap = true;
     qreal lineSpacing = 0;
-    bool hasLinks = false;
+    bool hasLinks = false, hasCustomStrikes = false;
     bool truncated = false;
     int displayWidth = -1, displayLimit = 0;
     Qt::TextElideMode displayMode = Qt::ElideRight;

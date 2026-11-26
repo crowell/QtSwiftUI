@@ -77,7 +77,8 @@ public struct EnvironmentValues {
     public var calendar: Calendar = .autoupdatingCurrent
     public var locale: Locale = .autoupdatingCurrent
     public var timeZone: TimeZone = .autoupdatingCurrent
-    var textUnderline: TextUnderline?
+    var textUnderline: TextLineDecoration?
+    var textStrikethrough: TextLineDecoration?
     var removedAccessibilityTraits: AccessibilityTraits = []
     var accessibilityTraits: AccessibilityTraits = []
     var accessibleValue = ""

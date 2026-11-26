@@ -19,6 +19,7 @@
 #include <QNativeGestureEvent>
 #include <QPixmapCache>
 #include "PlainTextEditor.hpp"
+#include "TextParagraph.hpp"
 #include <QClipboard>
 #include <QContextMenuEvent>
 #include "WindowShortcuts.hpp"
@@ -1272,8 +1273,8 @@ void qs_text_display(QSWidget w, int limit, QSTextTruncation mode, int automatic
 }
 void qs_attributed_begin(QSWidget w) { static_cast<AttributedLabel *>(w)->begin(); }
 void qs_attributed_append(QSWidget w, const char *text, size_t count, const char *link, const char *foreground, const char *background,
-                          const char *family, double size, int weight, int italic, int underline, const char *underlineColor) {
-    static_cast<AttributedLabel *>(w)->append(QString::fromUtf8(text, qsizetype(count)), link, foreground, background, family, size, weight, italic, underline, underlineColor);
+                          const char *family, double size, int weight, int italic, int underline, const char *underlineColor, int strike, const char *strikeColor) {
+    static_cast<AttributedLabel *>(w)->append(QString::fromUtf8(text, qsizetype(count)), link, foreground, background, family, size, weight, italic, underline, underlineColor, strike, strikeColor);
 }
 void qs_attributed_finish(QSWidget w, int selectable, double lineSpacing) { static_cast<AttributedLabel *>(w)->finish(selectable, lineSpacing); }
 void qs_control_scale(QSWidget w, double scale) {
@@ -1375,6 +1376,11 @@ int qs_register_font(const char *path) {
     loaded.append(font);
     app.setProperty("qsFonts", loaded);
     return 1;
+}
+QSTextParagraph *qs_text_paragraph(const char *family, double size, int weight, int italic, double tracking) {
+    auto font = resolveFont(application().font(), QString::fromUtf8(family), weight, italic);
+    font.setPixelSize(qMax(1, qRound(size)));
+    return new QSTextParagraph(font, tracking);
 }
 double qs_text_width(const char *text, const char *family, double size, double spacing) {
     auto font = resolveFont(application().font(), QString::fromUtf8(family), -1, false);

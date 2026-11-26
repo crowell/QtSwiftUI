@@ -5,6 +5,10 @@ import QtBridge
         url.isFileURL && qs_register_font(url.path) != 0
     }
 
+    public static func font(family: String, size: CGFloat, weight: Int) -> Font {
+        Font.custom(family, fixedSize: size).weight(Font.Weight(value: Int32(clamping: min(1000, max(1, weight)))))
+    }
+
     public static func metrics(family: String, size: CGFloat) -> (ascent: CGFloat, descent: CGFloat, xHeight: CGFloat) {
         let metrics = qs_font_metrics(family, size)
         return (metrics.ascent, metrics.descent, metrics.xHeight)

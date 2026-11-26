@@ -22,7 +22,8 @@ extension Context {
 }
 public struct Text: Primitive {
     nonisolated let string: String
-    nonisolated var underlineOverride: TextUnderline?
+    nonisolated var underlineOverride: TextLineDecoration?
+    nonisolated var strikethroughOverride: TextLineDecoration?
     nonisolated private(set) var attributed: AttributedString?
     public nonisolated init(_ attributedContent: AttributedString) {
         string = String(attributedContent.characters)
@@ -56,7 +57,8 @@ public struct Text: Primitive {
         let ctx = styled(context)
         let widget: UnsafeMutableRawPointer
         let spacing = ctx.environment.lineSpacing.isFinite ? max(0, ctx.environment.lineSpacing) : 0
-        let richLayout = (underlineOverride ?? ctx.environment.textUnderline) != nil || spacing > 0
+        let richLayout = (underlineOverride ?? ctx.environment.textUnderline) != nil
+            || (strikethroughOverride ?? ctx.environment.textStrikethrough) != nil || spacing > 0
         if let attributed = attributed ?? (richLayout ? AttributedString(string) : nil) {
             widget = ctx.widget(QSAttributedLabel, action: { value in
                 if let link = URL(string: value) { ctx.environment.openURL(link) }
@@ -111,7 +113,8 @@ public struct Button<Label: View>: Primitive {
         configure(widget)
         context.installShortcut(on: widget)
         qs_plain_button(widget, style != nil ? 1 : 0)
-        if style == nil, let text = label as? Text, text.attributed == nil, text.underlineOverride == nil, context.environment.textUnderline == nil {
+        if style == nil, let text = label as? Text, text.attributed == nil, text.underlineOverride == nil, context.environment.textUnderline == nil,
+           text.strikethroughOverride == nil, context.environment.textStrikethrough == nil {
             qs_text(widget, text.string)
             return [text.styled(context).control(widget)]
         }

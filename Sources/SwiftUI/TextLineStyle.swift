@@ -29,20 +29,44 @@ extension Text {
         copy.underlineOverride = isActive ? .enabled(.init(pattern: pattern, color: color)) : .disabled
         return copy
     }
+
+    nonisolated public func strikethrough(_ isActive: Bool = true, color: Color? = nil) -> Text {
+        strikethrough(isActive, pattern: .solid, color: color)
+    }
+
+    nonisolated public func strikethrough(_ isActive: Bool = true, pattern: LineStyle.Pattern, color: Color? = nil) -> Text {
+        var copy = self
+        copy.strikethroughOverride = isActive ? .enabled(.init(pattern: pattern, color: color)) : .disabled
+        return copy
+    }
 }
 
-enum TextUnderline: Sendable {
+enum TextLineDecoration: Sendable {
     case enabled(Text.LineStyle), disabled
+
+    func resolve(_ style: Text.LineStyle?) -> Text.LineStyle? {
+        switch self {
+        case .disabled: nil
+        case .enabled(let inherited): style ?? inherited
+        }
+    }
 }
 
-nonisolated private struct UnderlinedView<Content: View>: View {
+nonisolated private struct DecoratedTextView<Content: View>: View {
     let content: Content
-    let underline: TextUnderline
-    @MainActor var body: some View { content.environment(\.textUnderline, underline) }
+    let style: TextLineDecoration
+    let strike: Bool
+    @MainActor var body: some View {
+        content.environment(strike ? \.textStrikethrough : \.textUnderline, style)
+    }
 }
 
 extension View {
     nonisolated public func underline(_ isActive: Bool = true, pattern: Text.LineStyle.Pattern = .solid, color: Color? = nil) -> some View {
-        UnderlinedView(content: self, underline: isActive ? .enabled(.init(pattern: pattern, color: color)) : .disabled)
+        DecoratedTextView(content: self, style: isActive ? .enabled(.init(pattern: pattern, color: color)) : .disabled, strike: false)
+    }
+
+    nonisolated public func strikethrough(_ isActive: Bool = true, pattern: Text.LineStyle.Pattern = .solid, color: Color? = nil) -> some View {
+        DecoratedTextView(content: self, style: isActive ? .enabled(.init(pattern: pattern, color: color)) : .disabled, strike: true)
     }
 }

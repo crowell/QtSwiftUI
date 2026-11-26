@@ -68,7 +68,7 @@ QSSize qs_measure_text(QSWidget, double width, int limit, enum QSTextTruncation 
 void qs_text_display(QSWidget, int limit, enum QSTextTruncation mode, int automaticName);
 void qs_attributed_begin(QSWidget);
 void qs_attributed_append(QSWidget, const char *utf8, size_t count, const char *link, const char *foreground, const char *background,
-                          const char *family, double size, int weight, int italic, int underline, const char *underlineColor);
+                          const char *family, double size, int weight, int italic, int underline, const char *underlineColor, int strike, const char *strikeColor);
 void qs_attributed_finish(QSWidget, int selectable, double lineSpacing);
 void qs_editor_text(QSWidget, const char *utf8, size_t count);
 const unsigned char *qs_editor_value(QSWidget, size_t *count);
@@ -80,6 +80,12 @@ int qs_register_font(const char *path);
 typedef struct { double ascent, descent, xHeight; } QSFontMetrics;
 double qs_text_width(const char *text, const char *family, double size, double spacing);
 QSFontMetrics qs_font_metrics(const char *family, double size);
+typedef struct QSTextParagraph QSTextParagraph;
+typedef void (*QSMeasuredLine)(void *context, int start, int length, double width, double advance, double height);
+QSTextParagraph *qs_text_paragraph(const char *family, double size, int weight, int italic, double tracking);
+void qs_paragraph_append(QSTextParagraph *, const char *text, size_t length, const char *family, double size, int weight, int italic);
+void qs_paragraph_measure(QSTextParagraph *, double width, int breakWords, void *context, QSMeasuredLine receive);
+void qs_paragraph_free(QSTextParagraph *);
 void qs_style(QSWidget, const char *family, double points, int weight, int italic, double tracking, const char *color, int alignment, int wrap);
 void qs_selectable(QSWidget, int enabled);
 void qs_exit_scope(QSWidget, int enabled);

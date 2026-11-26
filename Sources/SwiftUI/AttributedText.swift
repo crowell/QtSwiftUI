@@ -6,10 +6,15 @@ extension AttributeScopes {
     public struct SwiftUIAttributes: AttributeScope {
         public let font: FontAttribute
         public let foregroundColor: ForegroundColorAttribute
+        public let strikethroughStyle: StrikethroughStyleAttribute
         public let underlineStyle: UnderlineStyleAttribute
         public let backgroundColor: BackgroundColorAttribute
         public let foundation: FoundationAttributes
 
+        @frozen public enum StrikethroughStyleAttribute: AttributedStringKey {
+            public typealias Value = Text.LineStyle
+            public static let name = "SwiftUI.StrikethroughStyle"
+        }
         public enum UnderlineStyleAttribute: AttributedStringKey {
             public typealias Value = Text.LineStyle
             public static let name = "SwiftUI.UnderlineStyle"
@@ -39,18 +44,19 @@ extension Text {
         for run in text.runs {
             let value = String(text[run.range].characters)
             let font = run.font
-            let underline: Text.LineStyle?
-            switch underlineOverride ?? environment.textUnderline {
-            case .disabled: underline = nil
-            case .enabled(let inherited): underline = run.underlineStyle ?? inherited
-            case nil: underline = run.underlineStyle
+            func resolved(_ decoration: TextLineDecoration?, _ runStyle: Text.LineStyle?) -> Text.LineStyle? {
+                if let decoration { return decoration.resolve(runStyle) }
+                return runStyle
             }
+            let underline = resolved(underlineOverride ?? environment.textUnderline, run.underlineStyle)
+            let strike = resolved(strikethroughOverride ?? environment.textStrikethrough, run.strikethroughStyle)
             value.withCString { bytes in
                 qs_attributed_append(widget, bytes, value.utf8.count, run.link?.absoluteString ?? "",
                                      run.foregroundColor?.hex(environment.colorScheme) ?? "",
                                      run.backgroundColor?.hex(environment.colorScheme) ?? "",
                                      font?.qtFamily ?? "", Double(font?.size ?? 0), font?.qtWeight ?? 400, font?.slanted == true ? 1 : 0,
-                                     underline?.pattern.qt ?? 0, underline?.color?.hex(environment.colorScheme) ?? "")
+                                     underline?.pattern.qt ?? 0, underline?.color?.hex(environment.colorScheme) ?? "",
+                                     strike?.pattern.qt ?? 0, strike?.color?.hex(environment.colorScheme) ?? "")
             }
         }
         qs_attributed_finish(widget, environment.selectableText ? 1 : 0, environment.lineSpacing)
