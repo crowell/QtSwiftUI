@@ -109,6 +109,9 @@ protected:
         return !restricted;
     }
 };
+static void activateAccessibleTap(GroupWidget *target);
+static void activateAccessibleButton(QAbstractButton *button);
+
 class AccessibleGroup final : public QAccessibleWidget {
 public:
     explicit AccessibleGroup(GroupWidget *group) : QAccessibleWidget(group), group(group) {}
@@ -138,12 +141,23 @@ public:
     }
     QStringList actionNames() const override {
         auto names = QAccessibleWidget::actionNames();
-        for (const auto &entry : combinedActions()) names.append(entry.first);
+        if (!group->isEnabled() || group->accessibilityHidden) return {};
+        if (group->tapCount == 1) names.append(QAccessibleActionInterface::pressAction());
+        for (const auto &entry : combinedActions()) names.append(entry.name);
+        names.removeDuplicates();
         return names;
     }
     void doAction(const QString &action) override {
+        if (!group->isEnabled() || group->accessibilityHidden) return;
+        if (group->tapCount == 1 && action == QAccessibleActionInterface::pressAction()) {
+            activateAccessibleTap(group);
+            return;
+        }
         for (const auto &entry : combinedActions()) {
-            if (entry.first == action) { entry.second->click(); return; }
+            if (entry.name == action) {
+                entry.target->actionInterface()->doAction(entry.action);
+                return;
+            }
         }
         QAccessibleWidget::doAction(action);
     }
@@ -165,12 +179,18 @@ private:
         if (!text.isEmpty()) parts.append(text);
         else for (int i = 0; i < child->childCount(); ++i) collectText(child->child(i), kind, parts);
     }
-    using Actions = QList<QPair<QString, QAbstractButton *>>;
+    struct Action { QString name; QAccessibleInterface *target; QString action; };
+    using Actions = QList<Action>;
     static void collectActions(QAccessibleInterface *child, Actions &actions) {
         if (!child || child->state().invisible || child->state().disabled) return;
-        if (auto *button = qobject_cast<QAbstractButton *>(child->object())) {
-            actions.append({child->text(QAccessible::Name), button});
-            return;
+        if (auto *interface = child->actionInterface()) {
+            const auto supported = interface->actionNames();
+            for (const auto &action : {QAccessibleActionInterface::pressAction(), QAccessibleActionInterface::toggleAction()}) {
+                if (supported.contains(action)) {
+                    actions.append({child->text(QAccessible::Name), child, action});
+                    return;
+                }
+            }
         }
         for (int i = 0; i < child->childCount(); ++i) collectActions(child->child(i), actions);
     }
@@ -180,7 +200,8 @@ private:
             for (int i = 0; i < QAccessibleWidget::childCount(); ++i)
                 collectActions(QAccessibleWidget::child(i), actions);
         }
-        if (actions.size() == 1) actions.first().first = QAccessibleActionInterface::pressAction();
+        if (actions.size() == 1) actions.first().name = group->property("qsAXToggle").toBool()
+            ? QAccessibleActionInterface::toggleAction() : QAccessibleActionInterface::pressAction();
         return actions;
     }
     GroupWidget *group;
@@ -259,7 +280,7 @@ public:
     }
     QStringList actionNames() const override { return {QAccessibleActionInterface::pressAction()}; }
     void doAction(const QString &action) override {
-        if (action == QAccessibleActionInterface::pressAction() && button->isEnabled()) button->click();
+        if (action == QAccessibleActionInterface::pressAction() && button->isEnabled()) activateAccessibleButton(button);
     }
     QAccessible::State state() const override {
         auto state = QAccessibleWidget::state();
@@ -483,6 +504,20 @@ struct QSWindow final : QWidget {
     void resizeEvent(QResizeEvent *) override { schedule(); }
 };
 
+namespace {
+static void activateAccessibleTap(GroupWidget *target) {
+    auto *window = dynamic_cast<QSWindow *>(target->window());
+    if (window && target->isEnabled())
+        window->event(window->context, target->property("swiftId").toInt(), QSActivate, "");
+}
+static void activateAccessibleButton(QAbstractButton *button) {
+    for (auto *parent = button->parentWidget(); parent; parent = parent->parentWidget()) {
+        auto *group = dynamic_cast<GroupWidget *>(parent);
+        if (group && group->simultaneous && group->tapCount == 1) activateAccessibleTap(group);
+    }
+    button->click();
+}
+} // namespace
 QSWindow *qs_window(const char *title, void *context, QSRender render, QSEvent event) {
     application();
     ++liveWindows;
@@ -938,6 +973,7 @@ void qs_accessible_control(QSWidget w, int selected, int button, int toggle) {
     if (changed) {
         QAccessible::State state;
         state.selected = true;
+        state.checked = bool(toggle);
         QAccessibleStateChangeEvent event(item, state);
         QAccessible::updateAccessibility(&event);
     }
@@ -1049,16 +1085,24 @@ void qs_group_finish_layout(QSWidget w) {
     for (auto *child : children) child->move(child->pos() + offset);
 }
 
+int qs_accessible_checked(QSWindow *window, const char *name) {
+    for (auto *widget : window->findChildren<QWidget *>()) {
+        auto *object = QAccessible::queryAccessibleInterface(widget);
+        if (!object || object->state().invisible || !object->state().checkable) continue;
+        if (object->text(QAccessible::Name) == QString::fromUtf8(name)) return object->state().checked ? 1 : 0;
+    }
+    return -1;
+}
 int qs_accessible_element(QSWindow *window, const char *name, int childCount, const char *action) {
     for (auto *widget : window->findChildren<QWidget *>()) {
-        auto *group = dynamic_cast<GroupWidget *>(widget);
-        if (!group || !group->combineChildren) continue;
-        auto *object = QAccessible::queryAccessibleInterface(group);
-        if (!object || object->text(QAccessible::Name) != QString::fromUtf8(name) || object->childCount() != childCount) continue;
+        auto *object = QAccessible::queryAccessibleInterface(widget);
+        if (!object || object->state().invisible || object->text(QAccessible::Name) != QString::fromUtf8(name)) continue;
+        if (childCount >= 0 && object->childCount() != childCount) continue;
         if (action) {
             auto *actions = object->actionInterface();
-            if (!actions || !actions->actionNames().contains(QString::fromUtf8(action))) return 0;
+            if (!actions || !actions->actionNames().contains(QString::fromUtf8(action))) continue;
             actions->doAction(QString::fromUtf8(action));
+            qs_flush();
         }
         return 1;
     }

@@ -94,6 +94,7 @@ void qs_place(QSWidget, double x, double y, double width, double height);
 
 // Drive the native controls in the offscreen integration tests.
 void qs_flush(void);
+int qs_accessible_checked(QSWindow *, const char *name);
 int qs_accessible_element(QSWindow *, const char *name, int childCount, const char *action);
 int qs_click(QSWindow *, const char *identifier);
 int qs_enter(QSWindow *, const char *identifier, const char *value);

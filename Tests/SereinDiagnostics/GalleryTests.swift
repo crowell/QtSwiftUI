@@ -61,6 +61,10 @@ final class GalleryTests: XCTestCase {
             func checkmark(at y: Int) -> Bool {
                 qs_dark_ink(host.window, Int32(width-195), Int32(y-5), 14, 11) != 0
             }
+            let dateLabel = strings("icu:MediaGallery__sort__date")
+            let sizeLabel = strings("icu:MediaGallery__sort__size")
+            XCTAssertEqual(qs_accessible_checked(host.window, dateLabel), 1)
+            XCTAssertEqual(qs_accessible_checked(host.window, sizeLabel), 0)
             XCTAssertTrue(checkmark(at: 96))
             XCTAssertFalse(checkmark(at: 126))
             XCTAssertEqual(qs_click_point(host.window, Int32(width-100), 123), 1)
@@ -73,11 +77,17 @@ final class GalleryTests: XCTestCase {
             }
             XCTAssertFalse(checkmark(at: 96))
             XCTAssertTrue(checkmark(at: 126))
+            XCTAssertEqual(qs_accessible_checked(host.window, dateLabel), 0)
+            XCTAssertEqual(qs_accessible_checked(host.window, sizeLabel), 1)
             if width == 520, let path = ProcessInfo.processInfo.environment["QTSWIFTUI_GALLERY_MENU_CAPTURE"] {
                 XCTAssertEqual(qs_capture(host.window, path), 1)
             }
             XCTAssertEqual(qs_click_point(host.window, 150, 200), 1)
             XCTAssertEqual(qs_read_text(host.window, nil, strings("icu:MediaGallery__sort--header")), 0)
+            XCTAssertEqual(qs_accessible_element(host.window, strings("icu:MediaGallery__sort"), -1, "Press"), 1)
+            XCTAssertEqual(qs_accessible_element(host.window, strings("icu:MediaGallery__sort__date"), 0, "Toggle"), 1)
+            XCTAssertEqual(selection.order, .date)
+            XCTAssertEqual(qs_click_point(host.window, 150, 200), 1)
             XCTAssertEqual(qs_click_named_button(host.window, strings("icu:goBack")), 1)
             XCTAssertEqual(backs, 1)
             #endif
