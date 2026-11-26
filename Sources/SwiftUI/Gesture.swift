@@ -111,7 +111,7 @@ extension View {
     private func recognizing<T: Gesture>(_ gesture: T, mask: GestureMask, simultaneous: Bool) -> some View {
         Transform(content: self) { view, ctx in
             let inner = ctx.with(\.gesturesEnabled, ctx.environment.gesturesEnabled && mask.contains(.subviews))
-            let enabled = ctx.environment.gesturesEnabled && mask.contains(.gesture)
+            let enabled = ctx.environment.isEnabled && ctx.environment.gesturesEnabled && mask.contains(.gesture)
             let recognizer = enabled ? gesture.resolve(changed: { _ in }, ended: { _ in }) : nil
             let reset = recognizer?.reset
             if let reset { ctx.host.lifetime(at: ctx.path, appear: {}, disappear: reset) }

@@ -42,7 +42,7 @@ public typealias ContentBuilder = ViewBuilder
 }
 
 public struct EmptyView: Primitive {
-    public init() {}
+    public nonisolated init() {}
     func elements(in context: Context) -> [Element] { [] }
 }
 public struct TupleView<T>: Primitive {

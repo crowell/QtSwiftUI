@@ -10,6 +10,7 @@ enum Part: Hashable {
     let host: Host
     var path: [Part] = []
     var parent: UnsafeMutableRawPointer?
+    var verticalViewport: UnsafeMutableRawPointer?
     var environment = EnvironmentValues()
     var preferences: [ObjectIdentifier: any PreferenceScope] = [:]
     var transaction = Transaction()

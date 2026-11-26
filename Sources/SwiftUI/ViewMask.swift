@@ -1,6 +1,14 @@
 import QtBridge
 
 extension View {
+    nonisolated public func blur(radius: CGFloat, opaque: Bool = false) -> some View {
+        Transform(content: self) { view, ctx in
+            let group = ctx.widget(QSGroup)
+            qs_view_blur(group, ctx.interpolated(radius, key: "blur"), opaque ? 1 : 0)
+            return ctx.children(of: view, inside: group)
+        }
+    }
+
     nonisolated public func hidden() -> some View {
         Transform(content: self) { view, ctx in
             let group = ctx.widget(QSGroup)

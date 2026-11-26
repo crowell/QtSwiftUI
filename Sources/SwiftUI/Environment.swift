@@ -32,6 +32,10 @@ public struct EnvironmentValues {
     public var colorScheme: ColorScheme = .light
     public var layoutDirection: LayoutDirection = Locale.current.language.characterDirection == .rightToLeft ? .rightToLeft : .leftToRight
     public var isEnabled = true
+    public var isScrollEnabled = true
+    public var controlSize: ControlSize = .regular
+    var plainField = false
+    var fieldStyle: (@MainActor (TextField<_TextFieldStyleLabel>) -> AnyView)?
     var allowsHits = true
     var keyPressHandlers: [KeyPressHandler] = []
     var adjustment: AccessibleAdjustment?

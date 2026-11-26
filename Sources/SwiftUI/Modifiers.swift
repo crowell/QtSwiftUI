@@ -94,13 +94,13 @@ extension View {
             return items
         }
     }
-    public func padding(_ length: CGFloat) -> some View { padding(.all, length) }
-    public func padding(_ edges: Edge.Set = .all, _ length: CGFloat? = nil) -> some View {
+    nonisolated public func padding(_ length: CGFloat) -> some View { padding(.all, length) }
+    nonisolated public func padding(_ edges: Edge.Set = .all, _ length: CGFloat? = nil) -> some View {
         let n = length ?? 16
         return padding(EdgeInsets(top: edges.contains(.top) ? n : 0, leading: edges.contains(.leading) ? n : 0,
                                   bottom: edges.contains(.bottom) ? n : 0, trailing: edges.contains(.trailing) ? n : 0))
     }
-    public func padding(_ insets: EdgeInsets) -> some View {
+    nonisolated public func padding(_ insets: EdgeInsets) -> some View {
         Transform(content: self) { view, ctx in
             let left = ctx.environment.layoutDirection == .rightToLeft ? insets.trailing : insets.leading
             let w = insets.leading + insets.trailing, h = insets.top + insets.bottom
@@ -167,20 +167,31 @@ extension View {
         }
     }
     public func fixedSize() -> some View { fixedSize(horizontal: true, vertical: true) }
-    public func background<B: View>(_ background: B, alignment: Alignment = .center) -> some View {
+    nonisolated public func background<B: View>(_ background: B, alignment: Alignment = .center) -> some View {
         decorated(background, alignment: alignment, above: false)
     }
-    public func background<B: View>(alignment: Alignment = .center, @ViewBuilder content: () -> B) -> some View {
+    nonisolated public func background<B: View>(alignment: Alignment = .center, @ViewBuilder content: () -> B) -> some View {
         decorated(content(), alignment: alignment, above: false)
     }
-    public func overlay<V: View>(_ overlay: V, alignment: Alignment = .center) -> some View {
+    nonisolated public func overlay<V: View>(_ overlay: V, alignment: Alignment = .center) -> some View {
         decorated(overlay, alignment: alignment, above: true)
     }
-    public func overlay<V: View>(alignment: Alignment = .center, @ViewBuilder content: () -> V) -> some View {
+    nonisolated public func overlay<V: View>(alignment: Alignment = .center, @ViewBuilder content: () -> V) -> some View {
         decorated(content(), alignment: alignment, above: true)
     }
-    private func decorated<V: View>(_ decoration: V, alignment: Alignment, above: Bool) -> some View {
-        Transform(content: self) { view, ctx in
+    nonisolated private func decorated<V: View>(_ decoration: V, alignment: Alignment, above: Bool) -> some View {
+        DecoratedView(content: self, decoration: decoration, alignment: alignment, above: above)
+    }
+}
+
+private nonisolated struct DecoratedView<Content: View, Decoration: View>: View {
+    let content: Content
+    let decoration: Decoration
+    let alignment: Alignment
+    let above: Bool
+
+    @MainActor var body: some View {
+        Transform(content: content) { view, ctx in
             view.resolve(ctx.descending(.position(0))).enumerated().map { index, child in
                 let decorations = decoration.resolve(ctx.descending(.position(1)).descending(.position(index)))
                 return child.wrapping(size: child.measure) { bounds, p in

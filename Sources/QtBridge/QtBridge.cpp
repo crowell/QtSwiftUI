@@ -1,5 +1,8 @@
 #include "QtBridge.h"
 #include "AlphaMask.hpp"
+#include "BusyIndicator.hpp"
+#include "ViewBlur.hpp"
+#include "ScrollInput.hpp"
 #include "AttributedLabel.hpp"
 #include "CanvasBlur.hpp"
 #include "PointerDrag.hpp"
@@ -14,6 +17,7 @@
 #include <QDesktopServices>
 #include <QUrl>
 #include <QWindow>
+#include <QWheelEvent>
 #include <QVariantAnimation>
 #include <algorithm>
 #include <QLabel>
@@ -51,6 +55,17 @@ namespace {
 QTransform transform(QSAffine t) { return QTransform(t.a, t.b, t.c, t.d, t.tx, t.ty); }
 class SwiftWidgetStyle final : public QProxyStyle {
 public:
+    int pixelMetric(PixelMetric metric, const QStyleOption *option, const QWidget *item) const override {
+        const int base = QProxyStyle::pixelMetric(metric, option, item);
+        const qreal scale = item ? item->property("qsControlScale").toDouble() : 0;
+        if (scale == 0 || scale == 1) return base;
+        switch (metric) {
+        case PM_ButtonMargin: case PM_IndicatorWidth: case PM_IndicatorHeight:
+        case PM_SliderThickness: case PM_SliderLength: case PM_ProgressBarChunkWidth:
+            return qMax(1, qRound(base * scale));
+        default: return base;
+        }
+    }
     void drawPrimitive(PrimitiveElement element, const QStyleOption *option, QPainter *painter,
                        const QWidget *widget = nullptr) const override {
         if (element == PE_FrameFocusRect && widget && widget->property("qsNoFocusEffect").toBool()) return;
@@ -740,7 +755,7 @@ QSWidget qs_create(QSWindow *window, QSWidget parent, QSKind kind, int id) {
     }
     case QSTextEditor: {
         auto *edit = new PlainTextEditor(container);
-        QScroller::grabGesture(edit->viewport(), QScroller::TouchGesture);
+        edit->setProperty("qsScrollInput", QVariant::fromValue<QObject *>(new ScrollInput(edit)));
         window->observeFocus(edit, id);
         QObject::connect(edit, &QPlainTextEdit::textChanged, window, [=] {
             window->event(window->context, id, QSActivate, "");
@@ -779,7 +794,7 @@ QSWidget qs_create(QSWindow *window, QSWidget parent, QSKind kind, int id) {
     case QSScroll: {
         auto *scroll = new QScrollArea(container);
         scroll->setFrameShape(QFrame::NoFrame);
-        QScroller::grabGesture(scroll->viewport(), QScroller::TouchGesture);
+        scroll->setProperty("qsScrollInput", QVariant::fromValue<QObject *>(new ScrollInput(scroll)));
         for (auto *bar : {scroll->horizontalScrollBar(), scroll->verticalScrollBar()}) {
             QObject::connect(bar, &QScrollBar::valueChanged, window, [window] { window->schedule(); });
         }
@@ -796,6 +811,7 @@ QSWidget qs_create(QSWindow *window, QSWidget parent, QSKind kind, int id) {
         QObject::connect(slider, &QSlider::valueChanged, window, [=](int n) { window->event(window->context, id, QSActivate, QByteArray::number(n / 10000.0).constData()); });
         return slider;
     }
+    case QSBusyIndicator: return new BusyIndicator(container);
     case QSProgress: {
         auto *bar = new QProgressBar(container);
         bar->setTextVisible(false);
@@ -805,11 +821,24 @@ QSWidget qs_create(QSWindow *window, QSWidget parent, QSKind kind, int id) {
     return nullptr;
 }
 QSWidget qs_scroll_content(QSWidget w) { return static_cast<QScrollArea *>(w)->widget(); }
-void qs_scroll_size(QSWidget w, int width, int height) { widget(qs_scroll_content(w))->resize(width, height); }
+void qs_scroll_refining(QSWidget w) { widget(w)->setProperty("qsEstimatedExtent", true); }
+void qs_scroll_size(QSWidget w, int width, int height) {
+    auto *area = static_cast<QScrollArea *>(w);
+    auto *bar = area->verticalScrollBar();
+    const bool keepBottom = area->property("qsEstimatedExtent").toBool() &&
+                            bar->maximum() > bar->minimum() && bar->value() == bar->maximum();
+    area->setProperty("qsEstimatedExtent", false);
+    area->widget()->resize(width, height);
+    if (keepBottom) bar->setValue(bar->maximum());
+}
 QSRect qs_scroll_viewport(QSWidget w) {
     auto *area = static_cast<QScrollArea *>(w);
     return {double(area->horizontalScrollBar()->value()), double(area->verticalScrollBar()->value()),
             double(area->viewport()->width()), double(area->viewport()->height())};
+}
+void qs_scroll_input(QSWidget w, int enabled) {
+    auto *input = static_cast<ScrollInput *>(widget(w)->property("qsScrollInput").value<QObject *>());
+    input->setEnabled(enabled);
 }
 void qs_scroll_bounce(QSWidget w, int horizontal, int vertical) {
     using P = QScrollerProperties;
@@ -848,6 +877,20 @@ void qs_attributed_append(QSWidget w, const char *text, size_t count, const char
     static_cast<AttributedLabel *>(w)->append(QString::fromUtf8(text, qsizetype(count)), link, foreground, background, family, size, weight, italic);
 }
 void qs_attributed_finish(QSWidget w, int selectable) { static_cast<AttributedLabel *>(w)->finish(selectable); }
+void qs_control_scale(QSWidget w, double scale) {
+    auto *item = widget(w);
+    if (item->property("qsControlScale").toDouble() == scale) return;
+    item->setProperty("qsControlScale", scale);
+    item->updateGeometry();
+    item->update();
+}
+void qs_field_style(QSWidget w, int plain) {
+    auto *edit = static_cast<QLineEdit *>(w);
+    edit->setFrame(!plain);
+    auto palette = edit->palette();
+    palette.setColor(QPalette::Base, plain ? QColor(Qt::transparent) : application().palette().color(QPalette::Base));
+    edit->setPalette(palette);
+}
 void qs_editor_text(QSWidget w, const char *utf8, size_t count) {
     static_cast<PlainTextEditor *>(w)->applyText(QString::fromUtf8(utf8, qsizetype(count)));
 }
@@ -1141,6 +1184,16 @@ void qs_drawing_only(QSWidget w) {
     auto *item = widget(w);
     item->setProperty("qsDrawingOnly", true);
     item->hide();
+}
+void qs_view_blur(QSWidget w, double radius, int opaque) {
+    auto *item = widget(w);
+    if (!(radius > 0) || !std::isfinite(radius)) {
+        if (item->graphicsEffect()) item->setGraphicsEffect(nullptr);
+        return;
+    }
+    auto *effect = dynamic_cast<ViewBlur *>(item->graphicsEffect());
+    if (!effect) { effect = new ViewBlur; item->setGraphicsEffect(effect); }
+    effect->configure(radius, opaque);
 }
 void qs_alpha_mask(QSWidget w, QSWidget stencil) {
     auto *item = widget(w);
@@ -1539,6 +1592,26 @@ int qs_can_overshoot(QSWindow *window, int horizontal) {
     auto policy = properties.scrollMetric(horizontal ? P::HorizontalOvershootPolicy : P::VerticalOvershootPolicy).toInt();
     auto *bar = horizontal ? area->horizontalScrollBar() : area->verticalScrollBar();
     return policy == P::OvershootAlwaysOn || (policy == P::OvershootWhenScrollable && bar->maximum() > bar->minimum());
+}
+int qs_scroll_wheel(QSWindow *window, int x, int y, int steps) {
+    const QPoint point(x, y);
+    QAbstractScrollArea *area = nullptr;
+    for (auto *target = window->childAt(point); target && !area; target = target->parentWidget())
+        area = qobject_cast<QAbstractScrollArea *>(target);
+    if (!area) return 0;
+    auto *viewport = area->viewport();
+    QWheelEvent event(viewport->mapFrom(window, point), window->mapToGlobal(point), {}, QPoint(0, 120 * steps),
+                      Qt::NoButton, Qt::NoModifier, Qt::NoScrollPhase, false);
+    QApplication::sendEvent(viewport, &event);
+    qs_flush();
+    return event.isAccepted();
+}
+int qs_scroll_to_start(QSWindow *window) {
+    auto *area = window->findChild<QScrollArea *>();
+    if (!area) return 0;
+    area->verticalScrollBar()->setValue(area->verticalScrollBar()->minimum());
+    qs_flush();
+    return 1;
 }
 int qs_scroll_to_end(QSWindow *window) {
     auto *area = window->findChild<QScrollArea *>();

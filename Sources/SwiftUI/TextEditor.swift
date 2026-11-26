@@ -27,8 +27,9 @@ public struct TextEditor: Primitive {
         context.with(\.font, font ?? .custom("Helvetica", fixedSize: 12)).style(widget)
         qs_scroll_background(widget, context.environment.scrollBackground == .hidden ? 0 : 1,
                              context.environment.colorScheme == .dark ? 1 : 0)
+        qs_scroll_input(widget, context.environment.isScrollEnabled ? 1 : 0)
         qs_scroll_bounce(widget, -1, context.environment.verticalScrollBounceBehavior.policy)
-        qs_editor_indicators(widget, context.environment.verticalScrollIndicatorVisibility.showsBar ? 1 : 0)
+        qs_editor_indicators(widget, context.environment.isScrollEnabled && context.environment.verticalScrollIndicatorVisibility.showsBar ? 1 : 0)
         let ideal = font == nil ? CGFloat(12 * (value.filter(\.isNewline).count + 1)) : qs_measure(widget, -1).height
         return [Element { proposal in
             CGSize(width: proposal.width ?? 0, height: proposal.height ?? ideal)

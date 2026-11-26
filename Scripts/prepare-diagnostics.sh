@@ -158,6 +158,24 @@ cp "$source_dir/Components/ChatColorPicker.swift" "$source_dir/Axo/AxoContainer.
 cp "$source_dir/Components/Preferences/PreferencesCallsPage.swift" "$source_dir/Components/Preferences/PreferencesList.swift" \
    "$source_dir/Components/CallingDeviceSelectionItems.swift" "$source_dir/Axo/AxoPanel.swift" "$source_dir/Axo/AxoScrollArea.swift" \
    "$source_dir/Axo/Items/AxoSwitchItem.swift" "$source_dir/Axo/Items/AxoSelectItem.swift" "$source_dir/Axo/Items/AxoList.swift" "$target_dir/"
+cp "$source_dir/Components/Avatar.swift" "$source_dir/Theme/StaticAwareScrollView.swift" "$target_dir/"
+{
+    echo 'import SwiftUI'
+    echo 'import SignalI18n'
+    declarations '^public struct CallsListItem:|^public enum CallsTabSelectedView:|^public struct CallsNewCallButton:|^struct CallsListTile<|^public struct CallsList:|^struct CallsListTimestamp:|^struct MissedFilterToggle:' 7 "$source_dir/Calling/CallsTab.swift"
+    declarations '^public struct CallingConversation:' 1 "$source_dir/Calling/CallingModels.swift"
+    declarations '^public struct CallHistoryGroup:' 1 "$source_dir/Components/Conversation/ConversationDetails/CallHistoryGroupPanelSection.swift"
+    awk '/^public enum Call(Type|Direction):/ { print; count++ } END { if (count!=2) exit 1 }' "$source_dir/Components/Conversation/Notifications/CallingNotification.swift"
+    declarations '^public enum CallStatus:' 1 "$source_dir/Components/Conversation/Notifications/CallingNotification.swift"
+    declarations '^extension AvatarStrings ' 1 "$source_dir/Components/ConversationList/BaseConversationListItem.swift"
+    declarations '^public struct ComposeStepButton:' 1 "$source_dir/Components/ConversationList/ComposeRows.swift"
+    declarations '^struct ClearFilterButton:' 1 "$source_dir/Components/ConversationList/ConversationList.swift"
+    declarations '^public struct I18n:' 1 "$source_dir/Components/SmallDialogs.swift"
+    declarations '^public struct NavSidebar(SearchHeader<|Empty:)|^public enum WidthBreakpoint:' 3 "$source_dir/Components/NavSidebar.swift"
+    awk '/^[ ]+@Entry public var navSidebarWidthBreakpoint:/ { print "extension EnvironmentValues {\n" $0 "\n}"; count++ } END { if (count!=1) exit 1 }' "$source_dir/Components/NavSidebar.swift"
+    declarations '^public struct SearchInput<|^extension EnvironmentValues |^extension SearchInput where' 3 "$source_dir/Components/SearchInput.swift"
+    declarations '^public struct ListTile<|^extension EnvironmentValues ' 2 "$source_dir/Components/ListTile.swift"
+} > "$target_dir/CallsHistory.swift"
 # Replace CoreText font measurement in the select trigger with the portable font metrics.
 sed -e '/^import CoreText$/d' -e 's/CSSTextStyle(text).ctFont/AxoFonts.interMetrics(size: text.size)/' \
     -e 's/AxoSymbol.style(size: iconSize, weight: 400).ctFont/AxoFonts.metrics(family: "Signal Symbols", size: iconSize)/' \

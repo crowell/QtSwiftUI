@@ -9,7 +9,11 @@ extension Context {
                  alignment == .leading ? leading : alignment == .center ? 0 : -leading, environment.lineLimit == 1 ? 0 : 1)
     }
     func control(_ widget: UnsafeMutableRawPointer, expands: Bool = false) -> Element {
-        style(widget)
+        let scale = environment.controlSize.qtScale
+        if environment.font == nil && scale != 1 {
+            with(\.font, .system(size: Font.body.size * scale)).style(widget)
+        } else { style(widget) }
+        qs_control_scale(widget, scale)
         return Element { p in
             let hint = qs_measure(widget, p.width ?? -1)
             return CGSize(width: expands ? (p.width ?? hint.width) : hint.width, height: hint.height)
@@ -86,7 +90,8 @@ public struct Button<Label: View>: Primitive {
         ctx.environment.focus = nil
         let configured = style?(.init(label: .init(content: AnyView(label)), isPressed: qs_button_down(widget) != 0), context)
         let child = stacked((configured ?? AnyView(label)).resolve(ctx.descending(.position(0))), axis: .horizontal, alignment: .center, spacing: 4, direction: ctx.environment.layoutDirection)
-        let dx: CGFloat = style == nil ? 8 : 0, dy: CGFloat = style == nil ? 5 : 0
+        let scale = context.environment.controlSize.qtScale
+        let dx: CGFloat = style == nil ? 8 * scale : 0, dy: CGFloat = style == nil ? 5 * scale : 0
         func inner(_ p: ProposedViewSize) -> ProposedViewSize {
             .init(width: p.width.map { max(0, $0 - 2 * dx) }, height: p.height.map { max(0, $0 - 2 * dy) })
         }
@@ -120,17 +125,31 @@ public struct Toggle<Label: View>: Primitive {
     let widget = context.widget(secure ? QSSecureEdit : QSEdit, action: { text.wrappedValue = $0 })
     qs_text(widget, text.wrappedValue)
     qs_hint(widget, title)
-    return context.control(widget, expands: true)
+    let control = context.control(widget, expands: true)
+    qs_field_style(widget, context.environment.plainField ? 1 : 0)
+    return control
 }
 public struct TextField<Label: View>: Primitive {
     let title: String, text: Binding<String>
     public init<S: StringProtocol>(_ title: S, text: Binding<String>) where Label == Text { self.title = String(title); self.text = text }
-    func elements(in context: Context) -> [Element] { [field(title, text: text, secure: false, in: context)] }
+    var secure = false
+    init(configuration title: String, text: Binding<String>, secure: Bool) {
+        self.title = title
+        self.text = text
+        self.secure = secure
+    }
+    func elements(in context: Context) -> [Element] {
+        if let style = context.environment.fieldStyle {
+            let configuration = TextField<_TextFieldStyleLabel>(configuration: title, text: text, secure: secure)
+            return style(configuration).resolve(context.with(\.fieldStyle, nil))
+        }
+        return [field(title, text: text, secure: secure, in: context)]
+    }
 }
 public struct SecureField<Label: View>: Primitive {
     let title: String, text: Binding<String>
     public init<S: StringProtocol>(_ title: S, text: Binding<String>) where Label == Text { self.title = String(title); self.text = text }
-    func elements(in context: Context) -> [Element] { [field(title, text: text, secure: true, in: context)] }
+    func elements(in context: Context) -> [Element] { TextField<_TextFieldStyleLabel>(configuration: title, text: text, secure: true).elements(in: context) }
 }
 public struct Slider<Label: View, ValueLabel: View>: Primitive {
     let fraction: () -> Double, move: (Double) -> Void
@@ -158,8 +177,20 @@ public struct ProgressView<Label: View, CurrentValueLabel: View>: Primitive {
         fraction = value.map { total > 0 ? min(1, max(0, Double($0 / total))) : 0 }
     }
     func elements(in context: Context) -> [Element] {
+        guard let fraction else {
+            let widget = context.widget(QSBusyIndicator)
+            context.style(widget)
+            let diameter: CGFloat = switch context.environment.controlSize {
+            case .mini: 10
+            case .small: 16
+            default: 32
+            }
+            return [Element { _ in CGSize(width: diameter, height: diameter) } place: { rect, _ in
+                qs_place(widget, rect.minX, rect.minY, rect.width, rect.height)
+            }]
+        }
         let widget = context.widget(QSProgress)
-        qs_value(widget, fraction ?? -1)
+        qs_value(widget, fraction)
         return [context.control(widget, expands: true)]
     }
 }
@@ -174,6 +205,7 @@ public struct ScrollView<Content: View>: Primitive {
                              context.environment.colorScheme == .dark ? 1 : 0)
         var inner = context.descending(.position(0))
         inner.parent = qs_scroll_content(widget)
+        if axes.contains(.vertical) { inner.verticalViewport = widget }
         let origin = NamedOrigin()
         inner.spaces[ScrollSpace.nearest] = origin
         for axis in Axis.allCases where axes.contains(axis == .vertical ? .vertical : .horizontal) {
@@ -183,10 +215,11 @@ public struct ScrollView<Content: View>: Primitive {
         inner.publish(FirstScrollGeometry.self) { geometry }
         let view = stacked(content.resolve(inner), axis: .vertical, alignment: .center, spacing: 8)
         let horizontal = axes.contains(.horizontal), vertical = axes.contains(.vertical)
+        qs_scroll_input(widget, context.environment.isScrollEnabled ? 1 : 0)
         qs_scroll_bounce(widget, horizontal ? context.environment.horizontalScrollBounceBehavior.policy : -1,
                          vertical ? context.environment.verticalScrollBounceBehavior.policy : -1)
-        qs_scroll_axes(widget, showsIndicators && horizontal && context.environment.horizontalScrollIndicatorVisibility.showsBar ? 1 : 0,
-                       showsIndicators && vertical && context.environment.verticalScrollIndicatorVisibility.showsBar ? 1 : 0)
+        qs_scroll_axes(widget, context.environment.isScrollEnabled && showsIndicators && horizontal && context.environment.horizontalScrollIndicatorVisibility.showsBar ? 1 : 0,
+                       context.environment.isScrollEnabled && showsIndicators && vertical && context.environment.verticalScrollIndicatorVisibility.showsBar ? 1 : 0)
         func offer(_ p: ProposedViewSize) -> ProposedViewSize { .init(width: horizontal ? nil : p.width, height: vertical ? nil : p.height) }
         return [Element { p in
             let ideal = view.measure(offer(p))

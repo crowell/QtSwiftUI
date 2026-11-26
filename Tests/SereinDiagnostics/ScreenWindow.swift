@@ -60,9 +60,18 @@ import AppKit
         #endif
     }
 
+    func settle() async throws {
+        // Run observation callbacks on Swift's main actor, then apply their queued Qt layout.
+        try await Task.sleep(for: .milliseconds(25))
+        #if os(Linux)
+        qs_flush()
+        #endif
+    }
+
     func click(_ x: Int, _ y: Int) async throws {
         #if os(Linux)
         XCTAssertEqual(qs_click_point(host.window, Int32(x), Int32(y)), 1)
+        try await settle()
         #else
         try await pointer(x, y, down: true)
         try await pointer(x, y, down: false)
@@ -82,9 +91,39 @@ import AppKit
         #endif
     }
 
+    #if !os(Linux)
+    private func scrollView(in view: NSView) -> NSScrollView? {
+        if let scroll = view as? NSScrollView { return scroll }
+        return view.subviews.lazy.compactMap { self.scrollView(in: $0) }.first
+    }
+    #endif
+
+    func scroll(toEnd: Bool) async throws {
+        #if os(Linux)
+        XCTAssertEqual(toEnd ? qs_scroll_to_end(host.window) : qs_scroll_to_start(host.window), 1)
+        #else
+        let scroll = try XCTUnwrap(scrollView(in: hosting))
+        let document = try XCTUnwrap(scroll.documentView)
+        let bottom = max(0, document.bounds.height - scroll.contentView.bounds.height)
+        scroll.contentView.scroll(to: CGPoint(x: 0, y: toEnd ? bottom : 0))
+        scroll.reflectScrolledClipView(scroll.contentView)
+        #endif
+        try await Task.sleep(for: .milliseconds(80))
+    }
+
+    #if os(Linux)
+    func wheel(down: Bool) async throws {
+        _ = qs_scroll_wheel(host.window, Int32(width / 2), Int32(height / 2), down ? -3 : 3)
+        try await settle()
+    }
+    #else
+    var showsVerticalScroller: Bool { scrollView(in: hosting)?.hasVerticalScroller == true }
+    #endif
+
     func type(_ text: String) async throws {
         #if os(Linux)
         XCTAssertEqual(text.withCString { qs_commit_text(host.window, $0, text.utf8.count) }, 1)
+        try await settle()
         #else
         let editor = try XCTUnwrap(window.firstResponder as? NSTextView)
         editor.insertText(text, replacementRange: editor.selectedRange())

@@ -44,7 +44,7 @@ enum AxoFonts {
     static func interName(weight: Int) -> String {
         weight >= 600 ? "Inter-SemiBold" : weight >= 500 ? "Inter-Medium" : "Inter-Regular"
     }
-    static func inter(size: CGFloat, weight: Int) -> Font {
+    static func inter(size: CGFloat, weight: Int = 400) -> Font {
         let weight: Font.Weight = weight >= 600 ? .semibold : weight >= 500 ? .medium : .regular
         return Font.custom("Inter", fixedSize: size).weight(weight)
     }
@@ -59,7 +59,8 @@ public struct CSSTextRun: Hashable, Sendable {
     public var fontName: String?
     public var color: AxoColor?
     public var action: String?
-    public init(_ text: String) { self.text = text }
+    public var background: AxoColor?
+    public init(_ text: String, color: AxoColor? = nil) { self.text = text; self.color = color }
 }
 public struct CSSTextStyle {
     var fontName: String
@@ -67,7 +68,7 @@ public struct CSSTextStyle {
     var lineHeight: CGFloat
     var letterSpacing: CGFloat
 
-    init(_ type: AxoType) {
+    public init(_ type: AxoType) {
         self.init(fontName: AxoFonts.interName(weight: type.weight), size: type.size,
                   lineHeight: type.lineHeight, letterSpacing: type.tracking * type.size)
     }
@@ -87,7 +88,7 @@ extension EnvironmentValues {
     @Entry var cssTextColor: AxoColor = .labelPrimary
     @Entry var cssTextWrapWidth: CGFloat? = nil
 }
-public enum CSSTextWrap { case wrap, truncate, nowrap }
+public enum CSSTextWrap: Equatable { case wrap, truncate, nowrap, clamp(Int) }
 extension TextAlignment {
     static var start: Self { .leading }
     static var end: Self { .trailing }
@@ -116,7 +117,7 @@ struct CSSText: View {
     }
     init(runs: [CSSTextRun], style: CSSTextStyle, wrap: CSSTextWrap, color: AxoColor? = nil, alignment: TextAlignment = .leading) {
         self.init(runs.map(\.text).joined(), type: style.type, wrap: wrap, alignment: alignment, color: color)
-        if runs.contains(where: { $0.action != nil || $0.color != nil || $0.fontName != nil }) { self.runs = runs }
+        if runs.contains(where: { $0.action != nil || $0.color != nil || $0.background != nil || $0.fontName != nil }) { self.runs = runs }
     }
     init(runs: [CSSTextRun], style: CSSTextStyle, color: AxoColor? = nil, alignment: TextAlignment = .leading, onTap: ((String) -> Void)?) {
         self.init(runs: runs, style: style, wrap: .wrap, color: color, alignment: alignment)
@@ -129,6 +130,7 @@ struct CSSText: View {
             var part = AttributedString(run.text)
             if let name = run.fontName { part.font = Font.custom(name, fixedSize: type.size) }
             if let color = run.color { part.foregroundColor = color.value(for: scheme).color }
+            if let background = run.background { part.backgroundColor = background.value(for: scheme).color }
             if let action = run.action {
                 var url = URLComponents()
                 url.scheme = "serein"
@@ -145,6 +147,8 @@ struct CSSText: View {
         let text = content.font(type.font).tracking(type.tracking * type.size)
         if wrap == .nowrap {
             text.lineLimit(1).fixedSize(horizontal: true, vertical: false).frame(height: type.lineHeight)
+        } else if case .clamp(let lines) = wrap {
+            text.lineLimit(lines).fixedSize(horizontal: false, vertical: true).frame(minHeight: type.lineHeight)
         } else if wrap == .truncate {
             text.lineLimit(1).frame(height: type.lineHeight)
         } else {
