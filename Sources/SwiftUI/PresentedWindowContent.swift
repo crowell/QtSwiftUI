@@ -22,6 +22,31 @@ public nonisolated struct PresentedWindowContent<Data: Codable & Hashable, Conte
 }
 
 extension WindowGroup {
+
+    public init<D: Codable & Hashable, C: View>(_ titleKey: LocalizedStringKey, for type: D.Type,
+        @ContentBuilder content: @escaping (Binding<D?>) -> C)
+    where Content == PresentedWindowContent<D, C> {
+        self.init(Text(titleKey), for: type, content: content)
+    }
+
+    public init<D: Codable & Hashable, C: View>(_ titleKey: LocalizedStringKey, for type: D.Type = D.self,
+        @ContentBuilder content: @escaping (Binding<D>) -> C, defaultValue: @escaping () -> D)
+    where Content == PresentedWindowContent<D, C> {
+        self.init(Text(titleKey), for: type, content: content, defaultValue: defaultValue)
+    }
+
+    public init<D: Codable & Hashable, C: View>(_ titleKey: LocalizedStringKey, id: String, for type: D.Type,
+        @ContentBuilder content: @escaping (Binding<D?>) -> C)
+    where Content == PresentedWindowContent<D, C> {
+        self.init(Text(titleKey), id: id, for: type, content: content)
+    }
+
+    public init<D: Codable & Hashable, C: View>(_ titleKey: LocalizedStringKey, id: String, for type: D.Type = D.self,
+        @ContentBuilder content: @escaping (Binding<D>) -> C, defaultValue: @escaping () -> D)
+    where Content == PresentedWindowContent<D, C> {
+        self.init(Text(titleKey), id: id, for: type, content: content, defaultValue: defaultValue)
+    }
+
     private init<D: Codable & Hashable, C: View>(title: String, id: String?, type: D.Type,
                                                  optionalContent: @escaping (Binding<D?>) -> C)
     where Content == PresentedWindowContent<D, C> {

@@ -95,7 +95,10 @@ public nonisolated struct CommandMenu<Content: View>: CommandContent {
         title = name
         items = content()
     }
-    public init<S: StringProtocol>(_ name: S, @ContentBuilder content: () -> Content) {
+    public init(_ name: LocalizedStringKey, @ContentBuilder content: () -> Content) {
+        self.init(Text(name), content: content)
+    }
+    @_disfavoredOverload public init<S: StringProtocol>(_ name: S, @ContentBuilder content: () -> Content) {
         self.init(Text(verbatim: String(name)), content: content)
     }
     public var body: Never { fatalError("CommandMenu is rendered directly") }
@@ -104,7 +107,7 @@ public nonisolated struct CommandMenu<Content: View>: CommandContent {
         let container = inner.widget(QSGroup)
         qs_drawing_only(container)
         inner.parent = container
-        menus.rows.append(.init(title: title.string, children: MenuEntries.read(items, in: inner)))
+        menus.rows.append(.init(title: title.resolvedString(context.environment.locale), children: MenuEntries.read(items, in: inner)))
     }
 }
 

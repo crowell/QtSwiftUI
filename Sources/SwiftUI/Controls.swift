@@ -28,18 +28,27 @@ extension Context {
     }
 }
 public nonisolated struct Text: Primitive {
-    nonisolated let string: String
+    private var literal = ""
+    private var localized: (key: LocalizedStringKey, table: String?, bundle: Bundle?)?
+    var string: String { resolvedString(.autoupdatingCurrent) }
+    func resolvedString(_ locale: Locale) -> String {
+        guard let localized else { return literal }
+        return localized.key.resolve(locale: locale, table: localized.table, bundle: localized.bundle)
+    }
+    public init(_ key: LocalizedStringKey, tableName: String? = nil, bundle: Bundle? = nil, comment: StaticString? = nil) {
+        localized = (key, tableName, bundle)
+    }
     nonisolated var underlineOverride: TextLineDecoration?
     nonisolated var strikethroughOverride: TextLineDecoration?
     nonisolated private(set) var attributed: AttributedString?
-    public nonisolated init(_ attributedContent: AttributedString) {
-        string = String(attributedContent.characters)
+    @_disfavoredOverload public nonisolated init(_ attributedContent: AttributedString) {
+        literal = String(attributedContent.characters)
         attributed = attributedContent
     }
     private(set) var foregroundOverride: AnyShapeStyle?
     private var attributes: [(inout EnvironmentValues) -> Void] = []
-    public nonisolated init<S: StringProtocol>(_ content: S) { string = String(content) }
-    public nonisolated init(verbatim content: String) { string = content }
+    @_disfavoredOverload public nonisolated init<S: StringProtocol>(_ content: S) { literal = String(content) }
+    public nonisolated init(verbatim content: String) { literal = content }
     public func font(_ font: Font?) -> Text { modified { $0.font = font } }
     public func tracking(_ tracking: CGFloat) -> Text { modified { $0.tracking = tracking } }
     public func fontWeight(_ weight: Font.Weight?) -> Text { modified { $0.font = ($0.font ?? .body).weight(weight ?? .regular) } }
@@ -79,6 +88,7 @@ public nonisolated struct Text: Primitive {
             return child.children(of: self, inside: group)
         }
         let ctx = styled(context)
+        let string = resolvedString(ctx.environment.locale)
         let widget: UnsafeMutableRawPointer
         let spacing = ctx.environment.lineSpacing.isFinite ? max(0, ctx.environment.lineSpacing) : 0
         let richLayout = (underlineOverride ?? ctx.environment.textUnderline) != nil
@@ -121,7 +131,10 @@ public nonisolated struct Text: Primitive {
 public struct Button<Label: View>: Primitive {
     let action: () -> Void, label: Label
     public init(action: @escaping () -> Void, @ViewBuilder label: () -> Label) { self.action = action; self.label = label() }
-    public init<S: StringProtocol>(_ title: S, action: @escaping () -> Void) where Label == Text {
+    public init(_ titleKey: LocalizedStringKey, action: @escaping () -> Void) where Label == Text {
+        self.init(action: action) { Text(titleKey) }
+    }
+    @_disfavoredOverload public init<S: StringProtocol>(_ title: S, action: @escaping () -> Void) where Label == Text {
         self.init(action: action) { Text(title) }
     }
     func elements(in context: Context) -> [Element] {
@@ -139,7 +152,7 @@ public struct Button<Label: View>: Primitive {
         qs_plain_button(widget, style != nil ? 1 : 0)
         if style == nil, let text = label as? Text, text.attributed == nil, text.underlineOverride == nil, context.environment.textUnderline == nil,
            text.strikethroughOverride == nil, context.environment.textStrikethrough == nil {
-            qs_text(widget, text.string)
+            qs_text(widget, text.resolvedString(context.environment.locale))
             return [text.styled(context).control(widget)]
         }
         var ctx = context
@@ -171,7 +184,10 @@ public struct Button<Label: View>: Primitive {
 public struct Toggle<Label: View>: Primitive {
     let isOn: Binding<Bool>, label: Label
     public init(isOn: Binding<Bool>, @ViewBuilder label: () -> Label) { self.isOn = isOn; self.label = label() }
-    public init<S: StringProtocol>(_ title: S, isOn: Binding<Bool>) where Label == Text {
+    public init(_ titleKey: LocalizedStringKey, isOn: Binding<Bool>) where Label == Text {
+        self.init(isOn: isOn) { Text(titleKey) }
+    }
+    @_disfavoredOverload public init<S: StringProtocol>(_ title: S, isOn: Binding<Bool>) where Label == Text {
         self.init(isOn: isOn) { Text(title) }
     }
     func elements(in context: Context) -> [Element] {
@@ -183,7 +199,7 @@ public struct Toggle<Label: View>: Primitive {
         context.installShortcut(on: widget)
         qs_checked(widget, isOn.wrappedValue ? 1 : 0)
         if let text = (label as? Text) ?? (label as? ToggleStyleConfiguration.Label)?.plainText, text.attributed == nil {
-            qs_text(widget, text.string)
+            qs_text(widget, text.resolvedString(context.environment.locale))
             return [text.styled(context).control(widget)]
         }
         return [stacked([context.control(widget)] + label.resolve(context.descending(.position(0))), axis: .horizontal, alignment: .center, spacing: 4, direction: context.environment.layoutDirection)]
@@ -201,32 +217,46 @@ public struct Toggle<Label: View>: Primitive {
     return control
 }
 public nonisolated struct TextField<Label: View>: Primitive {
-    let title: String, text: Binding<String>
+    let title: Text, text: Binding<String>
     private var selection: Binding<TextSelection?>?
     var axis: Axis = .horizontal
     var prompt: Text?
     var secure = false
-    public nonisolated init<S: StringProtocol>(_ title: S, text: Binding<String>) where Label == Text {
+    public init(_ titleKey: LocalizedStringKey, text: Binding<String>) where Label == Text {
+        self.init(configuration: Text(titleKey), text: text, secure: false, prompt: nil, axis: .horizontal)
+    }
+    public init(_ titleKey: LocalizedStringKey, text: Binding<String>, axis: Axis) where Label == Text {
+        self.init(configuration: Text(titleKey), text: text, secure: false, prompt: nil, axis: axis)
+    }
+    public init(_ titleKey: LocalizedStringKey, text: Binding<String>, prompt: Text?) where Label == Text {
+        self.init(configuration: Text(titleKey), text: text, secure: false, prompt: prompt, axis: .horizontal)
+    }
+    public init(_ titleKey: LocalizedStringKey, text: Binding<String>, prompt: Text?, axis: Axis) where Label == Text {
+        self.init(configuration: Text(titleKey), text: text, secure: false, prompt: prompt, axis: axis)
+    }
+    public init(_ titleKey: LocalizedStringKey, text: Binding<String>, selection: Binding<TextSelection?>, prompt: Text? = nil, axis: Axis? = nil) where Label == Text {
+        self.init(configuration: Text(titleKey), text: text, secure: false, selection: selection, prompt: prompt, axis: axis ?? .horizontal)
+    }
+    @_disfavoredOverload public nonisolated init<S: StringProtocol>(_ title: S, text: Binding<String>) where Label == Text {
         self.init(title, text: text, prompt: nil, axis: .horizontal)
     }
-    public nonisolated init<S: StringProtocol>(_ title: S, text: Binding<String>, axis: Axis) where Label == Text {
+    @_disfavoredOverload public nonisolated init<S: StringProtocol>(_ title: S, text: Binding<String>, axis: Axis) where Label == Text {
         self.init(title, text: text, prompt: nil, axis: axis)
     }
-    public nonisolated init<S: StringProtocol>(_ title: S, text: Binding<String>, prompt: Text?) where Label == Text {
+    @_disfavoredOverload public nonisolated init<S: StringProtocol>(_ title: S, text: Binding<String>, prompt: Text?) where Label == Text {
         self.init(title, text: text, prompt: prompt, axis: .horizontal)
     }
-    public nonisolated init<S: StringProtocol>(_ title: S, text: Binding<String>, prompt: Text?, axis: Axis) where Label == Text {
-        self.title = String(title)
+    @_disfavoredOverload public nonisolated init<S: StringProtocol>(_ title: S, text: Binding<String>, prompt: Text?, axis: Axis) where Label == Text {
+        self.title = Text(verbatim: String(title))
         self.text = text
         self.prompt = prompt
         self.axis = axis
     }
-    @_disfavoredOverload
-    public nonisolated init<S: StringProtocol>(_ title: S, text: Binding<String>, selection: Binding<TextSelection?>, prompt: Text? = nil, axis: Axis? = nil) where Label == Text {
+    @_disfavoredOverload public nonisolated init<S: StringProtocol>(_ title: S, text: Binding<String>, selection: Binding<TextSelection?>, prompt: Text? = nil, axis: Axis? = nil) where Label == Text {
         self.init(title, text: text, prompt: prompt, axis: axis ?? .horizontal)
         self.selection = selection
     }
-    init(configuration title: String, text: Binding<String>, secure: Bool, selection: Binding<TextSelection?>? = nil, prompt: Text? = nil, axis: Axis = .horizontal) {
+    init(configuration title: Text, text: Binding<String>, secure: Bool, selection: Binding<TextSelection?>? = nil, prompt: Text? = nil, axis: Axis = .horizontal) {
         self.selection = selection
         self.prompt = prompt
         self.axis = axis
@@ -239,9 +269,10 @@ public nonisolated struct TextField<Label: View>: Primitive {
             let configuration = TextField<_TextFieldStyleLabel>(configuration: title, text: text, secure: secure, selection: selection, prompt: prompt, axis: axis)
             return style(configuration).resolve(context.with(\.fieldStyle, nil))
         }
+        let title = title.resolvedString(context.environment.locale)
         var context = context
         if context.environment.label.isEmpty { context.environment.label = title }
-        let placeholder = prompt?.string ?? title
+        let placeholder = prompt?.resolvedString(context.environment.locale) ?? title
         let promptColor = prompt?.foregroundOverride?.resolvedPaint(in: context.environment).representativeColor.hex(context.environment.colorScheme) ?? ""
         let cursor = selection.map { EditorSelection(binding: $0, text: text, affinity: context.environment.selectionAffinity) }
         guard axis == .vertical else { return [field(placeholder, promptColor: promptColor, text: text, secure: secure, selection: cursor, in: context)] }
@@ -257,10 +288,27 @@ public nonisolated struct TextField<Label: View>: Primitive {
         } place: { rect, _ in qs_place(widget, rect.minX, rect.minY, rect.width, rect.height) }]
     }
 }
-public struct SecureField<Label: View>: Primitive {
-    let title: String, text: Binding<String>
-    public init<S: StringProtocol>(_ title: S, text: Binding<String>) where Label == Text { self.title = String(title); self.text = text }
-    func elements(in context: Context) -> [Element] { TextField<_TextFieldStyleLabel>(configuration: title, text: text, secure: true).elements(in: context) }
+public nonisolated struct SecureField<Label: View>: Primitive {
+    let title: Text, text: Binding<String>, prompt: Text?
+    public init(_ titleKey: LocalizedStringKey, text: Binding<String>) where Label == Text {
+        self.init(titleKey, text: text, prompt: nil)
+    }
+    public init(_ titleKey: LocalizedStringKey, text: Binding<String>, prompt: Text?) where Label == Text {
+        title = Text(titleKey)
+        self.text = text
+        self.prompt = prompt
+    }
+    @_disfavoredOverload public init<S: StringProtocol>(_ title: S, text: Binding<String>) where Label == Text {
+        self.init(title, text: text, prompt: nil)
+    }
+    @_disfavoredOverload public init<S: StringProtocol>(_ title: S, text: Binding<String>, prompt: Text?) where Label == Text {
+        self.title = Text(verbatim: String(title))
+        self.text = text
+        self.prompt = prompt
+    }
+    @MainActor func elements(in context: Context) -> [Element] {
+        TextField<_TextFieldStyleLabel>(configuration: title, text: text, secure: true, prompt: prompt).elements(in: context)
+    }
 }
 public struct Slider<Label: View, ValueLabel: View>: Primitive {
     let fraction: () -> Double, move: (Double) -> Void

@@ -140,7 +140,7 @@ public struct GraphicsContext {
         fileprivate func paragraph(in size: CGSize) -> (OpaquePointer, QSCanvasTextMetrics) {
             let font = environment.font ?? .body
             let paragraph = qs_text_paragraph(font.qtFamily, font.size, font.qtWeight, font.slanted ? 1 : 0, environment.tracking)!
-            text.appendRuns(text.attributed ?? AttributedString(text.string), to: UnsafeMutableRawPointer(paragraph),
+            text.appendRuns(text.attributed ?? AttributedString(text.resolvedString(environment.locale)), to: UnsafeMutableRawPointer(paragraph),
                             in: environment, using: qs_canvas_text_append)
             if let outline { qs_canvas_text_outline(paragraph, outline.color.hex(environment.colorScheme), outline.width) }
             let leading: Int32 = environment.layoutDirection == .rightToLeft ? 1 : -1

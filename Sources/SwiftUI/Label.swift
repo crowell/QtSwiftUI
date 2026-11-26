@@ -5,7 +5,11 @@ public nonisolated struct Label<Title: View, Icon: View>: View {
         self.title = title()
         self.icon = icon()
     }
-    public init<S: StringProtocol>(_ title: S, systemImage name: String) where Title == Text, Icon == Image {
+    public init(_ titleKey: LocalizedStringKey, systemImage name: String) where Title == Text, Icon == Image {
+        title = Text(titleKey)
+        icon = Image(systemName: name)
+    }
+    @_disfavoredOverload public init<S: StringProtocol>(_ title: S, systemImage name: String) where Title == Text, Icon == Image {
         self.title = Text(title)
         icon = Image(systemName: name)
     }
@@ -16,7 +20,10 @@ public nonisolated struct Label<Title: View, Icon: View>: View {
 }
 
 extension Button where Label == SwiftUI.Label<Text, Image> {
-    public init<S: StringProtocol>(_ title: S, systemImage: String, action: @escaping @MainActor () -> Void) {
+    public init(_ titleKey: LocalizedStringKey, systemImage: String, action: @escaping @MainActor () -> Void) {
+        self.init(action: action) { SwiftUI.Label(titleKey, systemImage: systemImage) }
+    }
+    @_disfavoredOverload public init<S: StringProtocol>(_ title: S, systemImage: String, action: @escaping @MainActor () -> Void) {
         self.init(action: action) { SwiftUI.Label(title, systemImage: systemImage) }
     }
 }

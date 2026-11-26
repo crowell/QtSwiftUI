@@ -105,6 +105,21 @@ public nonisolated struct WindowGroup<Content: View>: SceneCollection {
     public init<S: StringProtocol>(_ title: S, id: String, @ContentBuilder makeContent: @escaping () -> Content) {
         self.init(title: String(title), id: id, makeView: makeContent)
     }
+
+    @_disfavoredOverload public init(_ titleKey: LocalizedStringKey, @ContentBuilder content: () -> Content) {
+        self.init(Text(titleKey), content: content)
+    }
+    public init(_ titleKey: LocalizedStringKey, @ContentBuilder makeContent: @escaping () -> Content) {
+        self.init(Text(titleKey), makeContent: makeContent)
+    }
+
+    @_disfavoredOverload public init(_ titleKey: LocalizedStringKey, id: String, @ContentBuilder content: () -> Content) {
+        self.init(Text(titleKey), id: id, content: content)
+    }
+    public init(_ titleKey: LocalizedStringKey, id: String, @ContentBuilder makeContent: @escaping () -> Content) {
+        self.init(Text(titleKey), id: id, makeContent: makeContent)
+    }
+
     public var body: Never { fatalError("Primitive window group") }
     @MainActor var windows: [WindowScene] {
         [WindowScene(title: title, id: id, single: false, valueType: valueType, initialValue: initialValue,
@@ -120,6 +135,9 @@ public nonisolated struct Window<Content: View>: SceneCollection {
         self.title = String(title); self.id = id; view = content()
     }
     public init(_ title: Text, id: String, @ContentBuilder content: () -> Content) { self.init(title.string, id: id, content: content) }
+    public init(_ titleKey: LocalizedStringKey, id: String, @ContentBuilder content: () -> Content) {
+        self.init(Text(titleKey), id: id, content: content)
+    }
     public var body: Never { fatalError("Primitive window") }
     @MainActor var windows: [WindowScene] {
         [WindowScene(title: title, id: id, single: true, content: { view.resolve($0) })]

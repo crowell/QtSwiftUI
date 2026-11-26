@@ -38,7 +38,7 @@ import QtBridge
 
     static func title(_ label: some View, in context: Context) -> String {
         if !context.environment.label.isEmpty { return context.environment.label }
-        if let text = label as? Text { return text.string }
+        if let text = label as? Text { return text.resolvedString(context.environment.locale) }
         return read(label, in: context.descending(.property("menu title"))).rows.map(\.title).joined(separator: " ")
     }
 
@@ -79,7 +79,7 @@ import QtBridge
 extension Button: MenuEntrySource {
     func collect(in context: Context, into entries: MenuEntries) {
         let symbolLabel = label as? SwiftUI.Label<Text, Image>
-        let title = symbolLabel?.title.string ?? MenuEntries.title(label, in: context)
+        let title = symbolLabel?.title.resolvedString(context.environment.locale) ?? MenuEntries.title(label, in: context)
         entries.rows.append(.init(title: context.environment.label.isEmpty ? title : context.environment.label,
                                   systemImage: symbolLabel?.icon.systemName, enabled: context.environment.isEnabled,
                                   shortcut: context.environment.keyboardShortcut, action: action))
@@ -93,7 +93,7 @@ extension Toggle: MenuEntrySource {
 }
 extension Text: MenuEntrySource {
     @MainActor func collect(in context: Context, into entries: MenuEntries) {
-        entries.rows.append(.init(title: string, enabled: false))
+        entries.rows.append(.init(title: resolvedString(context.environment.locale), enabled: false))
     }
 }
 extension Divider: MenuEntrySource {
@@ -107,7 +107,10 @@ public struct Menu<Label: View, Content: View>: Primitive, MenuEntrySource {
         self.content = content()
         self.label = label()
     }
-    public init<S: StringProtocol>(_ title: S, @ViewBuilder content: () -> Content) where Label == Text {
+    public init(_ titleKey: LocalizedStringKey, @ViewBuilder content: () -> Content) where Label == Text {
+        self.init(content: content) { Text(titleKey) }
+    }
+    @_disfavoredOverload public init<S: StringProtocol>(_ title: S, @ViewBuilder content: () -> Content) where Label == Text {
         self.init(content: content) { Text(title) }
     }
     public init(_ configuration: MenuStyleConfiguration) where Label == MenuStyleConfiguration.Label, Content == MenuStyleConfiguration.Content {

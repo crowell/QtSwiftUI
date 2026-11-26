@@ -49,7 +49,10 @@ public struct Link<Label: View>: View {
         self.destination = destination
         self.label = label()
     }
-    public init<S: StringProtocol>(_ title: S, destination: URL) where Label == Text {
+    public init(_ titleKey: LocalizedStringKey, destination: URL) where Label == Text {
+        self.init(destination: destination) { Text(titleKey) }
+    }
+    @_disfavoredOverload public init<S: StringProtocol>(_ title: S, destination: URL) where Label == Text {
         self.init(destination: destination) { Text(title) }
     }
     public var body: some View {

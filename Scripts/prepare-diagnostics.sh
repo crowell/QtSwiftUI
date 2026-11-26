@@ -6,7 +6,7 @@ target=${2:?pass the temporary package directory}
 source_dir="$checkout/Packages/SignalUI/Sources/SignalUI"
 root=$(cd "$(dirname "$0")/.." && pwd)
 mkdir -p "$target/Sources/CallDiagnostics" "$target/Tests/ScreenTests"
-cp "$root"/Tests/SereinDiagnostics/*.swift "$target/Tests/ScreenTests/"
+cp "$root"/Tests/SereinDiagnostics/*.swift "$root/Tests/SwiftUITests/LocalizedStringTests.swift" "$target/Tests/ScreenTests/"
 ln -s "$checkout/Packages/SignalI18n" "$target/SignalI18n"
 ln -s "$checkout/Packages/SignalText" "$target/SignalText"
 codecs="$checkout/Packages/SignalCodecs"
