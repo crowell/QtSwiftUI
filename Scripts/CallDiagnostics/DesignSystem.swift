@@ -51,8 +51,11 @@ extension View {
     func cssTextColor(_ color: AxoColor) -> some View { environment(\.cssTextColor, color).foregroundStyle(color) }
 }
 
-public struct CSSTextRun {
-    let text: String
+public struct CSSTextRun: Hashable, Sendable {
+    public var text: String
+    public var fontName: String?
+    public var color: AxoColor?
+    public var action: String?
     public init(_ text: String) { self.text = text }
 }
 public struct CSSTextStyle {
@@ -83,6 +86,7 @@ extension EnvironmentValues {
 }
 public enum CSSTextWrap { case wrap, truncate, nowrap }
 extension TextAlignment {
+    static var start: Self { .leading }
     static var end: Self { .trailing }
 }
 
@@ -92,6 +96,9 @@ struct CSSText: View {
     let wrap: CSSTextWrap
     let alignment: TextAlignment
     let color: AxoColor?
+    private var runs: [CSSTextRun] = []
+    private var onTap: ((String) -> Void)?
+    @Environment(\.colorScheme) private var scheme
     @Environment(\.cssTextWrapWidth) private var wrapWidth
 
     init(_ value: String, type: AxoType, wrap: CSSTextWrap = .wrap, alignment: TextAlignment = .leading, color: AxoColor? = nil) {
@@ -106,14 +113,33 @@ struct CSSText: View {
     }
     init(runs: [CSSTextRun], style: CSSTextStyle, wrap: CSSTextWrap, color: AxoColor? = nil) {
         self.init(runs.map(\.text).joined(), type: style.type, wrap: wrap, color: color)
+        if runs.contains(where: { $0.action != nil || $0.color != nil || $0.fontName != nil }) { self.runs = runs }
     }
-    init(runs: [CSSTextRun], style: CSSTextStyle, onTap: ((String) -> Void)?) {
-        // This preview only supplies plain localized strings to the production dialog.
-        self.init(runs: runs, style: style, wrap: .wrap)
+    init(runs: [CSSTextRun], style: CSSTextStyle, color: AxoColor? = nil, onTap: ((String) -> Void)?) {
+        self.init(runs: runs, style: style, wrap: .wrap, color: color)
+        self.onTap = onTap
+    }
+    private var content: Text {
+        guard !runs.isEmpty else { return Text(verbatim: value) }
+        var attributed = AttributedString()
+        for run in runs {
+            var part = AttributedString(run.text)
+            if let name = run.fontName { part.font = Font.custom(name, fixedSize: type.size) }
+            if let color = run.color { part.foregroundColor = color.value(for: scheme).color }
+            if let action = run.action {
+                var url = URLComponents()
+                url.scheme = "serein"
+                url.host = "text-action"
+                url.queryItems = [URLQueryItem(name: "action", value: action)]
+                part.link = url.url
+            }
+            attributed += part
+        }
+        return Text(attributed)
     }
     @ViewBuilder private var label: some View {
         let _ = AxoFonts.register()
-        let text = Text(verbatim: value).font(type.font).tracking(type.tracking * type.size)
+        let text = content.font(type.font).tracking(type.tracking * type.size)
         if wrap == .nowrap {
             text.lineLimit(1).fixedSize(horizontal: true, vertical: false).frame(height: type.lineHeight)
         } else if wrap == .truncate {
@@ -127,6 +153,13 @@ struct CSSText: View {
         Group {
             if let color { label.foregroundStyle(color) } else { label }
         }.multilineTextAlignment(alignment)
+        .environment(\.openURL, OpenURLAction { url in
+            guard url.scheme == "serein", url.host == "text-action", let onTap,
+                  let action = URLComponents(url: url, resolvingAgainstBaseURL: false)?.queryItems?.first(where: { $0.name == "action" })?.value
+            else { return .systemAction }
+            onTap(action)
+            return .handled
+        })
     }
 }
 public enum AxoSymbol {

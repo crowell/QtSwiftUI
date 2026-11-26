@@ -63,7 +63,6 @@ declarations() {
     declarations '^public struct MessageAttachment:' 1 "$source_dir/Components/Conversation/Message/MessageAttachment.swift"
     declarations '^enum QuoteMIME ' 1 "$source_dir/Components/Conversation/Quote.swift"
     declarations '^public struct RGBAImage:|^public final class RGBAAnimation:' 2 "$source_dir/Theme/PixelImage.swift"
-    declarations '^public func formatFileSize[(]' 1 "$source_dir/Theme/I18nRichText.swift"
     declarations '^public struct ImageOrBlurhash:' 1 "$source_dir/Components/Conversation/ConversationImage.swift"
 } > "$target_dir/DraftAudioSupport.swift"
 # Keep Serein's image fitting, snapping and animation. Paint the decoded RGBA bytes
@@ -147,21 +146,23 @@ awk '/^    @MainActor func width\(i18n:/ { skip=1; count++ }
     echo 'import SignalI18n'
     declarations '^extension RGBA ' 1 "$source_dir/Components/Conversation/Quote.swift"
     declarations '^public enum BubbleColor:|^struct BubbleFill:' 2 "$source_dir/Components/Conversation/Message/Message.swift"
+    declarations '^struct UndimmedButtonStyle:' 1 "$source_dir/Calling/CallingButton.swift"
     declarations '^public enum FormatTimestamp ' 1 "$source_dir/Components/LeftPaneDialogs.swift"
     awk '/^public enum MessageDirection:/ { print; count++ } END { if (count!=1) exit 1 }' "$source_dir/Components/Conversation/MessageTextRenderer.swift"
     awk 'BEGIN { print "extension EnvironmentValues {" } /@Entry public var chatColorViewport:/ { print; count++ }
          END { print "}"; if (count!=1) exit 1 }' "$source_dir/Components/Conversation/Message/Message.swift"
 } > "$target_dir/EditorSupport.swift"
+cp "$source_dir/Theme/I18nRichText.swift" "$source_dir/Calling/CallQualitySurveyDialog.swift" "$source_dir/Axo/AxoCheckbox.swift" "$source_dir/Axo/AxoSwitch.swift" "$target_dir/"
 cp "$source_dir/Components/ChatColorPicker.swift" "$source_dir/Axo/AxoContainer.swift" \
    "$source_dir/Axo/Items/AxoClickableItem.swift" "$target_dir/"
-# Only the avatar, checkbox and mixed-inline section title are outside this fixture.
+# Only the avatar and mixed-inline section title are outside this fixture.
 # Keep both original item layouts, trigger registration, and hit targets.
-awk '/^    public struct (IconAvatar|Checkbox):/ { skip=1; omitted++ }
+awk '/^    public struct IconAvatar:/ { skip=1; omitted++ }
      !skip && !/^import CoreText$/ {
          if (/let font = CSSTextStyle.*\.ctFont/) { print "            let font = AxoFonts.interMetrics(size: size)"; metrics++; next }
          gsub(/CTFontGetAscent\(font\)/, "font.ascent"); gsub(/CTFontGetDescent\(font\)/, "font.descent")
          gsub(/CTFontGetXHeight\(font\)/, "font.xHeight"); print }
-     /^    }$/ { skip=0 } END { if (omitted!=2 || metrics!=1) exit 1 }' \
+     /^    }$/ { skip=0 } END { if (omitted!=1 || metrics!=1) exit 1 }' \
     "$source_dir/Axo/Items/AxoBaseItem.swift" > "$target_dir/AxoBaseItem.swift"
 sed '/public typealias IconAvatar =/d' "$source_dir/Axo/Items/AxoItem.swift" > "$target_dir/AxoItem.swift"
 awk '/^    public struct Label:/ { skip=1; count++ }
