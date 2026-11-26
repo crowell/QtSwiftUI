@@ -13,6 +13,7 @@
 #include "Magnification.hpp"
 #include "NativeMenu.hpp"
 #include "NativeTransfer.hpp"
+#include "ClipboardCommands.hpp"
 #include "NativePopover.hpp"
 #include <QGestureEvent>
 #include <QNativeGestureEvent>
@@ -636,6 +637,7 @@ struct QSWindow final : QWidget {
         });
     }
     bool eventFilter(QObject *source, QEvent *input) override {
+        if (source == focusWidget() && handleClipboardKey(focusWidget(), input, transfers.handler, context)) return true;
         if (transfers.filter(qobject_cast<QWidget *>(source), input, context)) return true;
         if (keyHandler && source == focusWidget() && (input->type() == QEvent::KeyPress || input->type() == QEvent::KeyRelease)) {
             const auto *key = static_cast<QKeyEvent *>(input);

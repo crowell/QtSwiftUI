@@ -85,9 +85,27 @@ struct TransferAction {
     var types: [String] = []
     var targeted: Binding<Bool>?
     var drop: (([NSItemProvider], CGPoint) -> Bool)?
+    var clipboardCommand: QSTransferPhase?
+    var copyItems: (() -> [NSItemProvider])?
+    var pasteItems: (([NSItemProvider]) -> Bool)?
 
     @MainActor func handle(_ phase: QSTransferPhase, mime: UnsafeMutableRawPointer?, point: CGPoint) -> Bool {
         switch phase {
+        case QSCopyItems, QSCutItems:
+            guard let mime, let copyItems, clipboardCommand == phase else { return false }
+            for item in copyItems() where !item.registeredTypeIdentifiers.isEmpty {
+                if let destination = qs_clipboard_add_item(mime) { _ = item.write(to: destination) }
+            }
+            return true
+        case QSPasteItems:
+            guard let mime, let pasteItems else { return false }
+            let providers = (0..<qs_clipboard_item_count(mime)).compactMap { index -> NSItemProvider? in
+                guard let item = qs_clipboard_item(mime, index) else { return nil }
+                let offered = NSItemProvider.read(item, includingData: false)
+                guard types.contains(where: offered.hasItemConformingToTypeIdentifier) else { return nil }
+                return NSItemProvider.read(item, includingData: true)
+            }
+            return !providers.isEmpty && pasteItems(providers)
         case QSWriteTransfer:
             guard let mime, let source else { return false }
             return source().write(to: mime)
@@ -110,12 +128,37 @@ private nonisolated struct TransferView<Content: View>: Primitive {
     @MainActor func elements(in context: Context) -> [Element] {
         let group = context.widget(QSGroup, transfer: transfer)
         let enabled = context.environment.isEnabled && context.environment.allowsHits
+        qs_clipboard_scope(group, enabled ? transfer.clipboardCommand.map { Int32($0.rawValue) } ?? -1 : -1)
         qs_transfer_scope(group, enabled && transfer.source != nil ? 1 : 0, enabled && transfer.drop != nil ? 1 : 0)
         return context.children(of: content, inside: group)
     }
 }
 
 extension View {
+    nonisolated public func onCopyCommand(perform payloadAction: (() -> [NSItemProvider])?) -> some View {
+        TransferView(content: self, transfer: TransferAction(clipboardCommand: payloadAction == nil ? nil : QSCopyItems, copyItems: payloadAction))
+    }
+    nonisolated public func onCutCommand(perform payloadAction: (() -> [NSItemProvider])?) -> some View {
+        TransferView(content: self, transfer: TransferAction(clipboardCommand: payloadAction == nil ? nil : QSCutItems, copyItems: payloadAction))
+    }
+    nonisolated public func onPasteCommand(of supportedContentTypes: [UTType], perform payloadAction: @escaping ([NSItemProvider]) -> Void) -> some View {
+        onPasteCommand(of: supportedContentTypes.map(\.identifier), perform: payloadAction)
+    }
+    nonisolated public func onPasteCommand<Payload>(of supportedContentTypes: [UTType], validator: @escaping ([NSItemProvider]) -> Payload?,
+                                                    perform payloadAction: @escaping (Payload) -> Void) -> some View {
+        onPasteCommand(of: supportedContentTypes.map(\.identifier), validator: validator, perform: payloadAction)
+    }
+    nonisolated public func onPasteCommand(of supportedTypes: [String], perform payloadAction: @escaping ([NSItemProvider]) -> Void) -> some View {
+        onPasteCommand(of: supportedTypes, validator: { $0 }, perform: payloadAction)
+    }
+    nonisolated public func onPasteCommand<Payload>(of supportedTypes: [String], validator: @escaping ([NSItemProvider]) -> Payload?,
+                                                    perform payloadAction: @escaping (Payload) -> Void) -> some View {
+        TransferView(content: self, transfer: TransferAction(types: supportedTypes, clipboardCommand: QSPasteItems, pasteItems: { items in
+            guard let payload = validator(items) else { return false }
+            payloadAction(payload)
+            return true
+        }))
+    }
     nonisolated public func onDrag(_ data: @escaping () -> NSItemProvider) -> some View {
         TransferView(content: self, transfer: TransferAction(source: data))
     }
