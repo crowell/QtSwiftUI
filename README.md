@@ -12,7 +12,7 @@ From a checkout with Docker running, this command builds the Ubuntu 24.04 image,
 ./Scripts/verify-linux.sh
 ```
 
-Pass a Serein checkout to render its inbox, Calls tab, New Call picker, call history, call-link details, participant approval, contact details and note, About window, nickname editor, call settings, data usage settings, call-quality survey, chat-color picker and custom editor, media gallery, photo lightbox, voice-note controls, data-clearing and device-link screens, leave-call dialog, call diagnostics window, device card and artwork.
+Pass a Serein checkout to render its inbox, Calls tab, New Call picker, call history, call-link details, participant approval, contact details and note, About window, nickname editor, call settings, data usage settings, call-quality survey, chat-color picker and custom editor, media gallery, photo lightbox, disappearing-message timer, voice-note controls, data-clearing and device-link screens, leave-call dialog, call diagnostics window, device card and artwork.
 
 ```sh
 ./Scripts/verify-linux.sh ../serein
@@ -63,6 +63,10 @@ The `--lightbox` example runs the photo mode of Serein’s `Lightbox` and its or
 ![Serein’s photo lightbox on Ubuntu](Screenshots/lightbox.png)
 
 [View the full-resolution zoom on Ubuntu](Screenshots/lightbox-zoomed.png). Tests send pinch events through Qt and AppKit, compare scale, recognition threshold, initial velocity and gesture coordinates, then exercise click-to-zoom, thumbnail selection, Save and Close. Qt tests also move the pointer across the enlarged image and check both zoom cursors. Set `QTSWIFTUI_LIGHTBOX_REFERENCE` to an existing directory when running `Scripts/check-apple.sh` to save the macOS captures.
+
+The `--disappearing-timer` example opens Serein’s `DisappearingTimeDialog` with its original `Select` controls. The example starts at 45 minutes. On Ubuntu, each control opens a native Qt menu. The same interaction test uses AppKit’s menu on macOS and verifies that switching to weeks caps the selection at four, that two weeks submits 1,209,600 seconds, and that Cancel leaves the saved value alone. The explanatory text wraps differently on the two systems. Set `QTSWIFTUI_TIMER_REFERENCE` to an existing directory to capture the macOS dialog.
+
+![Serein’s timer and native units menu on Ubuntu](Screenshots/disappearing-timer-units.png)
 
 The chat-color picker runs the complete Serein `ChatColorPicker`, including its message preview, 22 presets, custom swatch menu and reset-confirmation dialog. The preview starts with the four colors from Serein’s picker tests and keeps edits in memory. Both platforms exercise selecting a preset, editing a custom color, saving or canceling, duplicating and deleting a swatch, and confirming or canceling a reset. The reset rows use the production Axo item layouts and trigger registration. Serein’s reset-alert Cancel also calls the environment dismiss action, which closes this standalone window on both platforms. The custom editor’s Cancel returns to the picker. The fixture omits unused avatar and mixed-inline section-title views. At 780 × 720, 27,208 pixels (4.84%) differ from the AppKit-hosted SwiftUI capture by more than 8/255 in any RGB channel. Set `QTSWIFTUI_PICKER_REFERENCE` to an existing directory to capture the picker and its open menu during the tests.
 
@@ -168,7 +172,7 @@ The target is source compatibility with Apple's public SwiftUI APIs. The impleme
 
 `./Scripts/check-apple.sh ../serein` type-checks the example source with Apple's SwiftUI module on a Mac with Xcode. `./Scripts/check-api.sh` extracts public symbol graphs from Xcode and the Linux image. Pass `--missing` to list missing declaration paths. The inventory groups declarations by symbol kind and path, counts overload spellings separately, and excludes underscored and synthesized members. A shared name alone cannot establish matching signatures, constraints, availability or behavior.
 
-The inventory against the macOS 27.2 SDK found 1,260 shared declaration paths out of 7,627 and 801 identical declaration spellings out of 8,735. The examples exercise a smaller set at runtime. Navigation, multiwindow scenes, broader animation support, text shaping parity, gestures and platform integration remain substantial gaps. Font metrics, control appearance and several layout behaviors differ from Apple's implementation.
+The inventory against the macOS 27.2 SDK found 1,281 shared declaration paths out of 7,627 and 806 identical declaration spellings out of 8,735. The examples exercise a smaller set at runtime. Navigation, multiwindow scenes, broader animation support, text shaping parity, gestures and platform integration remain substantial gaps. Font metrics, control appearance and several layout behaviors differ from Apple's implementation.
 
 After capturing the Linux examples, run `./Scripts/compare-artwork.sh ../serein` on macOS to render both illustrations with Apple's `ImageRenderer`. At a threshold of 8/255 in any RGB channel, 101 of 119,680 account artwork pixels (0.084%) and 91 of 49,928 key transparency pixels (0.182%) differed. The mean absolute channel differences were 0.104/255 and 0.095/255 respectively. Both reference images are saved in `.build/artwork/`.
 

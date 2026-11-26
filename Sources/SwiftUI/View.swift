@@ -21,6 +21,10 @@ extension View where Body == Never {
 extension View {
     func resolve(_ incoming: Context) -> [Element] {
         let context = incoming.descending(.type(ObjectIdentifier(Self.self)))
+        if let entries = context.menuEntries, let item = self as? any MenuEntrySource {
+            item.collect(in: context, into: entries)
+            return []
+        }
         if let primitive = self as? any Primitive { return primitive.elements(in: context) }
         return context.preparing(self).body.resolve(context)
     }

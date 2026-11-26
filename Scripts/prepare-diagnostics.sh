@@ -160,6 +160,7 @@ awk '/^import AppKit/ || /\.background \{ if backdropBlur/ { print "#if canImpor
 awk '/^    public struct (BodyTitle|FooterContent):/ { skip=1; count++ }
      !skip { print } /^    }$/ { skip=0 } END { if (count!=2) exit 1 }' \
     "$source_dir/Axo/AxoDialog.swift" > "$target_dir/AxoDialog.swift"
+cp "$source_dir/Components/Select.swift" "$source_dir/Components/DisappearingTimeDialog.swift" "$target_dir/"
 cp "$source_dir/Axo/AxoTabs.swift" "$source_dir/Components/CustomColorEditor.swift" \
    "$source_dir/Components/Conversation/ExpireTimer.swift" "$source_dir/Tokens/AxoTokens.swift" \
    "$source_dir/Tokens/AxoTokensTables.generated.swift" "$target_dir/"

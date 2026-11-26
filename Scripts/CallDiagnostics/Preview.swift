@@ -22,6 +22,7 @@ struct DiagnosticPreview: App {
         let survey = CommandLine.arguments.contains("--call-survey")
         let colorPicker = CommandLine.arguments.contains("--color-picker")
         let colorEditor = CommandLine.arguments.contains("--color-editor")
+        let timer = CommandLine.arguments.contains("--disappearing-timer")
         let photoViewer = CommandLine.arguments.contains("--lightbox")
         let populatedGallery = CommandLine.arguments.contains("--gallery-media")
         let gallery = populatedGallery || CommandLine.arguments.contains("--gallery")
@@ -29,8 +30,9 @@ struct DiagnosticPreview: App {
         let recording = CommandLine.arguments.contains("--recording")
         let discard = CommandLine.arguments.contains("--discard-recording")
         let arabic = CommandLine.arguments.contains("--arabic")
-        WindowGroup(photoViewer ? "Photo" : callsTab ? "Calls" : inbox ? "Inbox" : appAbout ? "About" : about ? "About contact" : note ? "Contact note" : request ? "Request to join" : linkDetails ? "Call link" : nickname ? "Edit nickname and note" : history ? "Call history" : settings ? (calls ? "Calls" : "Data usage") : survey ? "Call quality" : colorPicker ? "Chat color" : colorEditor ? "Custom chat color" : recording || draft || discard ? "Voice message" : gallery ? "All media" : clearing ? "Clearing data" : linking ? "Link device" : leaveCall ? "Leave current call" : "Call diagnostics") {
-            if photoViewer { PhotoPreview() }
+        WindowGroup(timer ? "Disappearing messages" : photoViewer ? "Photo" : callsTab ? "Calls" : inbox ? "Inbox" : appAbout ? "About" : about ? "About contact" : note ? "Contact note" : request ? "Request to join" : linkDetails ? "Call link" : nickname ? "Edit nickname and note" : history ? "Call history" : settings ? (calls ? "Calls" : "Data usage") : survey ? "Call quality" : colorPicker ? "Chat color" : colorEditor ? "Custom chat color" : recording || draft || discard ? "Voice message" : gallery ? "All media" : clearing ? "Clearing data" : linking ? "Link device" : leaveCall ? "Leave current call" : "Call diagnostics") {
+            if timer { DisappearingTimerPreview() }
+            else if photoViewer { PhotoPreview() }
             else if callsTab { CallsTabPreview() }
             else if inbox { InboxPreview() }
             else if request || about || note { ContactFlowPreview(model: .init(start: request ? .request : about ? .about : .note)) }
@@ -64,6 +66,16 @@ struct AppAboutPreview: View {
     @Environment(\.dismiss) private var dismiss
     var body: some View {
         About(appEnv: "development", platform: "linux", version: "QtSwiftUI preview", closeAbout: { dismiss() })
+    }
+}
+
+struct DisappearingTimerPreview: View {
+    @Environment(\.dismiss) private var dismiss
+    var body: some View {
+        AxoBaseDialog.Host {
+            DisappearingTimeDialog(initialValue: 45 * 60, onClose: { dismiss() })
+        }
+        .background(AxoColor.surfacePrimary)
     }
 }
 

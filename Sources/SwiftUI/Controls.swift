@@ -89,10 +89,16 @@ public struct Button<Label: View>: Primitive {
         self.init(action: action) { Text(title) }
     }
     func elements(in context: Context) -> [Element] {
+        buttonElements(in: context, kind: context.environment.isLink ? QSLink : QSButton, activate: { _ in action() })
+    }
+
+    func buttonElements(in context: Context, kind: QSKind, activate: @escaping (String) -> Void,
+                        configure: (UnsafeMutableRawPointer) -> Void = { _ in }) -> [Element] {
         let style = context.environment.buttonStyle
-        let widget = context.widget(context.environment.isLink ? QSLink : QSButton, pressed: { [weak host = context.host] _ in
+        let widget = context.widget(kind, pressed: { [weak host = context.host] _ in
             if style != nil { host?.update() }
-        }, action: { _ in action() })
+        }, action: activate)
+        configure(widget)
         context.installShortcut(on: widget)
         qs_plain_button(widget, style != nil ? 1 : 0)
         if style == nil, let text = label as? Text, text.attributed == nil, text.underlineOverride == nil, context.environment.textUnderline == nil {
@@ -109,15 +115,17 @@ public struct Button<Label: View>: Primitive {
         let child = stacked((configured ?? AnyView(label)).resolve(ctx.descending(.position(0))), axis: .horizontal, alignment: .center, spacing: 4, direction: ctx.environment.layoutDirection)
         let scale = context.environment.controlSize.qtScale
         let dx: CGFloat = style == nil ? 8 * scale : 0, dy: CGFloat = style == nil ? 5 * scale : 0
+        let indicator = kind == QSMenuButton ? CGFloat(qs_menu_indicator_width(widget)) : 0
+        let leading = dx + (context.environment.layoutDirection == .rightToLeft ? indicator : 0)
         func inner(_ p: ProposedViewSize) -> ProposedViewSize {
-            .init(width: p.width.map { max(0, $0 - 2 * dx) }, height: p.height.map { max(0, $0 - 2 * dy) })
+            .init(width: p.width.map { max(0, $0 - 2 * dx - indicator) }, height: p.height.map { max(0, $0 - 2 * dy) })
         }
         let button = Element { p in
             let size = child.measure(inner(p))
-            return CGSize(width: size.width + 2 * dx, height: size.height + 2 * dy)
+            return CGSize(width: size.width + 2 * dx + indicator, height: size.height + 2 * dy)
         } place: { rect, p in
             qs_place(widget, rect.minX, rect.minY, rect.width, rect.height)
-            child.place(.init(origin: CGPoint(x: dx, y: dy), size: child.measure(inner(p))), inner(p))
+            child.place(.init(origin: CGPoint(x: leading, y: dy), size: child.measure(inner(p))), inner(p))
         }
         button.baselines = { p, _ in child.baselines?(inner(p), child.measure(inner(p)))?.offset(by: dy) }
         return [button]

@@ -8,6 +8,7 @@
 #include "CanvasBlur.hpp"
 #include "PointerDrag.hpp"
 #include "Magnification.hpp"
+#include "NativeMenu.hpp"
 #include <QGestureEvent>
 #include <QNativeGestureEvent>
 #include <QPixmapCache>
@@ -141,7 +142,13 @@ public:
 class SwiftButton final : public QPushButton {
 public:
     using QPushButton::QPushButton;
+    NativeMenu *popup = nullptr;
+    bool menuIndicator = true;
 protected:
+    void initStyleOption(QStyleOptionButton *option) const override {
+        QPushButton::initStyleOption(option);
+        if (popup && menuIndicator) option->features |= QStyleOptionButton::HasMenu;
+    }
     bool hitButton(const QPoint &point) const override {
         if (!QPushButton::hitButton(point)) return false;
         for (auto *parent = parentWidget(); parent; parent = parent->parentWidget()) {
@@ -376,7 +383,10 @@ class AccessibleButton final : public QAccessibleWidget {
 public:
     AccessibleButton(QPushButton *button, bool link)
         : QAccessibleWidget(button, QAccessible::Button), button(button) { button->setProperty("qsAXLink", link); }
-    QAccessible::Role role() const override { return button->property("qsAXLink").toBool() ? QAccessible::Link : QAccessible::Button; }
+    QAccessible::Role role() const override {
+        if (button->property("qsAXMenu").toBool()) return QAccessible::ButtonMenu;
+        return button->property("qsAXLink").toBool() ? QAccessible::Link : QAccessible::Button;
+    }
     QString text(QAccessible::Text kind) const override {
         const QString value = QAccessibleWidget::text(kind);
         if (kind != QAccessible::Name || !value.isEmpty()) return value;
@@ -388,15 +398,20 @@ public:
         }
         return parts.join(' ');
     }
-    QStringList actionNames() const override { return {QAccessibleActionInterface::pressAction()}; }
+    QStringList actionNames() const override {
+        if (role() == QAccessible::ButtonMenu) return {pressAction(), showMenuAction()};
+        return {pressAction()};
+    }
     void doAction(const QString &action) override {
-        if (action == QAccessibleActionInterface::pressAction() && button->isEnabled()) activateAccessibleButton(button);
+        if (button->isEnabled() && (action == pressAction() || (role() == QAccessible::ButtonMenu && action == showMenuAction())))
+            activateAccessibleButton(button);
     }
     QAccessible::State state() const override {
         auto state = QAccessibleWidget::state();
         state.linked = role() == QAccessible::Link;
         state.selected = button->property("qsSelected").toBool();
         state.pressed = button->isDown();
+        state.hasPopup = role() == QAccessible::ButtonMenu;
         state.defaultButton = button->isDefault();
         return state;
     }
@@ -812,7 +827,13 @@ int qs_dark_ink(QSWindow *window, int x, int y, int width, int height) {
     return 0;
 }
 int qs_capture(QSWindow *window, const char *path) {
-    return window->grab().save(QString::fromUtf8(path), "PNG");
+    auto pixels = window->grab();
+    QPainter painter(&pixels);
+    for (auto *popup : window->findChildren<QMenu *>()) {
+        if (popup->isVisible()) painter.drawPixmap(window->mapFromGlobal(popup->mapToGlobal(QPoint())), popup->grab());
+    }
+    painter.end();
+    return pixels.save(QString::fromUtf8(path), "PNG");
 }
 int qs_run(QSWindow *window, const char *screenshot, QSPump pump) {
     // Swift's main actor and Foundation timers share the GUI thread with Qt.
@@ -887,14 +908,23 @@ QSWidget qs_create(QSWindow *window, QSWidget parent, QSKind kind, int id) {
         });
         return label;
     }
-    case QSLink: case QSButton: {
+    case QSLink: case QSButton: case QSMenuButton: {
         auto *button = new SwiftButton(container);
         if (kind == QSLink) {
             button->setCursor(Qt::PointingHandCursor);
         }
         QAccessible::registerAccessibleInterface(new AccessibleButton(button, kind == QSLink));
         window->observeFocus(button, id);
-        QObject::connect(button, &QPushButton::clicked, window, [=] { window->event(window->context, id, QSActivate, ""); });
+        if (kind == QSMenuButton) {
+            button->setProperty("qsAXMenu", true);
+            button->popup = new NativeMenu(button);
+            QObject::connect(button->popup, &QMenu::triggered, window, [=](QAction *item) {
+                const int action = item->data().toInt();
+                if (action >= 0) window->event(window->context, id, QSActivate, QByteArray::number(action).constData());
+            });
+        } else {
+            QObject::connect(button, &QPushButton::clicked, window, [=] { window->event(window->context, id, QSActivate, ""); });
+        }
         QObject::connect(button, &QPushButton::pressed, window, [=] { window->event(window->context, id, QSPressedChanged, "1"); });
         QObject::connect(button, &QPushButton::released, window, [=] { window->event(window->context, id, QSPressedChanged, "0"); });
         return button;
@@ -1526,6 +1556,19 @@ void qs_plain_button(QSWidget w, int plain) {
     auto *button = static_cast<QPushButton *>(w);
     button->setFlat(plain);
 }
+QSWidget qs_menu_begin(QSWidget w, int indicator) {
+    auto *button = static_cast<SwiftButton *>(w);
+    if (button->menuIndicator != bool(indicator)) {
+        button->menuIndicator = indicator;
+        button->updateGeometry();
+        button->update();
+    }
+    return button->popup;
+}
+int qs_menu_indicator_width(QSWidget w) {
+    auto *button = static_cast<SwiftButton *>(w);
+    return button->popup && button->menuIndicator ? button->style()->pixelMetric(QStyle::PM_MenuButtonIndicator, nullptr, button) : 0;
+}
 int qs_button_down(QSWidget w) { return static_cast<QPushButton *>(w)->isDown(); }
 void qs_focus(QSWidget w, int active) {
     auto *item = widget(w);
@@ -1585,6 +1628,7 @@ QSSize qs_measure(QSWidget w, double width) {
         return {0, double(editor->fontMetrics().height() * editor->blockCount())};
     }
     auto size = item->sizeHint();
+    if (dynamic_cast<SwiftButton *>(item)) size.rwidth() += qs_menu_indicator_width(w);
     return {double(size.width()), double(size.height())};
 }
 QSSize qs_tap_location(QSWidget w) {
@@ -1748,15 +1792,17 @@ int qs_send_key_sequence(QSWindow *window, const char *keys) { return qs_send_re
 int qs_send_repeated_key(QSWindow *window, const char *keys, int repeats) {
     const auto sequence = QKeySequence::fromString(QString::fromUtf8(keys), QKeySequence::PortableText);
     if (sequence.count() != 1 || !window->windowHandle()) return 0;
+    auto *popup = qobject_cast<QMenu *>(QApplication::activePopupWidget());
+    auto *target = popup && window->findChildren<QMenu *>().contains(popup) ? popup->windowHandle() : window->windowHandle();
     auto combination = sequence[0];
     QKeyEvent press(QEvent::KeyPress, combination.key(), combination.keyboardModifiers());
     QKeyEvent release(QEvent::KeyRelease, combination.key(), combination.keyboardModifiers());
-    QApplication::sendEvent(window->windowHandle(), &press);
+    QApplication::sendEvent(target, &press);
     for (int i = 0; i < repeats; ++i) {
         QKeyEvent repeated(QEvent::KeyPress, combination.key(), combination.keyboardModifiers(), QString(), true);
-        QApplication::sendEvent(window->windowHandle(), &repeated);
+        QApplication::sendEvent(target, &repeated);
     }
-    QApplication::sendEvent(window->windowHandle(), &release);
+    QApplication::sendEvent(target, &release);
     qs_flush();
     return 1;
 }
@@ -1816,6 +1862,32 @@ int qs_drag_pointer(QSWindow *window, int x1, int y1, int x2, int y2, int steps)
     send(QEvent::MouseButtonPress, start, 0);
     for (int i = 1; i <= steps; ++i) send(QEvent::MouseMove, start + (end - start) * i / steps, i);
     send(QEvent::MouseButtonRelease, end, steps + 1);
+    return 1;
+}
+static QAction *popupItem(QSWindow *window, const char *title) {
+    auto *menu = qobject_cast<QMenu *>(QApplication::activePopupWidget());
+    if (!menu || !window->findChildren<QMenu *>().contains(menu)) return nullptr;
+    const auto label = QString::fromUtf8(title).replace("&", "&&");
+    for (auto *item : menu->actions()) {
+        if (!item->isSeparator() && item->text() == label) return item;
+    }
+    return nullptr;
+}
+int qs_popup_item_state(QSWindow *window, const char *title) {
+    auto *item = popupItem(window, title);
+    return item ? int(item->isEnabled()) | (int(item->isChecked()) << 1) : -1;
+}
+int qs_click_popup_item(QSWindow *window, const char *title) {
+    auto *item = popupItem(window, title);
+    if (!item || !item->isEnabled()) return 0;
+    auto *menu = static_cast<QMenu *>(QApplication::activePopupWidget());
+    const QPoint local = menu->actionGeometry(item).center(), global = menu->mapToGlobal(local);
+    QMouseEvent move(QEvent::MouseMove, local, global, Qt::NoButton, Qt::NoButton, Qt::NoModifier);
+    QApplication::sendEvent(menu, &move);
+    QMouseEvent press(QEvent::MouseButtonPress, local, global, Qt::LeftButton, Qt::LeftButton, Qt::NoModifier);
+    QApplication::sendEvent(menu, &press);
+    QMouseEvent release(QEvent::MouseButtonRelease, local, global, Qt::LeftButton, Qt::NoButton, Qt::NoModifier);
+    QApplication::sendEvent(menu, &release);
     return 1;
 }
 static int clickPoint(QSWindow *window, int x, int y, const QPointingDevice *device) {

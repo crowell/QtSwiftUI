@@ -11,6 +11,7 @@ enum Part: Hashable {
     var path: [Part] = []
     var parent: UnsafeMutableRawPointer?
     var verticalViewport: UnsafeMutableRawPointer?
+    var menuEntries: MenuEntries?
     var environment = EnvironmentValues()
     var preferences: [ObjectIdentifier: any PreferenceScope] = [:]
     var transaction = Transaction()
@@ -102,7 +103,7 @@ enum Part: Hashable {
         qs_enabled(entry.widget, environment.isEnabled ? 1 : 0)
         qs_accessibility(entry.widget, environment.label, environment.identifier, environment.accessibleHint,
                          environment.accessibilityTraits.contains(.isSearchField) ? 1 : 0)
-        if kind == QSGroup || kind == QSButton || kind == QSLink {
+        if kind == QSGroup || kind == QSButton || kind == QSMenuButton || kind == QSLink {
             let traits = environment.accessibilityTraits
             if kind == QSGroup { qs_direct_touch(entry.widget, traits.contains(.allowsDirectInteraction) ? 1 : 0) }
             qs_accessible_control(entry.widget, traits.contains(.isSelected) ? 1 : 0,

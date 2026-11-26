@@ -34,6 +34,8 @@ public struct EnvironmentValues {
     public var isEnabled = true
     public var isScrollEnabled = true
     public var controlSize: ControlSize = .regular
+    var menuIndicator = Visibility.automatic
+    var menuStyle: (@MainActor (MenuStyleConfiguration) -> AnyView)?
     var plainField = false
     var fieldStyle: (@MainActor (TextField<_TextFieldStyleLabel>) -> AnyView)?
     var allowsHits = true
