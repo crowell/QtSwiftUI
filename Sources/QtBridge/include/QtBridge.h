@@ -50,6 +50,9 @@ void qs_scroll_axes(QSWidget, int horizontal, int vertical, int dark);
 void qs_destroy(QSWidget);
 void qs_text(QSWidget, const char *);
 void qs_hint(QSWidget, const char *);
+enum QSTextTruncation { QSTruncateHead, QSTruncateMiddle, QSTruncateTail };
+QSSize qs_measure_text(QSWidget, double width, int limit, enum QSTextTruncation mode);
+void qs_text_display(QSWidget, int limit, enum QSTextTruncation mode, int automaticName);
 void qs_attributed_begin(QSWidget);
 void qs_attributed_append(QSWidget, const char *utf8, size_t count, const char *link, const char *foreground, const char *background,
                           const char *family, double size, int weight, int italic, int underline, const char *underlineColor);

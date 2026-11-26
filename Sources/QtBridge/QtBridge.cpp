@@ -5,6 +5,7 @@
 #include "ViewShadow.hpp"
 #include "ScrollInput.hpp"
 #include "AttributedLabel.hpp"
+#include "PlainLabel.hpp"
 #include "CanvasBlur.hpp"
 #include "PointerDrag.hpp"
 #include "Magnification.hpp"
@@ -226,7 +227,7 @@ public:
         if (kind == QAccessible::Value && !group->accessibleValue.isEmpty()) return group->accessibleValue;
         auto value = QAccessibleWidget::text(kind);
         if (kind == QAccessible::Name && value.isEmpty() && group->heading) {
-            if (auto *label = group->findChild<QLabel *>()) return label->text();
+            if (auto *label = group->findChild<QLabel *>()) return label->accessibleName().isEmpty() ? label->text() : label->accessibleName();
         }
         if (group->combineChildren && value.isEmpty() && (kind == QAccessible::Name || kind == QAccessible::Value)) {
             QStringList parts;
@@ -432,7 +433,7 @@ public:
         QStringList parts;
         for (const auto *child : button->findChildren<QWidget *>()) {
             if (auto *rich = qobject_cast<const QTextBrowser *>(child)) parts.append(rich->toPlainText());
-            else if (auto *label = qobject_cast<const QLabel *>(child)) parts.append(label->text());
+            else if (auto *label = qobject_cast<const QLabel *>(child)) parts.append(label->accessibleName().isEmpty() ? label->text() : label->accessibleName());
         }
         return parts.join(' ');
     }
@@ -941,10 +942,7 @@ QSWidget qs_create(QSWindow *window, QSWidget parent, QSKind kind, int id) {
     QWidget *container = parent ? widget(parent) : window;
     switch (kind) {
     case QSLabel: {
-        auto *label = new QLabel(container);
-        label->setTextFormat(Qt::PlainText);
-        label->setMargin(0);
-        return label;
+        return new PlainLabel(container);
     }
     case QSAttributedLabel: {
         auto *label = new AttributedLabel(container);
@@ -1106,11 +1104,45 @@ void qs_scroll_axes(QSWidget w, int h, int v, int dark) {
 void qs_destroy(QSWidget w) { delete widget(w); }
 void qs_text(QSWidget w, const char *s) {
     auto text = QString::fromUtf8(s);
-    if (auto *label = qobject_cast<QLabel *>(widget(w))) {
-        if (label->text() != text) label->setText(text);
-    }
+    if (auto *label = dynamic_cast<PlainLabel *>(widget(w))) label->setSource(text);
     else if (auto *button = qobject_cast<QAbstractButton *>(widget(w))) button->setText(QString(text).replace('&', "&&"));
     else if (auto *edit = qobject_cast<QLineEdit *>(widget(w)); edit && edit->text() != text) edit->setText(text);
+}
+static Qt::TextElideMode textElideMode(QSTextTruncation mode) {
+    switch (mode) {
+    case QSTruncateHead: return Qt::ElideLeft;
+    case QSTruncateMiddle: return Qt::ElideMiddle;
+    case QSTruncateTail: return Qt::ElideRight;
+    }
+    return Qt::ElideRight;
+}
+QSSize qs_measure_text(QSWidget w, double width, int limit, QSTextTruncation mode) {
+    auto size = qs_measure(w, width);
+    if (limit > 0) {
+        if (auto *label = dynamic_cast<PlainLabel *>(widget(w))) {
+            const auto visible = label->intrinsicText(limit, textElideMode(mode));
+            if (visible != label->source) {
+                const double ideal = label->fontMetrics().boundingRect(QRect(0, 0, 1000000, 1000000),
+                                                                     Qt::TextExpandTabs | Qt::TextDontClip, visible).width();
+                size.width = width >= 0 ? qMin(width, ideal) : ideal;
+            }
+        } else if (auto *rich = dynamic_cast<AttributedLabel *>(widget(w))) {
+            if (auto ideal = rich->intrinsicWidth(limit, textElideMode(mode))) {
+                size.width = width >= 0 ? qMin(width, double(*ideal)) : *ideal;
+            }
+        }
+    }
+    return size;
+}
+void qs_text_display(QSWidget w, int limit, QSTextTruncation mode, int automaticName) {
+    const auto elide = textElideMode(mode);
+    if (auto *label = dynamic_cast<PlainLabel *>(widget(w))) {
+        label->display(limit, elide);
+        if (automaticName && label->text() != label->source) label->setAccessibleName(label->source);
+    } else if (auto *rich = dynamic_cast<AttributedLabel *>(widget(w))) {
+        rich->display(limit, elide);
+        if (automaticName && limit > 0) rich->setAccessibleName(rich->sourceText());
+    }
 }
 void qs_attributed_begin(QSWidget w) { static_cast<AttributedLabel *>(w)->begin(); }
 void qs_attributed_append(QSWidget w, const char *text, size_t count, const char *link, const char *foreground, const char *background,
@@ -1670,14 +1702,14 @@ QSSize qs_measure(QSWidget w, double width) {
         const auto hint = rich->measure(width);
         return {hint.width(), hint.height()};
     }
-    if (auto *label = qobject_cast<QLabel *>(item)) {
+    if (auto *label = dynamic_cast<PlainLabel *>(item)) {
         auto metrics = label->fontMetrics();
         auto flags = Qt::TextExpandTabs | Qt::TextDontClip;
-        auto natural = metrics.boundingRect(QRect(0, 0, 1000000, 1000000), flags, label->text());
+        auto natural = metrics.boundingRect(QRect(0, 0, 1000000, 1000000), flags, label->source);
         int ideal = qMax(0, natural.width());
         int available = width < 0 || !std::isfinite(width) ? ideal : qMin(ideal, qMax(1, qRound(width)));
         if (label->wordWrap() && available < ideal) flags |= Qt::TextWordWrap;
-        auto box = metrics.boundingRect(QRect(0, 0, available, 1000000), flags, label->text());
+        auto box = metrics.boundingRect(QRect(0, 0, available, 1000000), flags, label->source);
         return {double(available), double(qMax(metrics.height(), box.height()))};
     }
     if (auto *editor = qobject_cast<QPlainTextEdit *>(item)) {

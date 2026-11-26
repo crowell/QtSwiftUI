@@ -45,6 +45,7 @@ public struct EnvironmentValues {
     var gesturesEnabled = true
     public var font: Font?
     public var multilineTextAlignment: TextAlignment = .leading
+    public var truncationMode: Text.TruncationMode = .tail
     public var lineLimit: Int? { didSet { minimumLines = 1 } }
     var minimumLines = 1
     public internal(set) var autocorrectionDisabled = false

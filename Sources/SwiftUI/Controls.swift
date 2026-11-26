@@ -67,14 +67,19 @@ public struct Text: Primitive {
             qs_text(widget, string)
             ctx.style(widget)
         }
+        let limit = Int32(clamping: ctx.environment.lineLimit.map { max(1, $0) } ?? 0)
+        let mode = ctx.environment.truncationMode.nativeMode
         let element = Element { p in
-            let hint = qs_measure(widget, p.width ?? -1)
+            let hint = qs_measure_text(widget, p.width ?? -1, limit, mode)
             let line = qs_line_height(widget)
             let minimum = ctx.environment.minimumLines
             let capped = ctx.environment.lineLimit.map { min(hint.height, CGFloat(max(1, $0)) * line) } ?? hint.height
             let height = minimum > 1 ? max(capped, CGFloat(minimum) * line) : capped
             return CGSize(width: hint.width, height: height)
-        } place: { rect, _ in qs_place(widget, rect.minX, rect.minY, rect.width, rect.height) }
+        } place: { rect, _ in
+            qs_place(widget, rect.minX, rect.minY, rect.width, rect.height)
+            qs_text_display(widget, limit, mode, ctx.environment.label.isEmpty ? 1 : 0)
+        }
         element.baselines = { _, size in
             let result = qs_text_baselines(widget, size.width, size.height)
             return TextBaselines(first: result.first, last: result.last)

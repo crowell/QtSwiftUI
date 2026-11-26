@@ -1,5 +1,6 @@
 #pragma once
 #include "RegisteredFonts.hpp"
+#include "TextElision.hpp"
 #include <QTextBrowser>
 #include <QPointer>
 #include <QScrollBar>
@@ -9,6 +10,7 @@
 #include <QAbstractTextDocumentLayout>
 #include <QTextBlock>
 #include <cmath>
+#include <optional>
 
 // Keep native QTextCharFormats intact for painting, link hit testing and selection.
 class AttributedLabel final : public QTextBrowser {
@@ -94,10 +96,44 @@ public:
         displayedFont = font();
         displayedAlignment = alignment;
         displayedWrap = wraps;
+        displayWidth = -1;
+        truncated = false;
+        replaceDocument(content.clone(this));
+    }
+    void display(int limit, Qt::TextElideMode mode) {
+        const int width = viewport()->width();
+        if (displayWidth == width && displayLimit == limit && displayMode == mode) return;
+        displayWidth = width;
+        displayLimit = limit;
+        displayMode = mode;
+        if (auto shortened = elidedDocument(content, width, limit, mode)) {
+            truncated = true;
+            shortened->setParent(this);
+            replaceDocument(shortened.release());
+        } else if (truncated) {
+            truncated = false;
+            replaceDocument(content.clone(this));
+        }
+    }
+    QString sourceText() const { return content.toPlainText(); }
+
+    std::optional<qreal> intrinsicWidth(int limit, Qt::TextElideMode mode) {
+        if (limit <= 0 || content.blockCount() <= limit) return std::nullopt;
+        // With no wrapping, the last visible paragraph still needs room for its truncation mark.
+        content.setTextWidth(-1);
+        const qreal natural = content.idealWidth();
+        auto visible = elidedDocument(content, natural + QFontMetricsF(font()).maxWidth() + 1, limit, mode);
+        if (!visible) return std::nullopt;
+        visible->setTextWidth(-1);
+        return std::ceil(visible->idealWidth());
+    }
+
+private:
+    void replaceDocument(QTextDocument *next) {
         const auto selection = textCursor();
         const int anchor = selection.anchor(), position = selection.position();
         QPointer<QTextDocument> previous = document();
-        setDocument(content.clone(this));
+        setDocument(next);
         if (previous && previous->parent() == this) delete previous;
         QTextCursor cursor(document());
         cursor.setPosition(qMin(anchor, document()->characterCount() - 1));
@@ -105,10 +141,11 @@ public:
         setTextCursor(cursor);
         alignDocument();
     }
+public:
     QSizeF measure(double width) {
         content.setTextWidth(-1);
         const auto ideal = std::ceil(content.idealWidth());
-        const auto available = wraps && std::isfinite(width) && width >= 0 ? qMin(ideal, width) : ideal;
+        const auto available = std::isfinite(width) && width >= 0 ? qMin(ideal, width) : ideal;
         content.setTextWidth(available);
         return {available, std::ceil(content.size().height())};
     }
@@ -145,4 +182,7 @@ private:
     Qt::Alignment displayedAlignment;
     bool wraps = true, displayedWrap = true;
     bool hasLinks = false;
+    bool truncated = false;
+    int displayWidth = -1, displayLimit = 0;
+    Qt::TextElideMode displayMode = Qt::ElideRight;
 };
