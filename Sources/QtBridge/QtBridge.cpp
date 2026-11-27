@@ -470,6 +470,7 @@ public:
         updateBoundingRect();
         update();
     }
+    QTransform layoutTransform() const { return matrix(sourceBoundingRect(Qt::LogicalCoordinates)); }
     QRectF boundingRectFor(const QRectF &source) const override { return matrix(source).mapRect(source); }
 protected:
     void draw(QPainter *painter) override {
@@ -2726,6 +2727,21 @@ QSSize qs_origin(QSWidget w) {
     const QPoint origin = group ? group->layoutRect.topLeft() : QPoint();
     const auto point = QPointF(item->mapTo(item->window(), origin)) + item->property("qsFraction").toPointF();
     return {point.x(), point.y()};
+}
+QSAffine qs_transform_to_window(QSWidget w) {
+    auto *item = widget(w);
+    auto *window = item->window();
+    const auto origin = qs_origin(w);
+    QTransform result = QTransform::fromTranslate(origin.width, origin.height);
+    for (auto *ancestor = item; ancestor != window; ancestor = ancestor->parentWidget()) {
+        auto *effect = dynamic_cast<RotationEffect *>(ancestor->graphicsEffect());
+        if (!effect) continue;
+        const QPoint offset = ancestor->mapTo(window, QPoint());
+        result *= QTransform::fromTranslate(-offset.x(), -offset.y());
+        result *= effect->layoutTransform();
+        result *= QTransform::fromTranslate(offset.x(), offset.y());
+    }
+    return {result.m11(), result.m12(), result.m21(), result.m22(), result.dx(), result.dy()};
 }
 void qs_place(QSWidget w, double x, double y, double width, double height) {
     auto *item = widget(w);

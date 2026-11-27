@@ -1,31 +1,67 @@
+private enum AnchorSourceKind: Hashable, Sendable {
+    case bounds, rect, point, unitPoint
+    case array([Self])
+    indirect case optional(Self?)
+}
+
 public struct Anchor<Value> {
-    let global: Value
-    let translate: @Sendable (Value, CGPoint) -> Value
+    fileprivate let global: Value
+    fileprivate let kind: AnchorSourceKind
+    fileprivate let convert: @Sendable (Value, CGAffineTransform) -> Value
 
     public struct Source {
+        fileprivate let kind: AnchorSourceKind
         let value: @Sendable (CGRect) -> Value
-        let translate: @Sendable (Value, CGPoint) -> Value
+        fileprivate let convert: @Sendable (Value, CGAffineTransform) -> Value
     }
 }
 extension Anchor: Sendable where Value: Sendable {}
 extension Anchor.Source: Sendable where Value: Sendable {}
 extension Anchor: Equatable where Value: Equatable {
-    public static func == (lhs: Self, rhs: Self) -> Bool { lhs.global == rhs.global }
+    public static func == (lhs: Self, rhs: Self) -> Bool { lhs.kind == rhs.kind && lhs.global == rhs.global }
 }
+extension Anchor: Hashable where Value: Hashable {
+    public var hashValue: Int {
+        var hasher = Hasher()
+        hash(into: &hasher)
+        return hasher.finalize()
+    }
+    public func hash(into hasher: inout Hasher) {
+        hasher.combine(kind)
+        hasher.combine(global)
+    }
+}
+
+extension Anchor.Source {
+    public init<T>(_ array: [Anchor<T>.Source]) where Value == [T] {
+        let sources = array.map(\.value)
+        let conversions = array.map(\.convert)
+        kind = .array(array.map(\.kind))
+        value = { rect in sources.map { $0(rect) } }
+        convert = { values, transform in zip(values, conversions).map { $1($0, transform) } }
+    }
+
+    public init<T>(_ anchor: Anchor<T>.Source?) where Value == T? {
+        let source = anchor?.value
+        let conversion = anchor?.convert
+        kind = .optional(anchor?.kind)
+        value = { rect in source.map { $0(rect) } }
+        convert = { value, transform in value.flatMap { wrapped in conversion.map { $0(wrapped, transform) } } }
+    }
+}
+
 extension Anchor.Source where Value == CGRect {
-    public static var bounds: Self { Self(value: { $0 }, translate: { $0.offsetBy(dx: $1.x, dy: $1.y) }) }
+    public static var bounds: Self { Self(kind: .bounds, value: { $0 }, convert: { $0.applying($1) }) }
     public static func rect(_ r: CGRect) -> Self {
-        Self(value: { r.offsetBy(dx: $0.minX, dy: $0.minY) }, translate: bounds.translate)
+        Self(kind: .rect, value: { r.offsetBy(dx: $0.minX, dy: $0.minY) }, convert: { $0.applying($1) })
     }
 }
 extension Anchor.Source where Value == CGPoint {
     public static func point(_ p: CGPoint) -> Self {
-        Self(value: { CGPoint(x: $0.minX + p.x, y: $0.minY + p.y) },
-             translate: { CGPoint(x: $0.x + $1.x, y: $0.y + $1.y) })
+        Self(kind: .point, value: { CGPoint(x: $0.minX + p.x, y: $0.minY + p.y) }, convert: { $0.applying($1) })
     }
     public static func unitPoint(_ p: UnitPoint) -> Self {
-        Self(value: { CGPoint(x: $0.minX + p.x * $0.width, y: $0.minY + p.y * $0.height) },
-             translate: point(.zero).translate)
+        Self(kind: .unitPoint, value: { CGPoint(x: $0.minX + p.x * $0.width, y: $0.minY + p.y * $0.height) }, convert: { $0.applying($1) })
     }
     public static var topLeading: Self { .unitPoint(.topLeading) }
     public static var top: Self { .unitPoint(.top) }
@@ -39,40 +75,51 @@ extension Anchor.Source where Value == CGPoint {
 }
 extension GeometryProxy {
     public subscript<T>(_ anchor: Anchor<T>) -> T {
-        anchor.translate(anchor.global, CGPoint(x: -globalOrigin.x, y: -globalOrigin.y))
+        anchor.convert(anchor.global, fromWindow)
     }
 }
 
 extension View {
-    public func anchorPreference<A, K: PreferenceKey>(key: K.Type = K.self, value: Anchor<A>.Source,
+    nonisolated public func anchorPreference<A, K: PreferenceKey>(key _: K.Type = K.self, value: Anchor<A>.Source,
                                                        transform: @escaping (Anchor<A>) -> K.Value) -> some View {
         PlacedAnchor(content: self, source: value) { content, anchor in
-            content.deferredPreference(key) { transform(anchor()) }
+            content.deferredPreference(K.self) { transform(anchor()) }
         }
     }
 
-    public func transformAnchorPreference<A, K: PreferenceKey>(key: K.Type = K.self, value: Anchor<A>.Source,
+    nonisolated public func transformAnchorPreference<A, K: PreferenceKey>(key _: K.Type = K.self, value: Anchor<A>.Source,
                                                                transform: @escaping (inout K.Value, Anchor<A>) -> Void) -> some View {
         PlacedAnchor(content: self, source: value) { content, anchor in
-            content.transformPreference(key) { transform(&$0, anchor()) }
+            content.transformPreference(K.self) { transform(&$0, anchor()) }
         }
     }
 }
 
-private struct PlacedAnchor<Content: View, A, Output: View>: Primitive {
+private nonisolated struct PlacedAnchor<Content: View, A, Output: View>: Primitive, SubviewSource {
     let content: Content
     let source: Anchor<A>.Source
-    let output: (Content, @escaping () -> Anchor<A>) -> Output
-    func elements(in context: Context) -> [Element] {
-        var global = CGRect.zero
-        let elements = output(content) { Anchor(global: source.value(global), translate: source.translate) }.resolve(context)
-        return elements.map { child in
-            let placed = child.wrapping(size: child.measure) { bounds, proposal in
-                let offset = context.windowOffset
-                global = bounds.offsetBy(dx: offset.x, dy: offset.y)
-                child.place(bounds, proposal)
+    let output: (AnyView, @escaping () -> Anchor<A>) -> Output
+
+    @MainActor func elements(in context: Context) -> [Element] {
+        subviews(in: context).flatMap { $0.resolve(context.preferenceBranch()) }
+    }
+
+    @MainActor func subviews(in context: Context) -> [Subview] {
+        content.collectSubviews(in: context).map { child in
+            child.applying { view, destination in
+                var bounds = CGRect.zero
+                let writer = output(AnyView(view)) {
+                    let local = source.value(CGRect(origin: .zero, size: bounds.size))
+                    let global = source.convert(local, destination.transformToWindow(from: bounds.origin))
+                    return Anchor(global: global, kind: source.kind, convert: source.convert)
+                }
+                return writer.resolve(destination).map { element in
+                    element.wrapping(size: element.measure) { frame, proposal in
+                        bounds = frame
+                        element.place(frame, proposal)
+                    }
+                }
             }
-            return placed
         }
     }
 }

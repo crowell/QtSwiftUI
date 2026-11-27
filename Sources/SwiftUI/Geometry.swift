@@ -11,6 +11,7 @@ public struct SafeAreaRegions: OptionSet, Sendable {
 public struct GeometryProxy {
     public let size: CGSize
     let globalOrigin: CGPoint
+    let fromWindow: CGAffineTransform
     let origins: [AnyHashable: CGPoint]
     public var safeAreaInsets: EdgeInsets { EdgeInsets() }
     public func frame(in coordinateSpace: some CoordinateSpaceProtocol) -> CGRect { frame(in: coordinateSpace.coordinateSpace) }
@@ -25,10 +26,17 @@ public struct GeometryProxy {
     }
 }
 extension Context {
+    func transformToWindow(from origin: CGPoint) -> CGAffineTransform {
+        let translation = CGAffineTransform(translationX: origin.x, y: origin.y)
+        guard let parent else { return translation }
+        let t = qs_transform_to_window(parent)
+        return translation.concatenating(CGAffineTransform(a: t.a, b: t.b, c: t.c, d: t.d, tx: t.tx, ty: t.ty))
+    }
+
     func geometry(in bounds: CGRect) -> GeometryProxy {
         let offset = windowOffset
         return GeometryProxy(size: bounds.size, globalOrigin: CGPoint(x: bounds.minX + offset.x, y: bounds.minY + offset.y),
-                             origins: spaces.mapValues(\.point))
+                             fromWindow: transformToWindow(from: bounds.origin).inverted(), origins: spaces.mapValues(\.point))
     }
 }
 public struct GeometryReader<Content: View>: Primitive {

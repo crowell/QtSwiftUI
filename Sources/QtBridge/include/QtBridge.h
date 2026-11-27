@@ -279,6 +279,7 @@ void qs_group_action(QSWidget, const char *name);
 void qs_accessibility(QSWidget, const char *label, const char *identifier, const char *hint, int search);
 QSSize qs_measure(QSWidget, double width);
 QSSize qs_origin(QSWidget);
+QSAffine qs_transform_to_window(QSWidget);
 QSSize qs_tap_location(QSWidget);
 void qs_place(QSWidget, double x, double y, double width, double height);
 
