@@ -235,6 +235,16 @@ void installContextMenuFilter() {
     }
 }
 
+static const char *moveDirection(int key) {
+    switch (key) {
+    case Qt::Key_Left: return "left";
+    case Qt::Key_Right: return "right";
+    case Qt::Key_Up: return "up";
+    case Qt::Key_Down: return "down";
+    default: return nullptr;
+    }
+}
+
 class SwiftButton final : public QPushButton {
 public:
     using QPushButton::QPushButton;
@@ -244,6 +254,19 @@ protected:
     void initStyleOption(QStyleOptionButton *option) const override {
         QPushButton::initStyleOption(option);
         if (popup && menuIndicator) option->features |= QStyleOptionButton::HasMenu;
+    }
+    void keyPressEvent(QKeyEvent *key) override {
+        // QPushButton uses arrows for focus traversal before they can reach the
+        // window. A SwiftUI button with a move-command scope keeps its focus.
+        if (moveDirection(key->key())) {
+            for (auto *parent = parentWidget(); parent; parent = parent->parentWidget()) {
+                if (parent->property("qsMoveScope").isValid()) {
+                    key->ignore();
+                    return;
+                }
+            }
+        }
+        QPushButton::keyPressEvent(key);
     }
     bool hitButton(const QPoint &point) const override {
         if (!QPushButton::hitButton(point)) return false;
@@ -813,6 +836,23 @@ struct QSWindow final : QWidget {
                                                     release ? 4 : key->isAutoRepeat() ? 2 : 1, chars.constData(), flags)) {
                     input->accept();
                     return true;
+                }
+            }
+        }
+        if (input->type() == QEvent::KeyPress && source->property("qsMoveScope").toBool()) {
+            auto *key = static_cast<QKeyEvent *>(input);
+            const char *direction = moveDirection(key->key());
+            if (direction && (key->modifiers() == Qt::NoModifier || key->modifiers() == Qt::KeypadModifier)) {
+                // Handle the event as it bubbles through the nearest command scope,
+                // before an enclosing scroll area can use it to scroll.
+                for (auto *item = focusWidget(); item; item = item->parentWidget()) {
+                    if (item == source) {
+                        event(context, item->property("swiftId").toInt(), QSMoveCommand, direction);
+                        key->accept();
+                        return true;
+                    }
+                    if (item->property("qsMoveScope").isValid() || qobject_cast<QLineEdit *>(item)
+                        || qobject_cast<QTextEdit *>(item) || qobject_cast<QPlainTextEdit *>(item)) break;
                 }
             }
         }
@@ -1914,6 +1954,7 @@ void qs_value(QSWidget w, double fraction) {
     }
 }
 void qs_exit_scope(QSWidget w, int enabled) { widget(w)->setProperty("qsExit", bool(enabled)); }
+void qs_move_scope(QSWidget w, int enabled) { widget(w)->setProperty("qsMoveScope", bool(enabled)); }
 void qs_selectable(QSWidget w, int enabled) {
     auto *label = static_cast<QLabel *>(w);
     Qt::TextInteractionFlags flags = enabled ? Qt::TextSelectableByMouse | Qt::TextSelectableByKeyboard : Qt::NoTextInteraction;

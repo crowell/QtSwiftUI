@@ -30,7 +30,11 @@ In Settings → Chats → Chat folders, the Docker check created Unread and 1:1 
 
 ![Serein’s reordered chat folders in the Ubuntu release executable](Screenshots/serein-linux-chat-folders.png)
 
-Under Settings → Notifications, the Docker check changes the Show menu to Name only. It visits Chats, reopens Notifications, and verifies the saved selection.
+In Settings → Appearance, Down highlights Light in Serein’s theme menu. Escape keeps the current theme. The Docker check reopens the menu with Space, selects Light with Down and Return, and verifies the selection after leaving and reopening the page.
+
+![Light highlighted by keyboard in Serein’s Appearance settings on Ubuntu](Screenshots/serein-linux-appearance-theme.png)
+
+The same check selects Name only with the keyboard under Settings → Notifications and reopens the page to verify the saved value.
 
 ![Name only selected in Serein’s notification preferences on Ubuntu](Screenshots/serein-linux-notification-content.png)
 
@@ -377,7 +381,7 @@ The target is source compatibility with Apple's public SwiftUI APIs. The impleme
 
 `./Scripts/check-apple.sh ../serein` type-checks the example source with Apple's SwiftUI module on a Mac with Xcode. `./Scripts/check-api.sh` extracts public symbol graphs from Xcode and the Linux image. Pass `--by-kind` to see coverage for classes, structs, protocols and each member kind, or `--missing` to list individual missing declaration paths. The inventory groups declarations by symbol kind and path, counts overload spellings separately, and excludes underscored and synthesized members. A shared name alone cannot establish matching signatures, constraints, availability or behavior.
 
-The inventory against the macOS 27.2 SDK found 1,816 shared declaration paths out of 7,627 and 1,264 identical declaration spellings out of 8,735. Of the 5,811 absent paths, 719 are nominal type or protocol declarations (6 classes, 587 structs, 49 enums and 77 protocols). The examples exercise a smaller set at runtime. Navigation, window state restoration, broader animation support, text shaping parity, gestures and platform integration remain substantial gaps. Font metrics, control appearance and several layout behaviors differ from Apple's implementation.
+The inventory against the macOS 27.2 SDK found 1,822 shared declaration paths out of 7,627 and 1,270 identical declaration spellings out of 8,735. Of the 5,805 absent paths, 718 are nominal type or protocol declarations (6 classes, 587 structs, 48 enums and 77 protocols). The examples exercise a smaller set at runtime. Navigation, window state restoration, broader animation support, text shaping parity, gestures and platform integration remain substantial gaps. Font metrics, control appearance and several layout behaviors differ from Apple's implementation.
 
 After capturing the Linux examples, run `./Scripts/compare-artwork.sh ../serein` on macOS to render both illustrations with Apple's `ImageRenderer`. At a threshold of 8/255 in any RGB channel, 101 of 119,680 account artwork pixels (0.084%) and 91 of 49,928 key transparency pixels (0.182%) differed. The mean absolute channel differences were 0.104/255 and 0.095/255 respectively. Both reference images are saved in `.build/artwork/`.
 

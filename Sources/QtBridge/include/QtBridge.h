@@ -12,7 +12,7 @@ typedef struct { double x, y, width, height; } QSRect;
 typedef struct { double a, b, c, d, tx, ty; } QSAffine;
 typedef struct QSPath QSPath;
 typedef void (*QSRender)(void *context, int width, int height);
-enum QSEventKind { QSActivate, QSFocusChanged, QSSubmit, QSPressedChanged, QSExitCommand, QSHoverChanged, QSContinuousHover, QSIncrement, QSDecrement, QSGestureCancelled, QSMagnified, QSAccessibilityAction, QSCursorChanged };
+enum QSEventKind { QSActivate, QSFocusChanged, QSSubmit, QSPressedChanged, QSExitCommand, QSHoverChanged, QSContinuousHover, QSIncrement, QSDecrement, QSGestureCancelled, QSMagnified, QSAccessibilityAction, QSCursorChanged, QSMoveCommand };
 typedef void (*QSEvent)(void *context, int id, enum QSEventKind kind, const char *value);
 enum QSKind { QSLabel, QSButton, QSToggle, QSEdit, QSSecureEdit, QSSurface, QSScroll, QSSlider, QSProgress, QSGroup, QSCanvas, QSLink, QSRaster, QSTextEditor, QSAttributedLabel, QSBusyIndicator, QSMultilineField, QSMenuButton, QSPopover, QSMenuBar, QSRichEditor, QSPicker, QSSegmentedPicker, QSRadioPicker };
 
@@ -143,6 +143,7 @@ void qs_canvas_text_take(QSWidget, QSTextParagraph *);
 void qs_style(QSWidget, const char *family, double points, int weight, int italic, double tracking, const char *color, int alignment, int wrap);
 void qs_selectable(QSWidget, int enabled);
 void qs_exit_scope(QSWidget, int enabled);
+void qs_move_scope(QSWidget, int enabled);
 void qs_request_close(QSWindow *);
 void qs_shortcut_begin(QSWindow *);
 void qs_shortcut_finish(QSWindow *);
