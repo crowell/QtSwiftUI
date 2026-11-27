@@ -22,6 +22,10 @@ The composer also accepts file URLs for documents granted through the Linux desk
 
 ![File and caption sent from the production Serein composer](Screenshots/serein-linux-file-transfer.png)
 
+Selecting the contact name in the conversation header opens Conversation Details. The Docker check opens [Notifications](Screenshots/serein-linux-conversation-notifications.png) from that panel and uses Back twice to return to the same chat. The Linux window manager supplies the title bar, so the contact name and Back button receive clicks across the top of the window.
+
+![Conversation Details in the Serein Linux release](Screenshots/serein-linux-conversation-details.png)
+
 In the linked release executable, File → Create/upload sticker pack opens the sticker creator. The Docker check selected Serein’s bundled PNG in the file picker, waited for the confined media decoder’s preview, assigned an emoji and entered the title and author. Canceling the upload confirmation returned to the same details window.
 
 ![Sticker pack details in the running Serein Linux release](Screenshots/serein-linux-sticker-creator.png)
