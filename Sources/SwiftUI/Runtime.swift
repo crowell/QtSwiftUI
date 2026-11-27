@@ -220,7 +220,7 @@ enum Part: Hashable {
         qs_transfer_handler(window) { pointer, id, phase, mime, x, y in
             MainActor.assumeIsolated {
                 let host = Unmanaged<Host>.fromOpaque(pointer!).takeUnretainedValue()
-                return host.transfers[id]?.handle(phase, mime: mime, point: CGPoint(x: x, y: y)) == true ? 1 : 0
+                return host.transfers[id]?.response(phase, mime: mime, point: CGPoint(x: x, y: y)) ?? 0
             }
         }
         qs_set_drag_handler(window) { pointer, id, sample in

@@ -2432,6 +2432,9 @@ void qs_transfer_scope(QSWidget item, int source, int destination) {
     group->setProperty("qsDropTarget", bool(destination));
     if (group->acceptDrops() != bool(destination)) group->setAcceptDrops(destination);
 }
+QSDropAction qs_send_external_drop(QSWindow *window, QSTransferPhase phase, int x, int y, const void *mime) {
+    return window->transfers.externalEvent(window, phase, {x, y}, static_cast<const QMimeData *>(mime));
+}
 int qs_transfer_between(QSWindow *window, int fromX, int fromY, int toX, int toY) {
     return window->transfers.transferBetween(window, {fromX, fromY}, {toX, toY}, window->context);
 }

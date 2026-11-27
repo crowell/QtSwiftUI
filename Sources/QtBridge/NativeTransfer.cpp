@@ -6,6 +6,10 @@
 #include <QMouseEvent>
 #include <limits>
 
+namespace {
+class LocalDragData final : public QMimeData {};
+}
+
 void qs_mime_write(void *value, const char *format, const unsigned char *bytes, size_t length) {
     if (!value || !format || length > size_t(std::numeric_limits<qsizetype>::max()) || (!bytes && length)) return;
     static_cast<QMimeData *>(value)->setData(QString::fromUtf8(format), QByteArray(reinterpret_cast<const char *>(bytes), qsizetype(length)));
@@ -54,12 +58,25 @@ int NativeTransfer::send(QWidget *group, QSTransferPhase phase, const QMimeData 
     const auto origin = qs_origin(group);
     return handler(context, group->property("swiftId").toInt(), phase, const_cast<QMimeData *>(mime), at.x() - origin.width, at.y() - origin.height);
 }
-void NativeTransfer::target(QWidget *next, void *context) {
-    if (targeted == next) return;
-    auto previous = targeted;
-    targeted = next;
-    if (previous) send(previous, QSTargetLeave, nullptr, {}, context);
-    if (targeted) send(targeted, QSTargetEnter, nullptr, {}, context);
+void NativeTransfer::leave(void *context, bool finished) {
+    const auto previous = targeted;
+    const auto mime = targetMime;
+    const auto position = targetPosition;
+    targeted.clear();
+    targetMime.clear();
+    proposal = Qt::CopyAction;
+    if (previous) send(previous, finished ? QSTargetFinish : QSTargetLeave, mime, position, context);
+}
+
+void NativeTransfer::enter(QWidget *group, const QMimeData *mime, QPointF global, void *context) {
+    if (group != targeted || mime != targetMime) {
+        const QPointer<QWidget> next = group;
+        leave(context);
+        targeted = next;
+        targetMime = mime;
+        if (targeted) send(targeted, QSTargetEnter, mime, global, context);
+    }
+    targetPosition = global;
 }
 
 bool NativeTransfer::filter(QWidget *receiver, QEvent *event, void *context) {
@@ -83,19 +100,20 @@ bool NativeTransfer::filter(QWidget *receiver, QEvent *event, void *context) {
         QPointer<QWidget> source = pressed;
         pressed = nullptr;
         if (!source->isEnabled() || !source->isVisible()) break;
-        auto mime = std::make_unique<QMimeData>();
+        auto mime = std::make_unique<LocalDragData>();
         if (!send(source, QSWriteTransfer, mime.get(), pressPoint, context) || !source) break;
-        auto *drag = new QDrag(source);
+        QPointer<QDrag> drag = new QDrag(source);
         drag->setMimeData(mime.release());
         const auto pixmap = source->grab();
         drag->setPixmap(pixmap);
         drag->setHotSpot(source->mapFromGlobal(pressPoint));
         if (auto *button = qobject_cast<QAbstractButton *>(receiver)) button->setDown(false);
-        drag->exec(Qt::CopyAction | Qt::MoveAction, Qt::CopyAction);
+        drag->exec(Qt::CopyAction | Qt::MoveAction | Qt::LinkAction, Qt::CopyAction);
+        if (drag) drag->deleteLater();
         return true;
     }
     case QEvent::DragLeave:
-        if (targeted) { target(nullptr, context); event->accept(); return true; }
+        if (targeted) { leave(context); event->accept(); return true; }
         break;
     case QEvent::DragEnter:
     case QEvent::DragMove:
@@ -103,16 +121,33 @@ bool NativeTransfer::filter(QWidget *receiver, QEvent *event, void *context) {
         auto *drop = static_cast<QDropEvent *>(event);
         const auto global = receiver->mapToGlobal(drop->position());
         auto *group = scopeAt(receiver, global.toPoint(), "qsDropTarget");
-        while (group && !send(group, QSValidateTransfer, drop->mimeData(), global, context))
+        while (group && (group != targeted || targetMime != drop->mimeData()) &&
+               !send(group, QSValidateTransfer, drop->mimeData(), global, context))
             group = enclosing(group->parentWidget(), "qsDropTarget");
-        target(group, context);
-        if (!group) break;
+        const bool changedTarget = group != targeted || targetMime != drop->mimeData();
+        enter(group, drop->mimeData(), global, context);
+        if (!targeted) break;
+
+        if (event->type() != QEvent::Drop || changedTarget) {
+            const bool local = drop->source() || dynamic_cast<const LocalDragData *>(drop->mimeData());
+            const auto phase = local ? QSUpdateTransfer : QSUpdateExternalTransfer;
+            switch (send(targeted, phase, drop->mimeData(), global, context)) {
+            case QSDropCopy: proposal = Qt::CopyAction; break;
+            case QSDropMove: proposal = Qt::MoveAction; break;
+            case QSDropLink: proposal = Qt::LinkAction; break;
+            case QSDropReject: proposal = Qt::IgnoreAction; break;
+            default: proposal = drop->proposedAction(); break;
+            }
+        }
+        const auto action = drop->possibleActions().testFlag(proposal) ? proposal : Qt::IgnoreAction;
         if (event->type() == QEvent::Drop) {
-            const bool accepted = send(group, QSPerformDrop, drop->mimeData(), global, context);
-            target(nullptr, context);
+            const bool accepted = action != Qt::IgnoreAction &&
+                send(targeted, QSPerformDrop, drop->mimeData(), global, context);
+            leave(context, accepted);
             if (!accepted) { drop->ignore(); return true; }
         }
-        drop->acceptProposedAction();
+        drop->setDropAction(action);
+        drop->accept();
         return true;
     }
     default: break;
@@ -120,17 +155,46 @@ bool NativeTransfer::filter(QWidget *receiver, QEvent *event, void *context) {
     return false;
 }
 
+QSDropAction NativeTransfer::externalEvent(QWidget *window, QSTransferPhase phase, QPoint point, const QMimeData *mime) {
+    const auto global = window->mapToGlobal(point);
+    auto *receiver = scopeAt(window->childAt(point), global, "qsDropTarget");
+    if (!receiver || !mime) return QSDropReject;
+    if (phase == QSTargetLeave) {
+        QDragLeaveEvent leaveEvent;
+        QApplication::sendEvent(receiver, &leaveEvent);
+        return QSDropUnchanged;
+    }
+    const auto local = receiver->mapFromGlobal(global);
+    const auto actions = Qt::CopyAction | Qt::MoveAction | Qt::LinkAction;
+    std::unique_ptr<QDropEvent> event;
+    switch (phase) {
+    case QSTargetEnter: event = std::make_unique<QDragEnterEvent>(local, actions, mime, Qt::LeftButton, Qt::NoModifier); break;
+    case QSUpdateTransfer: event = std::make_unique<QDragMoveEvent>(local, actions, mime, Qt::LeftButton, Qt::NoModifier); break;
+    case QSPerformDrop: event = std::make_unique<QDropEvent>(local, actions, mime, Qt::LeftButton, Qt::NoModifier); break;
+    default: return QSDropReject;
+    }
+    QApplication::sendEvent(receiver, event.get());
+    if (!event->isAccepted()) return QSDropReject;
+    switch (event->dropAction()) {
+    case Qt::CopyAction: return QSDropCopy;
+    case Qt::MoveAction: return QSDropMove;
+    case Qt::LinkAction: return QSDropLink;
+    default: return QSDropReject;
+    }
+}
+
 bool NativeTransfer::transferBetween(QWidget *window, QPoint from, QPoint to, void *context) {
     const QPoint origin = window->mapToGlobal(from), destination = window->mapToGlobal(to);
     auto *source = scopeAt(window->childAt(from), origin, "qsDragSource");
     auto *group = scopeAt(window->childAt(to), destination, "qsDropTarget");
-    QMimeData mime;
+    LocalDragData mime;
     if (!source || !group || !send(source, QSWriteTransfer, &mime, origin, context)) return false;
     const auto local = group->mapFromGlobal(destination);
-    QDragEnterEvent enter(local, Qt::CopyAction, &mime, Qt::LeftButton, Qt::NoModifier);
+    const auto actions = Qt::CopyAction | Qt::MoveAction | Qt::LinkAction;
+    QDragEnterEvent enter(local, actions, &mime, Qt::LeftButton, Qt::NoModifier);
     QApplication::sendEvent(group, &enter);
     if (!enter.isAccepted()) return false;
-    QDropEvent drop(local, Qt::CopyAction, &mime, Qt::LeftButton, Qt::NoModifier);
+    QDropEvent drop(local, actions, &mime, Qt::LeftButton, Qt::NoModifier);
     QApplication::sendEvent(group, &drop);
     return drop.isAccepted();
 }

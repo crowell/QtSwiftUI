@@ -26,6 +26,10 @@ Selecting the contact name in the conversation header opens Conversation Details
 
 ![Conversation Details in the Serein Linux release](Screenshots/serein-linux-conversation-details.png)
 
+In Settings → Chats → Chat folders, the Docker check created Unread and 1:1 chats. It dragged 1:1 chats above Unread with the X11 pointer, reopened the list, and read back both row labels in their new positions.
+
+![Serein’s reordered chat folders in the Ubuntu release executable](Screenshots/serein-linux-chat-folders.png)
+
 From Conversation Details, Serein’s Nickname editor accepts a first name, last name, and private note. The Docker check saved all three with Return, reopened the editor, and read each field back from the running application.
 
 ![Editing a contact nickname and note in the production Serein Linux executable](Screenshots/serein-linux-edit-nickname.png)
@@ -178,7 +182,7 @@ The `--chat-folders` example runs Serein’s Chat Folders preferences page with 
 
 ![Serein Chat Folders preferences with the row menu open on Ubuntu](Screenshots/chat-folder-menu.png)
 
-Qt’s drag-and-drop backend exchanges item-provider data through native MIME types. The text path supports UTF-8, target bindings, trigger-local drop coordinates and acceptance or rejection by the destination. An Ubuntu X11 test drives a drag with a system pointer and checks the new folder order. Focused views can supply copy and cut commands and validate pasted items. The Qt clipboard preserves item boundaries inside the app and exports plain text and URL lists to other desktop apps. The current type-identifier table covers common desktop formats. Provider registration, file promises, custom drag previews and drop delegates still need implementation.
+Qt’s drag-and-drop backend exchanges item-provider data through native MIME types. The text path supports UTF-8, target bindings, trigger-local drop coordinates and acceptance or rejection by the destination. An Ubuntu X11 test drives a drag with a system pointer and checks the new folder order. Focused views can supply copy and cut commands and validate pasted items. The Qt clipboard preserves item boundaries inside the app and exports plain text and URL lists to other desktop apps. The current type-identifier table covers common desktop formats. Desktop drop delegates receive validation, entry, movement, exit and drop callbacks with destination-local coordinates. Native AppKit and Qt tests cover operation proposals and two file URLs delivered as separate item providers in order. Qt maps alias to its link action and delete to its move action. Provider registration, file promises and custom drag previews remain open.
 
 The `--calling-lobby` example opens Serein’s group pre-call lobby with the camera off. Tests exercise the microphone and ring switches, settings, cancellation and the Start callback on Ubuntu and macOS. The example uses local participants and a local callback for call setup.
 
@@ -364,7 +368,7 @@ The target is source compatibility with Apple's public SwiftUI APIs. The impleme
 
 `./Scripts/check-apple.sh ../serein` type-checks the example source with Apple's SwiftUI module on a Mac with Xcode. `./Scripts/check-api.sh` extracts public symbol graphs from Xcode and the Linux image. Pass `--by-kind` to see coverage for classes, structs, protocols and each member kind, or `--missing` to list individual missing declaration paths. The inventory groups declarations by symbol kind and path, counts overload spellings separately, and excludes underscored and synthesized members. A shared name alone cannot establish matching signatures, constraints, availability or behavior.
 
-The inventory against the macOS 27.2 SDK found 1,754 shared declaration paths out of 7,627 and 1,203 identical declaration spellings out of 8,735. Of the 5,873 absent paths, 724 are nominal type or protocol declarations (6 classes, 590 structs, 50 enums and 78 protocols). The examples exercise a smaller set at runtime. Navigation, window state restoration, broader animation support, text shaping parity, gestures and platform integration remain substantial gaps. Font metrics, control appearance and several layout behaviors differ from Apple's implementation.
+The inventory against the macOS 27.2 SDK found 1,791 shared declaration paths out of 7,627 and 1,237 identical declaration spellings out of 8,735. Of the 5,836 absent paths, 719 are nominal type or protocol declarations (6 classes, 587 structs, 49 enums and 77 protocols). The examples exercise a smaller set at runtime. Navigation, window state restoration, broader animation support, text shaping parity, gestures and platform integration remain substantial gaps. Font metrics, control appearance and several layout behaviors differ from Apple's implementation.
 
 After capturing the Linux examples, run `./Scripts/compare-artwork.sh ../serein` on macOS to render both illustrations with Apple's `ImageRenderer`. At a threshold of 8/255 in any RGB channel, 101 of 119,680 account artwork pixels (0.084%) and 91 of 49,928 key transparency pixels (0.182%) differed. The mean absolute channel differences were 0.104/255 and 0.095/255 respectively. Both reference images are saved in `.build/artwork/`.
 

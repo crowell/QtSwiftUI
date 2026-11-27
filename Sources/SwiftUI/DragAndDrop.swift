@@ -24,8 +24,8 @@ public final class NSItemProvider: NSObject {
     public init(object: NSURL) {
         super.init()
         let url = object as URL
-        representations = [.init(identifier: (url.isFileURL ? UTType.fileURL : .url).identifier,
-                                 format: "text/uri-list", data: Data((url.absoluteString + "\r\n").utf8))]
+        let types: [UTType] = url.isFileURL ? [.fileURL, .url] : [.url]
+        representations = types.map { Representation(identifier: $0.identifier, format: "text/uri-list", data: Data(url.absoluteString.utf8)) }
     }
 
     public init(item: NSSecureCoding?, typeIdentifier: String?) {
@@ -84,6 +84,24 @@ public final class NSItemProvider: NSObject {
         }
         return provider
     }
+    fileprivate static func dropItems(_ mime: UnsafeMutableRawPointer, includingData: Bool) -> [NSItemProvider] {
+        let item = read(mime, includingData: includingData)
+        if let urls = item.representation(for: UTType.url.identifier),
+           let list = String(data: urls.data, encoding: .utf8) {
+            let entries = list.split(whereSeparator: \.isNewline).compactMap { line -> URL? in
+                guard !line.hasPrefix("#"), let url = URL(string: String(line)), url.scheme != nil else { return nil }
+                return url
+            }
+            if !entries.isEmpty {
+                let providers = entries.map { NSItemProvider(object: $0 as NSURL) }
+                // Other MIME formats describe the offer as a whole. Retain them once.
+                providers[0].representations += item.representations.filter { $0.format != urls.format }
+                return providers
+            }
+        }
+        return [item]
+    }
+
     func transferData(for types: [UTType]) -> [(Data, UTType)] {
         for type in types {
             guard let match = representation(for: type.identifier) else { continue }
@@ -109,7 +127,9 @@ public final class NSItemProvider: NSObject {
 
     fileprivate func write(to mime: UnsafeMutableRawPointer) -> Bool {
         for item in representations {
-            item.data.withUnsafeBytes { bytes in
+            var wireData = item.data
+            if item.format == "text/uri-list", !wireData.isEmpty, wireData.last != 10 { wireData.append(contentsOf: [13, 10]) }
+            wireData.withUnsafeBytes { bytes in
                 qs_mime_write(mime, item.format, bytes.bindMemory(to: UInt8.self).baseAddress, bytes.count)
             }
         }
@@ -122,11 +142,38 @@ struct TransferAction {
     var types: [String] = []
     var targeted: Binding<Bool>?
     var drop: (([NSItemProvider], CGPoint) -> Bool)?
+    var delegate: (any DropDelegate)?
     var clipboardCommand: QSTransferPhase?
     var copyItems: (() -> [NSItemProvider])?
     var pasteItems: (([NSItemProvider]) -> Bool)?
 
-    @MainActor func handle(_ phase: QSTransferPhase, mime: UnsafeMutableRawPointer?, point: CGPoint) -> Bool {
+    @MainActor func response(_ phase: QSTransferPhase, mime: UnsafeMutableRawPointer?, point: CGPoint) -> Int32 {
+        guard let delegate else {
+            if phase == QSUpdateTransfer || phase == QSUpdateExternalTransfer { return Int32(QSDropUnchanged.rawValue) }
+            return handle(phase, mime: mime, point: point) ? 1 : 0
+        }
+        guard phase != QSTargetFinish, let mime else { return 0 }
+        let providers = NSItemProvider.dropItems(mime, includingData: phase == QSPerformDrop)
+        let payload = phase == QSPerformDrop ? DropInfo.Payload() : nil
+        payload?.items = providers
+        defer { payload?.items.removeAll() }
+        let info = DropInfo(position: point, offered: providers, payload: payload)
+        switch phase {
+        case QSValidateTransfer: return info.hasItemsConforming(to: types) && delegate.validateDrop(info: info) ? 1 : 0
+        case QSTargetEnter: delegate.dropEntered(info: info)
+        case QSTargetLeave: delegate.dropExited(info: info)
+        case QSPerformDrop: return delegate.performDrop(info: info) ? 1 : 0
+        case QSUpdateTransfer, QSUpdateExternalTransfer:
+            // The desktop hosting view proposes copy when an update returns nil.
+            guard let proposal = delegate.dropUpdated(info: info) else { return Int32(QSDropCopy.rawValue) }
+            let operation = phase == QSUpdateExternalTransfer ? proposal.operationOutsideApplication ?? proposal.operation : proposal.operation
+            return Int32(operation.nativeProposal.rawValue)
+        default: break
+        }
+        return 0
+    }
+
+    @MainActor private func handle(_ phase: QSTransferPhase, mime: UnsafeMutableRawPointer?, point: CGPoint) -> Bool {
         switch phase {
         case QSCopyItems, QSCutItems:
             guard let mime, let copyItems, clipboardCommand == phase else { return false }
@@ -141,7 +188,7 @@ struct TransferAction {
         case QSWriteTransfer:
             guard let mime, let source else { return false }
             return source().write(to: mime)
-        case QSTargetEnter, QSTargetLeave:
+        case QSTargetEnter, QSTargetLeave, QSTargetFinish:
             targeted?.wrappedValue = phase == QSTargetEnter
             return true
         case QSValidateTransfer, QSPerformDrop:
@@ -163,14 +210,14 @@ private nonisolated struct PasteDestination<Content: View, T: Transferable>: Vie
     }
 }
 
-private nonisolated struct TransferView<Content: View>: Primitive {
+nonisolated struct TransferView<Content: View>: Primitive {
     let content: Content
     let transfer: TransferAction
     @MainActor func elements(in context: Context) -> [Element] {
         let group = context.widget(QSGroup, transfer: transfer)
         let enabled = context.environment.isEnabled && context.environment.allowsHits
         qs_clipboard_scope(group, enabled ? transfer.clipboardCommand.map { Int32($0.rawValue) } ?? -1 : -1)
-        qs_transfer_scope(group, enabled && transfer.source != nil ? 1 : 0, enabled && transfer.drop != nil ? 1 : 0)
+        qs_transfer_scope(group, enabled && transfer.source != nil ? 1 : 0, enabled && (transfer.drop != nil || transfer.delegate != nil) ? 1 : 0)
         return context.children(of: content, inside: group)
     }
 }
