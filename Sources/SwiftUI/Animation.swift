@@ -57,6 +57,12 @@ public struct Animation: Equatable, Sendable {
         let ratio = bounce >= 0 ? max(0, 1 - bounce) : 1 / max(0.001, 1 + bounce)
         return interpolatingSpring(stiffness: frequency * frequency, damping: 2 * ratio * frequency, initialVelocity: initialVelocity)
     }
+    public static func spring(_ spring: Spring, blendDuration: TimeInterval = 0.0) -> Animation {
+        .spring(duration: spring.duration, bounce: spring.bounce, blendDuration: blendDuration)
+    }
+    public static func interpolatingSpring(_ spring: Spring, initialVelocity: Double = 0.0) -> Animation {
+        .interpolatingSpring(duration: spring.duration, bounce: spring.bounce, initialVelocity: initialVelocity)
+    }
     public static var interpolatingSpring: Self { .interpolatingSpring() }
     private var isDefault = false
     public static let `default`: Self = {
@@ -109,46 +115,26 @@ public struct Animation: Equatable, Sendable {
 }
 
 private struct DampedSpring: Equatable, Sendable {
-    let frequencySquared: Double, decay: Double, initialVelocity: Double
+    let spring: Spring
+    let initialVelocity: Double
 
     init(mass: Double, stiffness: Double, damping: Double, initialVelocity: Double) {
         precondition(mass > 0 && stiffness > 0 && damping >= 0)
-        frequencySquared = stiffness / mass
-        decay = damping / (2 * mass)
+        spring = Spring(mass: mass, stiffness: stiffness, damping: damping, allowOverDamping: true)
         self.initialVelocity = initialVelocity
     }
-    var duration: TimeInterval {
-        // Conservative envelope cutoff, including the slow mode of an overdamped system.
-        let rate = decay > sqrt(frequencySquared) ? frequencySquared / (decay + sqrt(decay * decay - frequencySquared)) : decay
-        return rate > 0 ? (12 + log1p(abs(initialVelocity) / sqrt(frequencySquared))) / rate : .infinity
-    }
-    func fraction(at t: TimeInterval) -> Double {
-        1 + advance(offset: -1.0, velocity: initialVelocity, time: t).offset
-    }
 
-    // The two fundamental solutions multiply the initial displacement and velocity.
-    func advance<V: VectorArithmetic>(offset: V, velocity: V, time t: TimeInterval) -> (offset: V, velocity: V) {
-        guard t > 0 else { return (offset, velocity) }
-        guard decay.isFinite else { return (offset, .zero) }
-        let discriminant = frequencySquared - decay * decay
-        let a, b: Double
-        if abs(discriminant) <= 1e-10 * frequencySquared {
-            let envelope = exp(-decay * t)
-            b = envelope * t
-            a = envelope + decay * b
-        } else if discriminant > 0 {
-            let frequency = sqrt(discriminant), envelope = exp(-decay * t)
-            b = envelope * sin(frequency * t) / frequency
-            a = envelope * cos(frequency * t) + decay * b
-        } else {
-            let root = sqrt(-discriminant)
-            let slow = -frequencySquared / (decay + root), fast = -decay - root
-            let slowMode = exp(slow * t), fastMode = exp(fast * t)
-            b = (slowMode - fastMode) / (slow - fast)
-            a = slowMode - slow * b
-        }
-        return (offset.scaled(by: a) + velocity.scaled(by: b),
-                offset.scaled(by: -frequencySquared * b) + velocity.scaled(by: a - 2 * decay * b))
+    var duration: TimeInterval {
+        let squared = spring.frequencySquared, decay = spring.decay
+        let rate = decay > sqrt(squared) ? squared / (decay + sqrt(decay * decay - squared)) : decay
+        return rate > 0 ? (12 + log1p(abs(initialVelocity) / sqrt(squared))) / rate : .infinity
+    }
+    func fraction(at time: TimeInterval) -> Double {
+        1 + advance(offset: -1.0, velocity: initialVelocity, time: time).offset
+    }
+    func advance<V: VectorArithmetic>(offset: V, velocity: V, time: TimeInterval) -> (offset: V, velocity: V) {
+        guard spring.decay.isFinite else { return (offset, .zero) }
+        return spring.advance(offset: offset, velocity: velocity, time: time)
     }
 }
 

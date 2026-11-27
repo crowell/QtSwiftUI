@@ -117,10 +117,8 @@ final class GalleryTests: XCTestCase {
             }
             XCTAssertTrue((width/2-50..<width/2+50).contains { x in (226..<250).contains { dark(x, $0) } })
             #if os(Linux)
-            for (key, selected) in [("icu:MediaGallery__tab__links", MediaGalleryTab.links),
-                                    ("icu:MediaGallery__tab__files", .documents), ("icu:media", .media),
-                                    ("icu:MediaGallery__tab__audio", .audio)] {
-                XCTAssertEqual(qs_click_named_button(host.window, strings(key)), 1)
+            for (offset, selected): (Int, MediaGalleryTab) in [(40, .links), (120, .documents), (-120, .media), (-40, .audio)] {
+                XCTAssertEqual(qs_click_point(host.window, Int32(width / 2 + offset), 26), 1)
                 XCTAssertEqual(selection.tab, selected)
                 XCTAssertEqual(qs_read_text(host.window, nil, strings(MediaGalleryEmptyState(tab: selected).strings.0)), 1)
             }

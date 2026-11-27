@@ -26,6 +26,12 @@ In Message Info, the copied send timestamp matched the timestamp decrypted by th
 
 ![Serein’s Message Info panel showing the test phone under Read by](Screenshots/serein-linux-message-details.png)
 
+The Ubuntu release also opened All media for this conversation after sending a document and a photo. The test phone decrypted both attachments. The Files tab displayed the document, and pixel checks compared the gallery thumbnail and the open lightbox with the delivered photo. [Files tab](Screenshots/serein-linux-media-gallery-files.png) · [Photo lightbox](Screenshots/serein-linux-media-lightbox.png)
+
+![Serein’s All media screen with a photo sent from Ubuntu](Screenshots/serein-linux-media-gallery.png)
+
+The waterfall photo is by Pierre Bouillot. Its orientation labels come from Dave Perrett’s EXIF test images. [Image source](https://github.com/recurser/exif-orientation-examples) · [Fixture license](Screenshots/LICENSE-exif-orientation-examples.txt)
+
 Reopening the picker and pressing Space sends a heart. The test phone verified the emoji, author and timestamp of the message it belongs to. Clicking the badge under the message opens Serein’s reaction viewer.
 
 ![Serein’s reaction viewer after the test phone received the heart](Screenshots/serein-linux-reaction-viewer.png)
@@ -442,7 +448,7 @@ The target is source compatibility with Apple's public SwiftUI APIs. The impleme
 
 `./Scripts/check-apple.sh ../serein` type-checks the example source with Apple's SwiftUI module on a Mac with Xcode. `./Scripts/check-api.sh` extracts public symbol graphs from Xcode and the Linux image. Pass `--by-kind` to see coverage for classes, structs, protocols and each member kind, or `--missing` to list individual missing declaration paths. The inventory groups declarations by symbol kind and path, counts overload spellings separately, and excludes underscored and synthesized members. A shared name alone cannot establish matching signatures, constraints, availability or behavior.
 
-The inventory against the macOS 27.2 SDK found 1,905 shared declaration paths out of 7,627 and 1,381 identical declaration spellings out of 8,735. Of the 5,722 absent paths, 713 are nominal type or protocol declarations (6 classes, 582 structs, 48 enums and 77 protocols). The examples exercise a smaller set at runtime. Navigation, window state restoration, broader animation support, text shaping parity, gestures and platform integration remain substantial gaps. Font metrics, control appearance and several layout behaviors differ from Apple's implementation.
+The inventory against the macOS 27.2 SDK found 1,935 shared declaration paths out of 7,627 and 1,405 identical declaration spellings out of 8,735. Of the 5,692 absent paths, 712 are nominal type or protocol declarations (6 classes, 581 structs, 48 enums and 77 protocols). The examples exercise a smaller set at runtime. Navigation, window state restoration, broader animation support, text shaping parity, gestures and platform integration remain substantial gaps. Font metrics, control appearance and several layout behaviors differ from Apple's implementation.
 
 After capturing the Linux examples, run `./Scripts/compare-artwork.sh ../serein` on macOS to render both illustrations with Apple's `ImageRenderer`. At a threshold of 8/255 in any RGB channel, 101 of 119,680 account artwork pixels (0.084%) and 91 of 49,928 key transparency pixels (0.182%) differed. The mean absolute channel differences were 0.104/255 and 0.095/255 respectively. Both reference images are saved in `.build/artwork/`.
 
@@ -455,6 +461,8 @@ The same package runs Serein’s `AxoChatDateSection` inside a native scroll vie
 The raster tests compile Serein’s `MediaEditorImageState` and `MediaEditorRenderer.drawBackground` and supply a decoded test image. Apple and Qt agree on the sampled crop bounds, horizontal flip, quarter turn, and colors inside each swatch. High-quality interpolation differs at sharp color boundaries.
 
 Serein’s production HSL color slider uses explicit device-RGB interpolation for its track. Apple and Ubuntu tests sample the hue stops in both layout directions. The Qt test drags the thumb and invokes accessible increment and decrement. Shared rendering tests also check SwiftUI’s default perceptual gradient, type-erased shape styles, linear-light Canvas shading, and repeated and mirrored gradients.
+
+The public `Spring` type provides the physical, response, duration and settling-duration initializers, the three presets, vector and animatable sampling, velocity, force and updates. Both spring animation factories accept a `Spring`. Shared tests cover underdamped, critically damped and overdamped motion, settling estimates and the metadata preserved in an animated value.
 
 The gallery fixtures compile Serein’s segmented control, including its spring-driven selection indicator. Tests compare matched position, size and anchor placement with Apple’s renderer, and follow a moving indicator across two Qt button labels. Binding tests exercise explicit transactions and spring trajectories. Full animation-transition and clipping parity remains open.
 
