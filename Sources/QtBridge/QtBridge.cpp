@@ -235,6 +235,16 @@ void installContextMenuFilter() {
     }
 }
 
+static QWidget *commandScope(QWidget *focus, const char *property) {
+    for (auto *item = focus; item; item = item->parentWidget()) {
+        if (qobject_cast<QLineEdit *>(item) || qobject_cast<QTextEdit *>(item)
+            || qobject_cast<QPlainTextEdit *>(item)) return nullptr;
+        const auto enabled = item->property(property);
+        if (enabled.isValid()) return enabled.toBool() ? item : nullptr;
+    }
+    return nullptr;
+}
+
 static const char *moveDirection(int key) {
     switch (key) {
     case Qt::Key_Left: return "left";
@@ -839,21 +849,22 @@ struct QSWindow final : QWidget {
                 }
             }
         }
-        if (input->type() == QEvent::KeyPress && source->property("qsMoveScope").toBool()) {
+        if (input->type() == QEvent::KeyPress) {
             auto *key = static_cast<QKeyEvent *>(input);
-            const char *direction = moveDirection(key->key());
-            if (direction && (key->modifiers() == Qt::NoModifier || key->modifiers() == Qt::KeypadModifier)) {
-                // Handle the event as it bubbles through the nearest command scope,
-                // before an enclosing scroll area can use it to scroll.
-                for (auto *item = focusWidget(); item; item = item->parentWidget()) {
-                    if (item == source) {
-                        event(context, item->property("swiftId").toInt(), QSMoveCommand, direction);
-                        key->accept();
-                        return true;
-                    }
-                    if (item->property("qsMoveScope").isValid() || qobject_cast<QLineEdit *>(item)
-                        || qobject_cast<QTextEdit *>(item) || qobject_cast<QPlainTextEdit *>(item)) break;
-                }
+            const auto modifiers = key->modifiers() & ~Qt::KeypadModifier;
+            // Dispatch as the key bubbles through its scope, before an enclosing scroll area.
+            if (const char *direction = moveDirection(key->key()); direction && modifiers == Qt::NoModifier
+                && source->property("qsMoveScope").toBool() && commandScope(focusWidget(), "qsMoveScope") == source) {
+                event(context, source->property("swiftId").toInt(), QSMoveCommand, direction);
+                key->accept();
+                return true;
+            }
+            if ((key->key() == Qt::Key_Backspace || key->key() == Qt::Key_Delete)
+                && (modifiers == Qt::NoModifier || modifiers == Qt::ShiftModifier)
+                && source->property("qsDeleteScope").toBool() && commandScope(focusWidget(), "qsDeleteScope") == source) {
+                event(context, source->property("swiftId").toInt(), QSDeleteCommand, "");
+                key->accept();
+                return true;
             }
         }
         if ((input->type() == QEvent::Enter || input->type() == QEvent::Leave) && source->property("qsHover").toBool()) {
@@ -907,6 +918,11 @@ struct QSWindow final : QWidget {
         }
         if (input->type() == QEvent::FocusIn || input->type() == QEvent::FocusOut) {
             const auto reason = static_cast<QFocusEvent *>(input)->reason();
+            // A menu temporarily borrows the keyboard. Clearing the Swift binding
+            // here would clear the window's responder before its edit action runs.
+            const bool menuBorrowsFocus = reason == Qt::MenuBarFocusReason
+                || (reason == Qt::PopupFocusReason && qobject_cast<QMenu *>(QApplication::activePopupWidget()));
+            if (input->type() == QEvent::FocusOut && menuBorrowsFocus) return false;
             const char *value = "1";
             if (input->type() == QEvent::FocusOut) value = "0";
             else if (reason == Qt::MouseFocusReason) value = "mouse";
@@ -1368,6 +1384,12 @@ int qs_edit_command(QSEditCommand command) {
     auto *window = dynamic_cast<QSWindow *>(QApplication::activeWindow());
     QWidget *field = window ? window->focusWidget() : nullptr;
     if (!field || !field->isEnabled()) return 0;
+    if (command == QSDelete) {
+        if (auto *scope = commandScope(field, "qsDeleteScope")) {
+            window->event(window->context, scope->property("swiftId").toInt(), QSDeleteCommand, "");
+            return 1;
+        }
+    }
     if (command == QSCopy || command == QSCut || command == QSPaste) {
         int key = command == QSCopy ? Qt::Key_C : command == QSCut ? Qt::Key_X : Qt::Key_V;
         QKeyEvent event(QEvent::KeyPress, key, Qt::ControlModifier);
@@ -1955,6 +1977,7 @@ void qs_value(QSWidget w, double fraction) {
 }
 void qs_exit_scope(QSWidget w, int enabled) { widget(w)->setProperty("qsExit", bool(enabled)); }
 void qs_move_scope(QSWidget w, int enabled) { widget(w)->setProperty("qsMoveScope", bool(enabled)); }
+void qs_delete_scope(QSWidget w, int enabled) { widget(w)->setProperty("qsDeleteScope", bool(enabled)); }
 void qs_selectable(QSWidget w, int enabled) {
     auto *label = static_cast<QLabel *>(w);
     Qt::TextInteractionFlags flags = enabled ? Qt::TextSelectableByMouse | Qt::TextSelectableByKeyboard : Qt::NoTextInteraction;
