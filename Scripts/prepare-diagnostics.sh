@@ -14,7 +14,8 @@ link_package() {
     ln -s "$1" "$2"
 }
 mkdir -p "$target/Sources/CallDiagnostics" "$target/Tests/ScreenTests"
-cp "$root"/Tests/SereinDiagnostics/*.swift "$root/Tests/SwiftUITests/LocalizedStringTests.swift" "$target/Tests/ScreenTests/"
+cp "$root"/Tests/SereinDiagnostics/*.swift "$root/Tests/SwiftUITests/LocalizedStringTests.swift" \
+    "$root/Tests/SwiftUITests/ShapeHitTests.swift" "$target/Tests/ScreenTests/"
 link_package "$checkout/Packages/SignalI18n" "$target/SignalI18n"
 link_package "$checkout/Packages/SignalText" "$target/SignalText"
 codecs="$checkout/Packages/SignalCodecs"

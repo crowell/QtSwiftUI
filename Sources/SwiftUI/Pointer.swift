@@ -56,9 +56,11 @@ extension View {
 
     public func opacity(_ opacity: Double) -> some View {
         Transform(content: self) { view, ctx in
-            let group = ctx.widget(QSGroup)
-            qs_group_opacity(group, ctx.interpolated(opacity, key: "opacity"))
-            return ctx.children(of: view, inside: group)
+            let value = ctx.interpolated(opacity, key: "opacity")
+            let inner = value <= 0 ? ctx.with(\.allowsHits, false) : ctx
+            let group = inner.widget(QSGroup)
+            qs_group_opacity(group, value)
+            return inner.children(of: view, inside: group)
         }
     }
 }

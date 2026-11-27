@@ -172,6 +172,11 @@ public:
             }
         }
     }
+    bool handlesPointer() const {
+        return property("qsDragSource").toBool() || acceptDrops() || hasContextMenu() || tapCount || windowDrag ||
+               pointerDrag.threshold >= 0 || pinch.minimum >= 0 || property("qsHover").toBool() ||
+               testAttribute(Qt::WA_SetCursor) || testAttribute(Qt::WA_Hover) || focusPolicy() != Qt::NoFocus;
+    }
     bool isImage = false;
     bool heading = false, adjustable = false;
     bool modal = false;
@@ -522,9 +527,17 @@ public:
 private:
     QPushButton *button;
 };
-class Surface final : public QWidget {
+class ShapeWidget : public QWidget {
 public:
     using QWidget::QWidget;
+    std::optional<QPainterPath> inputPath;
+    bool containsInput(QPointF position) const {
+        return !inputPath || inputPath->contains(position - property("qsFraction").toPointF());
+    }
+};
+class Surface final : public ShapeWidget {
+public:
+    using ShapeWidget::ShapeWidget;
     QColor fill;
     double materialRadius = 0;
     MaterialBackdrop backdrop;
@@ -563,9 +576,9 @@ struct Drawing {
     double materialRadius = 0;
     MaterialBackdrop backdrop;
 };
-class CanvasWidget final : public QWidget {
+class CanvasWidget final : public ShapeWidget {
 public:
-    using QWidget::QWidget;
+    using ShapeWidget::ShapeWidget;
     std::vector<Drawing> drawings;
     void paintEvent(QPaintEvent *) override {
         QPainter painter(this);
@@ -704,6 +717,56 @@ struct QSWindow final : QWidget {
         });
     }
 
+    // Qt grabs the original rectangular widget on press. Keep delivering to
+    // the SwiftUI hit target for the whole sequence, even across its boundary.
+    QPointer<QWidget> nativePointerTarget, hitPointerTarget;
+
+    QWidget *pointerTarget(QPoint at, QWidget *first) {
+        QWidget *hit = first;
+        std::vector<QWidget *> skipped;
+        while (hit) {
+            const auto local = hit->mapFrom(this, at);
+            const auto *shape = dynamic_cast<ShapeWidget *>(hit);
+            const auto *group = dynamic_cast<GroupWidget *>(hit);
+            if ((!shape || shape->containsInput(local)) &&
+                (!group || (group->handlesPointer() && group->hitBounds().contains(local)))) break;
+            skipped.push_back(hit);
+            hit->setAttribute(Qt::WA_TransparentForMouseEvents);
+            hit = childAt(at);
+        }
+        for (auto *item : skipped) item->setAttribute(Qt::WA_TransparentForMouseEvents, false);
+        return hit ? hit : this;
+    }
+    bool redirectPointer(QWidget *source, QMouseEvent *mouse) {
+        const bool press = mouse->type() == QEvent::MouseButtonPress || mouse->type() == QEvent::MouseButtonDblClick;
+        QWidget *hit = nullptr;
+        if (press || (mouse->type() == QEvent::MouseMove && !mouse->buttons())) {
+            if (!dynamic_cast<ShapeWidget *>(source) && !dynamic_cast<GroupWidget *>(source)) return false;
+            const auto at = mapFromGlobal(mouse->globalPosition().toPoint());
+            if (childAt(at) != source) return false;
+            hit = pointerTarget(at, source);
+            if (press) {
+                nativePointerTarget = source;
+                hitPointerTarget = hit;
+            }
+        } else {
+            if (source != nativePointerTarget) return false;
+            hit = hitPointerTarget;
+            if (mouse->type() == QEvent::MouseButtonRelease && !mouse->buttons()) {
+                nativePointerTarget.clear();
+                hitPointerTarget.clear();
+            }
+        }
+        if (hit == source) return false;
+        if (hit) {
+            QMouseEvent forwarded(mouse->type(), hit->mapFromGlobal(mouse->globalPosition()), mouse->globalPosition(),
+                                  mouse->button(), mouse->buttons(), mouse->modifiers(), mouse->pointingDevice());
+            forwarded.setTimestamp(mouse->timestamp());
+            QApplication::sendEvent(hit, &forwarded);
+        }
+        return true;
+    }
+
     void schedule() {
         if (pending || snapshot) return;
         pending = true;
@@ -768,28 +831,11 @@ struct QSWindow final : QWidget {
                 if (parent == source || (scope->simultaneous && tracking)) cancelGesture(scope);
             }
         }
-        if (group && group->hitBounds() != group->rect() &&
-            (input->type() == QEvent::MouseButtonPress || input->type() == QEvent::MouseButtonRelease ||
-             input->type() == QEvent::MouseButtonDblClick || input->type() == QEvent::MouseMove)) {
-            auto *mouse = static_cast<QMouseEvent *>(input);
-            if (!group->pointerDrag.tracking && !group->hitBounds().contains(mouse->position().toPoint())) {
-                const auto at = mapFromGlobal(mouse->globalPosition().toPoint());
-                // Paint overflow is transparent to input. Find the sibling underneath.
-                group->setAttribute(Qt::WA_TransparentForMouseEvents);
-                auto *under = childAt(at);
-                if (under) {
-                    QMouseEvent forwarded(mouse->type(), under->mapFrom(this, at), mouse->globalPosition(),
-                                          mouse->button(), mouse->buttons(), mouse->modifiers());
-                    QApplication::sendEvent(under, &forwarded);
-                }
-                group->setAttribute(Qt::WA_TransparentForMouseEvents, false);
-                return true;
-            }
-        }
         if (input->type() == QEvent::MouseButtonPress || input->type() == QEvent::MouseButtonDblClick ||
             input->type() == QEvent::MouseButtonRelease || input->type() == QEvent::MouseMove) {
             auto *target = qobject_cast<QWidget *>(source);
             auto *mouse = static_cast<QMouseEvent *>(input);
+            if (redirectPointer(target, mouse)) return true;
             // A native control can consume the event before it propagates to its parent.
             for (QWidget *ancestor = target; ancestor && ancestor != this; ancestor = ancestor->parentWidget()) {
                 auto *observer = dynamic_cast<GroupWidget *>(ancestor);
@@ -1438,6 +1484,7 @@ QSWidget qs_create(QSWindow *window, QSWidget parent, QSKind kind, int id) {
     }
     case QSCanvas: {
         auto *canvas = new CanvasWidget(container);
+        window->observeFocus(canvas, id);
         canvas->setAttribute(Qt::WA_TransparentForMouseEvents);
         return canvas;
     }
@@ -1458,6 +1505,7 @@ QSWidget qs_create(QSWindow *window, QSWidget parent, QSKind kind, int id) {
     }
     case QSSurface: {
         auto *surface = new Surface(container);
+        window->observeFocus(surface, id);
         surface->setAttribute(Qt::WA_TransparentForMouseEvents);
         return surface;
     }
@@ -1876,6 +1924,14 @@ void qs_style(QSWidget w, const char *family, double points, int weight, int ita
         label->setWordWrap(wrap);
         label->setAlignment(Qt::AlignAbsolute | Qt::AlignVCenter | (alignment < 0 ? Qt::AlignLeft : alignment > 0 ? Qt::AlignRight : Qt::AlignHCenter));
     }
+}
+void qs_shape_hits(QSWidget w, const QSPath *path, int evenOdd, int enabled) {
+    auto *shape = static_cast<ShapeWidget *>(w);
+    shape->setAttribute(Qt::WA_TransparentForMouseEvents, !enabled);
+    if (path && enabled) {
+        shape->inputPath = *path;
+        shape->inputPath->setFillRule(evenOdd ? Qt::OddEvenFill : Qt::WindingFill);
+    } else shape->inputPath.reset();
 }
 void qs_surface(QSWidget w, const char *color, double radius) {
     auto *surface = static_cast<Surface *>(w);
@@ -2603,9 +2659,7 @@ void qs_group_finish_layout(QSWidget w, int sizeToPositionedContent) {
     group->sizedToContent = sizeToPositionedContent && !group->graphicsEffect() && !group->contentShape;
     // A frame around paint-only descendants must leave the controls underneath reachable.
     const auto children = group->findChildren<QWidget *>(QString(), Qt::FindDirectChildrenOnly);
-    if (!group->property("qsDragSource").toBool() && !group->acceptDrops() && !group->hasContextMenu() && !group->tapCount && !group->windowDrag && group->pointerDrag.threshold < 0 && group->pinch.minimum < 0 && !group->property("qsHover").toBool() &&
-        !group->testAttribute(Qt::WA_SetCursor) && !group->testAttribute(Qt::WA_Hover) &&
-        std::all_of(children.begin(), children.end(), [](QWidget *child) {
+    if (!group->handlesPointer() && std::all_of(children.begin(), children.end(), [](QWidget *child) {
             return child->isHidden() || child->testAttribute(Qt::WA_TransparentForMouseEvents);
         })) group->setAttribute(Qt::WA_TransparentForMouseEvents);
     // A clip or transform has its own drawing coordinate space. Structural

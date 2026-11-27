@@ -34,10 +34,17 @@ enum ResolvedPaint: Sendable {
 }
 public nonisolated struct Color: ShapeStyle, Primitive, Hashable, Sendable {
     private let light: UInt32, dark: UInt32
+    private let lightOpacity: Double, darkOpacity: Double
     private nonisolated init(rgb: UInt32, dark: UInt32? = nil) {
-        self.light = 0xff000000 | rgb; self.dark = 0xff000000 | (dark ?? rgb)
+        self.init(light: 0xff000000 | rgb, dark: 0xff000000 | (dark ?? rgb))
     }
-    nonisolated init(light: UInt32, dark: UInt32) { self.light = light; self.dark = dark }
+    nonisolated init(light: UInt32, dark: UInt32, lightOpacity: Double? = nil, darkOpacity: Double? = nil) {
+        self.light = light
+        self.dark = dark
+        self.lightOpacity = lightOpacity ?? Double(light >> 24) / 255
+        self.darkOpacity = darkOpacity ?? Double(dark >> 24) / 255
+    }
+    func alpha(_ scheme: ColorScheme) -> Double { scheme == .dark ? darkOpacity : lightOpacity }
     public enum RGBColorSpace: Sendable { case sRGB, sRGBLinear, displayP3 }
     public nonisolated init(_ colorSpace: RGBColorSpace = .sRGB, red: Double, green: Double, blue: Double, opacity: Double = 1) {
         func linear(_ c: Double) -> Double { c <= 0.04045 ? c / 12.92 : pow((c + 0.055) / 1.055, 2.4) }
@@ -53,16 +60,20 @@ public nonisolated struct Color: ShapeStyle, Primitive, Hashable, Sendable {
         }
         func byte(_ n: Double) -> UInt32 { UInt32((min(1, max(0, n)) * 255).rounded()) }
         let rgba = byte(opacity) << 24 | byte(r) << 16 | byte(g) << 8 | byte(b)
-        self.init(light: rgba, dark: rgba)
+        let alpha = min(1, max(0, opacity))
+        self.init(light: rgba, dark: rgba, lightOpacity: alpha, darkOpacity: alpha)
     }
     public nonisolated init(_ colorSpace: RGBColorSpace = .sRGB, white: Double, opacity: Double = 1) {
         self.init(colorSpace, red: white, green: white, blue: white, opacity: opacity)
     }
     public nonisolated func opacity(_ opacity: Double) -> Color {
-        func faded(_ argb: UInt32) -> UInt32 {
-            UInt32((Double(argb >> 24) * min(1, max(0, opacity))).rounded()) << 24 | (argb & 0xffffff)
+        let amount = min(1, max(0, opacity))
+        let lightAlpha = lightOpacity * amount, darkAlpha = darkOpacity * amount
+        func faded(_ argb: UInt32, _ alpha: Double) -> UInt32 {
+            UInt32((alpha * 255).rounded()) << 24 | (argb & 0xffffff)
         }
-        return Color(light: faded(light), dark: faded(dark))
+        return Color(light: faded(light, lightAlpha), dark: faded(dark, darkAlpha),
+                     lightOpacity: lightAlpha, darkOpacity: darkAlpha)
     }
     nonisolated func argb(_ scheme: ColorScheme) -> UInt32 { scheme == .dark ? dark : light }
     nonisolated func hex(_ scheme: ColorScheme) -> String { String(format: "#%08x", argb(scheme)) }
@@ -77,7 +88,7 @@ public nonisolated struct Color: ShapeStyle, Primitive, Hashable, Sendable {
     public nonisolated func resolve(in environment: EnvironmentValues) -> Resolved {
         let argb = environment.colorScheme == .dark ? dark : light
         func channel(_ shift: Int) -> Float { Float((argb >> shift) & 255) / 255 }
-        return Resolved(red: channel(16), green: channel(8), blue: channel(0), opacity: channel(24))
+        return Resolved(red: channel(16), green: channel(8), blue: channel(0), opacity: Float(alpha(environment.colorScheme)))
     }
     public nonisolated static let primary = Color(rgb: 0x202124, dark: 0xf3f4f5), secondary = Color(rgb: 0x646970, dark: 0xaeb3bc)
     public nonisolated static let black = Color(rgb: 0), white = Color(rgb: 0xffffff), gray = Color(rgb: 0x8e8e93)
@@ -89,6 +100,7 @@ public nonisolated struct Color: ShapeStyle, Primitive, Hashable, Sendable {
     @MainActor func elements(in context: Context) -> [Element] {
         let widget = context.widget(QSSurface)
         qs_surface(widget, hex(context.environment.colorScheme), 0)
+        qs_shape_hits(widget, nil, 0, context.environment.allowsHits && alpha(context.environment.colorScheme) > 0 ? 1 : 0)
         return [Element { $0.replacingUnspecifiedDimensions() } place: { rect, _ in
             qs_place(widget, rect.minX, rect.minY, rect.width, rect.height)
         }]
@@ -244,15 +256,19 @@ struct FilledShape<S: Shape, Style: ShapeStyle>: Primitive {
     func elements(in context: Context) -> [Element] {
         let paint = style?.paint(in: context.environment) ?? context.environment.foregroundPaint
         let widget: UnsafeMutableRawPointer
+        let visible: Bool
         switch paint {
         case .color(let color):
+            visible = color.alpha(context.environment.colorScheme) > 0
             widget = context.widget(QSSurface)
             qs_surface(widget, color.hex(context.environment.colorScheme), 0)
         case .material(let material):
+            visible = true
             widget = context.widget(QSSurface)
             context.host.hasMaterial = true
             qs_surface_material(widget, material.radius, material.tint.argb(context.environment.colorScheme))
-        case .linear:
+        case .linear(let linear):
+            visible = linear.gradient.gradient.stops.contains { $0.color.alpha(context.environment.colorScheme) > 0 }
             widget = context.widget(QSCanvas)
         }
         return [Element { p in
@@ -262,6 +278,7 @@ struct FilledShape<S: Shape, Style: ShapeStyle>: Primitive {
         } place: { rect, _ in
             let bounds = CGRect(origin: .zero, size: rect.size)
             shape.displayPath(in: bounds, context: context).withNativePath { path in
+                qs_shape_hits(widget, path, fill.isEOFilled ? 1 : 0, visible && context.environment.allowsHits ? 1 : 0)
                 switch paint {
                 case .color, .material:
                     qs_surface_path(widget, path, fill.isEOFilled ? 1 : 0, fill.isAntialiased ? 1 : 0)

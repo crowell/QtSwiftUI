@@ -26,7 +26,7 @@ Selecting the contact name in the conversation header opens Conversation Details
 
 ![Conversation Details in the Serein Linux release](Screenshots/serein-linux-conversation-details.png)
 
-In the chat color picker, choosing crimson updates the sample bubbles. The Docker check opens Custom Color, switches to Gradient, drags the hue slider, and rotates the gradient with its endpoint. Cancel returns to the crimson preset. Back opens the [conversation with crimson outgoing messages](Screenshots/serein-linux-chat-color-conversation.png).
+In the chat color picker, choosing crimson updates the sample bubbles. The Docker check opens Custom Color, switches to Gradient, checks that the modal backdrop blocks the Back button, drags the hue slider, and rotates the gradient by dragging its endpoint beyond the handle. Cancel returns to the crimson preset. Back opens the [conversation with crimson outgoing messages](Screenshots/serein-linux-chat-color-conversation.png).
 
 ![Editing a custom gradient in the running Serein Linux release](Screenshots/serein-linux-custom-chat-color.png)
 

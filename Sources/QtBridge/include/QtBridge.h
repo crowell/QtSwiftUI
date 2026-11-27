@@ -158,6 +158,7 @@ typedef void (*QSDataBytes)(void *context, const unsigned char *bytes, size_t co
 int qs_raster_pdf(QSRasterImage, double pageWidth, double pageHeight, void *context, QSDataBytes receive);
 void qs_raster_image(QSWidget, QSRasterImage);
 void qs_canvas_image(QSWidget, QSRasterImage, int shaded);
+void qs_shape_hits(QSWidget, const QSPath *, int evenOdd, int enabled);
 void qs_surface(QSWidget, const char *color, double radius);
 QSPath *qs_path_new(void);
 void qs_path_delete(QSPath *);
