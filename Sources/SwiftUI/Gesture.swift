@@ -29,6 +29,7 @@ public struct GestureInputKinds: OptionSet, Sendable {
 
 struct Recognizer {
     var inputs: GestureInputKinds = .all
+    var modifiers: EventModifiers = []
     var taps = 0
     var spatialTap: ((Context, UnsafeMutableRawPointer) -> Void)?
     var movesWindow = false
@@ -144,7 +145,7 @@ private nonisolated struct GestureAttachment<Content: View, T: Gesture>: Primiti
                                } }, cancelGesture: reset,
                                action: { _ in recognizer?.ended(); reset?() })
         qs_group_gesture(group, Int32(clamping: recognizer?.taps ?? 0), recognizer?.movesWindow == true ? 1 : 0,
-                         simultaneous ? 1 : 0, recognizer?.dragDistance ?? -1, recognizer?.magnifyDelta ?? -1, Int32(recognizer?.inputs.rawValue ?? 0))
+                         simultaneous ? 1 : 0, recognizer?.dragDistance ?? -1, recognizer?.magnifyDelta ?? -1, Int32(recognizer?.inputs.rawValue ?? 0), recognizer?.modifiers.rawValue ?? 0)
         return inner.children(of: view, inside: group)
     }
 }

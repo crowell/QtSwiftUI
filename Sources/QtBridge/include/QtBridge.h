@@ -210,7 +210,7 @@ QSMagnifySample qs_magnify_sample(QSWidget);
 void qs_native_pinch(QSWindow *, int phase, double x, double y, double delta, unsigned long timestamp);
 typedef int (*QSKeyHandler)(void *context, int id, int phase, const char *characters, int modifiers);
 void qs_set_key_handler(QSWindow *, QSKeyHandler);
-void qs_group_gesture(QSWidget, int taps, int windowDrag, int simultaneous, double dragDistance, double magnifyDelta, int inputs);
+void qs_group_gesture(QSWidget, int taps, int windowDrag, int simultaneous, double dragDistance, double magnifyDelta, int inputs, intptr_t modifiers);
 void qs_group_spin(QSWidget, int milliseconds);
 void qs_group_opacity(QSWidget, double value);
 void qs_group_scale(QSWidget, double x, double y, double anchorX, double anchorY);
@@ -322,6 +322,7 @@ int qs_drag_pointer(QSWindow *, int x1, int y1, int x2, int y2, int steps);
 int qs_click_named_button(QSWindow *, const char *label);
 int qs_tab(QSWindow *);
 int qs_pointer_button(QSWindow *, int x, int y, int down);
+int qs_modified_pointer(QSWindow *, int x, int y, int phase, const char *keySequence);
 int qs_mouse_button(QSWindow *, const char *identifier, int down);
 #ifdef __cplusplus
 }

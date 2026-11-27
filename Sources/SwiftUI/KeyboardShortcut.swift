@@ -1,6 +1,6 @@
 import QtBridge
 
-public struct EventModifiers: OptionSet, Sendable {
+@frozen public struct EventModifiers: OptionSet, Sendable {
     public let rawValue: Int
     public init(rawValue: Int) { self.rawValue = rawValue }
     public static let capsLock = Self(rawValue: 1)

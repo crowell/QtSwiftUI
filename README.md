@@ -18,6 +18,10 @@ Double-clicking selectable text in a sent message opens the quote above the comp
 
 ![Serein’s quote composer after double-clicking a sent message on Ubuntu](Screenshots/serein-linux-quoted-reply-composer.png)
 
+In Select messages, clicking the first outgoing message and Shift-clicking the third selected the whole range. Releasing Shift and clicking the middle row toggled it independently. After restoring the selection, the Docker check chose the [recipient in Forward To](Screenshots/serein-linux-forward-messages.png). The test phone decrypted all three new messages in their original order.
+
+![Three messages selected by Shift-click in Serein on Ubuntu](Screenshots/serein-linux-range-selection.png)
+
 Reopening the picker and pressing Space sends a heart. The test phone verified the emoji, author and timestamp of the message it belongs to. Clicking the badge under the message opens Serein’s reaction viewer.
 
 ![Serein’s reaction viewer after the test phone received the heart](Screenshots/serein-linux-reaction-viewer.png)
@@ -390,7 +394,7 @@ The key transparency fixture renders the original illustration declaration from 
 
 ![Serein key transparency artwork drawn with Qt](Screenshots/key-transparency.png)
 
-On a Linux desktop with Swift 6.2, `pkg-config` and `qt6-base-dev` installed, run `swift run Conversation` or `swift run Controls`. Qt selects the desktop platform plugin. For headless rendering, set `QT_QPA_PLATFORM=offscreen` and `QTSWIFTUI_SCREENSHOT` to a writable PNG path. `QTSWIFTUI_CAPTURE_DELAY_MS` allows time for asynchronous content before capture.
+On Ubuntu with Swift 6.2, install `pkg-config`, `qt6-base-dev` and `libx11-dev`, then run `swift run Conversation` or `swift run Controls`. Qt selects the desktop platform plugin. For headless rendering, set `QT_QPA_PLATFORM=offscreen` and `QTSWIFTUI_SCREENSHOT` to a writable PNG path. `QTSWIFTUI_CAPTURE_DELAY_MS` allows time for asynchronous content before capture.
 
 ## Use the library
 
@@ -426,14 +430,14 @@ The target is source compatibility with Apple's public SwiftUI APIs. The impleme
 | Scrolling | `ScrollViewReader` scrolls by explicit or `ForEach` ID, with an optional anchor. Shared tests move both axes, target sibling scroll views, jump to distant lazy rows and remove a target. `scrollDisabled` controls Qt wheel, scrollbar and kinetic input while leaving child actions available. Scroll views and text editors apply per-axis bounce policies to the Qt kinetic scroller. Physical trackpad and touch bounce remain unverified. Native Qt scrolling updates scroll geometry observers. Apple and Ubuntu tests scroll 240 points of content through an 80-point viewport and check old and new values as the offset crosses a threshold. |
 | Adaptive layouts | `ViewThatFits` checks candidates in order, measures ideal size on the requested axes and falls back to the last child. Tests resize across breakpoints and check the chosen button, lifecycle callbacks, preference values, size and alignment guides on Ubuntu and macOS. |
 | Scroll positioning | `ScrollPosition` and ID bindings move a native Qt scroll area by edge, coordinate or target. Tests cover per-role default anchors, short content, visibility thresholds, disabled target layouts and appended rows. Animated scrolling and exact visibility timing remain open. |
-| Gestures | `AnyGesture` and `Gesture.map(_:)` forward tap, drag and optional gesture values. Apple and Ubuntu tests check repeated mapped values, callbacks across view updates, a drag that crosses its threshold on release, and a double-click on selectable text. |
+| Gestures | `AnyGesture` and `Gesture.map(_:)` forward tap, drag and optional gesture values. Apple and Ubuntu tests check repeated mapped values, callbacks across view updates, a drag that crosses its threshold on release, and a double-click on selectable text. `Gesture.modifiers(_:)` checks the keys held at the start of a desktop gesture. Tests cover combined keys, releasing Shift during a drag and latched Caps Lock under X11. The X11 backend reads Caps Lock and mapped Fn keys from the X server. Hardware Fn remains unverified, and the Wayland backend currently receives only Qt’s standard modifier flags. |
 | Keyboard input | Programmatic composer focus, native focus changes, nested Return handlers, `submitScope`, Escape commands and selectable monospaced diagnostic text. `submitLabel` sets the Qt input method’s Return key hint. Qt uses Go for Join and Route, and Next for Continue. |
 | Accessibility traits | Composite trait insertion, removal and replacement follow the macOS SDK’s observable set behavior. Qt exposes tab lists and static text through its accessibility interface. A button marked as a toggle reports its checked state and accepts the Toggle action. |
 | Lifecycle | `SubscriptionView` and `onReceive` use OpenCombine on Linux. Shared tests cover publisher replacement, action changes, cancellation when a view disappears, and background notifications delivered in order on the main actor. An async view task updates an observable model while the Qt event loop runs. An on-change handler observes the result. A timeline also advances to a scheduled date inside the Qt event loop. |
 
 `./Scripts/check-apple.sh ../serein` type-checks the example source with Apple's SwiftUI module on a Mac with Xcode. `./Scripts/check-api.sh` extracts public symbol graphs from Xcode and the Linux image. Pass `--by-kind` to see coverage for classes, structs, protocols and each member kind, or `--missing` to list individual missing declaration paths. The inventory groups declarations by symbol kind and path, counts overload spellings separately, and excludes underscored and synthesized members. A shared name alone cannot establish matching signatures, constraints, availability or behavior.
 
-The inventory against the macOS 27.2 SDK found 1,899 shared declaration paths out of 7,627 and 1,374 identical declaration spellings out of 8,735. Of the 5,728 absent paths, 713 are nominal type or protocol declarations (6 classes, 582 structs, 48 enums and 77 protocols). The examples exercise a smaller set at runtime. Navigation, window state restoration, broader animation support, text shaping parity, gestures and platform integration remain substantial gaps. Font metrics, control appearance and several layout behaviors differ from Apple's implementation.
+The inventory against the macOS 27.2 SDK found 1,900 shared declaration paths out of 7,627 and 1,376 identical declaration spellings out of 8,735. Of the 5,727 absent paths, 713 are nominal type or protocol declarations (6 classes, 582 structs, 48 enums and 77 protocols). The examples exercise a smaller set at runtime. Navigation, window state restoration, broader animation support, text shaping parity, gestures and platform integration remain substantial gaps. Font metrics, control appearance and several layout behaviors differ from Apple's implementation.
 
 After capturing the Linux examples, run `./Scripts/compare-artwork.sh ../serein` on macOS to render both illustrations with Apple's `ImageRenderer`. At a threshold of 8/255 in any RGB channel, 101 of 119,680 account artwork pixels (0.084%) and 91 of 49,928 key transparency pixels (0.182%) differed. The mean absolute channel differences were 0.104/255 and 0.095/255 respectively. Both reference images are saved in `.build/artwork/`.
 

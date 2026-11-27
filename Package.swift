@@ -20,7 +20,7 @@ let package = Package(
             .product(name: "SwiftSyntaxMacros", package: "swift-syntax")
         ]),
         .systemLibrary(name: "CQtWidgets", pkgConfig: "Qt6Widgets", providers: [.apt(["qt6-base-dev"])]),
-        .target(name: "QtBridge", dependencies: ["CQtWidgets"]),
+        .target(name: "QtBridge", dependencies: ["CQtWidgets"], linkerSettings: [.linkedLibrary("X11", .when(platforms: [.linux]))]),
         .target(name: "CoreGraphics", dependencies: ["QtBridge"]),
         .target(name: "UniformTypeIdentifiers"),
         .target(name: "CoreTransferable", dependencies: ["UniformTypeIdentifiers"]),

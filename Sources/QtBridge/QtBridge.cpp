@@ -12,6 +12,7 @@
 #include "MaterialBackdrop.hpp"
 #include "PointerDrag.hpp"
 #include "Magnification.hpp"
+#include "KeyboardModifiers.hpp"
 #include "NativeMenu.hpp"
 #include "NativeTransfer.hpp"
 #include "ClipboardCommands.hpp"
@@ -82,11 +83,6 @@ struct QSPath : QPainterPath {};
 
 namespace {
 QTransform transform(QSAffine t) { return QTransform(t.a, t.b, t.c, t.d, t.tx, t.ty); }
-int eventModifierFlags(Qt::KeyboardModifiers modifiers) {
-    return (modifiers & Qt::ShiftModifier ? 2 : 0) | (modifiers & Qt::ControlModifier ? 4 : 0)
-         | (modifiers & Qt::AltModifier ? 8 : 0) | (modifiers & Qt::MetaModifier ? 16 : 0)
-         | (modifiers & Qt::KeypadModifier ? 32 : 0);
-}
 class SwiftWidgetStyle final : public QProxyStyle {
 public:
     int styleHint(StyleHint hint, const QStyleOption *option, const QWidget *item, QStyleHintReturn *data) const override {
@@ -157,6 +153,8 @@ public:
     Magnification pinch;
     bool directInteraction = false;
     int gestureInputs = 127;
+    intptr_t gestureModifiers = 0;
+    bool pinchRejected = false;
     qint64 gestureDevice = -1;
     QMenu *contextPopup = nullptr;
     bool customContextRequest = false;
@@ -189,7 +187,7 @@ public:
     bool trackingTap = false;
     QPointF pressPosition, tapLocation;
     std::optional<QPointF> hoverPosition;
-    QElapsedTimer lastTap;
+    quint64 lastTapTick = 0;
     bool accessibilityHidden = false;
     QStringList accessibilityActions;
     void cancelPointer() {
@@ -951,10 +949,23 @@ struct QSWindow final : QWidget {
         const auto type = input->gestureType();
         const auto tick = input->timestamp() ? input->timestamp() : Magnification::now();
         auto &pinch = group->pinch;
-        if (type == Qt::BeginNativeGesture) { pinch.begin(tick); return true; }
+        if (type == Qt::BeginNativeGesture) {
+            group->pinchRejected = !matchesGestureModifiers(group->gestureModifiers, input->modifiers());
+            if (group->pinchRejected) return false;
+            pinch.begin(tick);
+            return true;
+        }
+        if (group->pinchRejected) {
+            if (type == Qt::EndNativeGesture) group->pinchRejected = false;
+            return false;
+        }
         if (type != Qt::ZoomNativeGesture && type != Qt::EndNativeGesture) return false;
         if (!pinch.tracking) {
             if (type == Qt::EndNativeGesture) return false;
+            if (!matchesGestureModifiers(group->gestureModifiers, input->modifiers())) {
+                group->pinchRejected = true;
+                return false;
+            }
             pinch.begin(tick);
         }
         const double next = type == Qt::ZoomNativeGesture ? pinch.factor * (1 + input->value()) : pinch.factor;
@@ -965,6 +976,8 @@ struct QSWindow final : QWidget {
         auto *gesture = static_cast<QPinchGesture *>(input->gesture(Qt::PinchGesture));
         if (!gesture || !(group->gestureInputs & 1)) return false;
         const auto state = gesture->state();
+        if (state == Qt::GestureStarted && !matchesGestureModifiers(group->gestureModifiers, QGuiApplication::keyboardModifiers())) return false;
+        if (state != Qt::GestureStarted && !group->pinch.tracking) return false;
         if (state == Qt::GestureCanceled) {
             cancelGesture(group);
         } else {
@@ -986,6 +999,14 @@ struct QSWindow final : QWidget {
         const auto point = group->mapFromGlobal(mouse->globalPosition());
         const bool press = type == QEvent::MouseButtonPress || type == QEvent::MouseButtonDblClick;
         const auto deviceId = device ? device->systemId() : 0;
+        const auto tick = mouse->timestamp() ? mouse->timestamp() : Magnification::now();
+        const bool moved = (point - group->pressPosition).manhattanLength() > QApplication::startDragDistance();
+        const bool continuesTap = group->consecutiveTaps > 0 && group->gestureDevice == deviceId && !moved &&
+                                  tick - group->lastTapTick <= quint64(QApplication::doubleClickInterval());
+        if (press && !continuesTap && !matchesGestureModifiers(group->gestureModifiers, mouse->modifiers())) {
+            cancelGesture(group);
+            return false;
+        }
         if (group->gestureDevice != deviceId) {
             if (!press) return false;
             cancelGesture(group);
@@ -1022,20 +1043,18 @@ struct QSWindow final : QWidget {
             return true;
         }
         if (group->tapCount <= 0) return false;
-        const bool moved = (point - group->pressPosition).manhattanLength() > QApplication::startDragDistance();
         if (type == QEvent::MouseMove && moved) group->trackingTap = false;
         if (mouse->button() != Qt::LeftButton) return false;
         const bool inside = group->hitBounds().contains(point.toPoint());
         if (press) {
-            if (!group->lastTap.isValid() || group->lastTap.elapsed() > QApplication::doubleClickInterval() || moved)
-                group->consecutiveTaps = 0;
+            if (!continuesTap) group->consecutiveTaps = 0;
             group->trackingTap = inside;
             group->pressPosition = point;
         } else if (type == QEvent::MouseButtonRelease) {
             const bool tapped = group->trackingTap && !moved && inside;
             group->trackingTap = false;
             if (tapped) {
-                group->lastTap.start();
+                group->lastTapTick = tick;
                 if (++group->consecutiveTaps == group->tapCount) {
                     group->consecutiveTaps = 0;
                     group->tapLocation = mapFromGlobal(mouse->globalPosition());
@@ -1048,6 +1067,7 @@ struct QSWindow final : QWidget {
     void cancelGesture(GroupWidget *group) {
         const bool active = (group->pointerDrag.tracking && group->pointerDrag.recognized) || (group->pinch.tracking && group->pinch.recognized);
         group->pinch.tracking = false;
+        group->pinchRejected = false;
         group->cancelPointer();
         if (active) event(context, group->property("swiftId").toInt(), QSGestureCancelled, "");
     }
@@ -1463,7 +1483,7 @@ int qs_reduce_motion(QSWindow *window) {
 double qs_window_scale(QSWindow *window) { return window->devicePixelRatioF(); }
 void qs_set_key_handler(QSWindow *window, QSKeyHandler handler) { window->keyHandler = handler; }
 void qs_set_drag_handler(QSWindow *window, QSDragHandler handler) { window->dragHandler = handler; }
-void qs_group_gesture(QSWidget w, int taps, int drag, int simultaneous, double dragDistance, double magnifyDelta, int inputs) {
+void qs_group_gesture(QSWidget w, int taps, int drag, int simultaneous, double dragDistance, double magnifyDelta, int inputs, intptr_t modifiers) {
     auto *group = static_cast<GroupWidget *>(w);
     group->tapCount = taps;
     group->windowDrag = drag;
@@ -1476,6 +1496,7 @@ void qs_group_gesture(QSWidget w, int taps, int drag, int simultaneous, double d
     group->pinch.minimum = magnifyDelta;
     if (magnifyDelta < 0) group->pinch.tracking = false;
     group->gestureInputs = inputs;
+    group->gestureModifiers = modifiers;
     group->setAttribute(Qt::WA_AcceptTouchEvents, touch || group->directInteraction);
     group->pointerDrag.threshold = dragDistance;
     if (dragDistance < 0) group->pointerDrag.tracking = false;
@@ -3102,6 +3123,18 @@ int qs_click_named_button(QSWindow *window, const char *name) {
 int qs_has_focus(QSWindow *window, const char *id) {
     auto *item = window->findChild<QWidget *>(QString::fromUtf8(id));
     return item && item->hasFocus();
+}
+int qs_modified_pointer(QSWindow *window, int x, int y, int phase, const char *keySequence) {
+    const QPoint point(x, y);
+    if (!window->childAt(point) || phase < 0 || phase > 2) return 0;
+    const auto keys = QKeySequence::fromString(QString::fromUtf8(keySequence), QKeySequence::PortableText);
+    const auto modifiers = keys.isEmpty() ? Qt::NoModifier : keys[0].keyboardModifiers();
+    const auto type = phase == 0 ? QEvent::MouseButtonPress : phase == 1 ? QEvent::MouseMove : QEvent::MouseButtonRelease;
+    QMouseEvent event(type, point, window->mapToGlobal(point), phase == 1 ? Qt::NoButton : Qt::LeftButton,
+                      phase == 2 ? Qt::NoButton : Qt::LeftButton, modifiers);
+    QApplication::sendEvent(window->windowHandle(), &event);
+    qs_flush();
+    return 1;
 }
 int qs_pointer_button(QSWindow *window, int x, int y, int down) {
     const QPoint location(x, y);
