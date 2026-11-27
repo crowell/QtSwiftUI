@@ -2224,11 +2224,20 @@ QSSize qs_primary_screen_size(void) {
     const QSize size = screen->geometry().size();
     return {double(size.width()), double(size.height())};
 }
-void qs_file_import(QSWidget w, const char *mime_types, int directories, int multiple, const char *default_directory) {
+void qs_file_import(QSWidget w, const char *mime_types, int directories, int multiple, const char *default_directory,
+                    const char *message, const char *confirmation) {
     auto *group = static_cast<GroupWidget *>(w);
     if (group->findChild<QFileDialog *>(QString(), Qt::FindDirectChildrenOnly)) return;
     auto *dialog = new QSFileImporter(group, QString::fromUtf8(mime_types), directories, multiple);
     if (default_directory) dialog->setDirectory(QString::fromUtf8(default_directory));
+    if (message) dialog->setWindowTitle(QString::fromUtf8(message));
+    if (confirmation) {
+        const auto label = QString::fromUtf8(confirmation);
+        if (auto *selection = dialog->findChild<QPushButton *>(QStringLiteral("qsImportSelection")))
+            selection->setText(label);
+        else
+            dialog->setLabelText(QFileDialog::Accept, label);
+    }
     QObject::connect(dialog, &QDialog::finished, group, [group, dialog](int result) {
         QStringList urls;
         if (result == QDialog::Accepted) {

@@ -4,6 +4,41 @@ import XCTest
 @testable import SwiftUI
 
 final class FileImporterTests: XCTestCase {
+    @MainActor func testCustomDialogLabelsAndRemovingAnOverride() async throws {
+        var shown = true
+        var custom = true
+        let binding = Binding(get: { shown }, set: { shown = $0 })
+        let count = 12500
+        let host = Host(title: "Import test") { context in
+            Color.white.fileImporter(isPresented: binding, allowedContentTypes: [.png]) { _ in }
+                .fileDialogMessage(custom ? Text("Selection \(count, format: .number)") : nil)
+                .fileDialogConfirmationLabel(custom ? Text(verbatim: "Use artwork") : nil)
+                .fileDialogConfirmationLabel("Outer label")
+                .fileDialogMessage("Outer message")
+                .environment(\.locale, Locale(identifier: "en-US"))
+                .resolve(context)
+        }
+        defer { host.close() }
+        host.open(width: 240, height: 160)
+        qs_flush()
+        XCTAssertEqual(qs_accessible_element(host.window, "Selection 12,500", -1, nil), 1)
+        XCTAssertEqual(qs_accessible_element(host.window, "Use artwork", -1, nil), 1)
+        _ = qs_key_escape(host.window)
+        qs_flush()
+        XCTAssertFalse(shown)
+        host.update()
+        qs_flush()
+        custom = false
+        shown = true
+        host.update()
+        qs_flush()
+        qs_flush()
+        XCTAssertEqual(qs_enter(host.window, "fileNameEdit", "art.png"), 1)
+        XCTAssertEqual(qs_accessible_element(host.window, "Open", -1, nil), 1)
+        XCTAssertEqual(qs_accessible_element(host.window, "Outer message", -1, nil), 0)
+        XCTAssertEqual(qs_accessible_element(host.window, "Use artwork", -1, nil), 0)
+    }
+
     @MainActor func testSingleFileURLAndCancellation() async throws {
         let directory = FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString)
         try FileManager.default.createDirectory(at: directory, withIntermediateDirectories: true)
@@ -82,7 +117,7 @@ final class FileImporterTests: XCTestCase {
                 Text("Import").fileImporter(isPresented: Binding(get: { shown }, set: { shown = $0 }),
                                             allowedContentTypes: types, allowsMultipleSelection: true) {
                     do { picked = try $0.get() } catch { XCTFail(String(describing: error)) }
-                }.fileDialogDefaultDirectory(dir).resolve(context)
+                }.fileDialogDefaultDirectory(dir).fileDialogConfirmationLabel(String("Import selected entries")).resolve(context)
             }
             defer { host.close() }
             host.open(width: 180, height: 100)
@@ -95,6 +130,7 @@ final class FileImporterTests: XCTestCase {
                 try await Task.sleep(for: .milliseconds(10))
             }
             XCTAssertTrue(selected)
+            XCTAssertEqual(qs_accessible_element(host.window, "Import selected entries", -1, nil), 1)
             XCTAssertEqual(qs_click(host.window, "qsImportSelection"), 1)
             qs_flush()
             XCTAssertEqual(Set(picked.map(\.path)), [folderA.path, second.path])

@@ -2,6 +2,11 @@ import Foundation
 import QtBridge
 import UniformTypeIdentifiers
 
+private extension EnvironmentValues {
+    @Entry var fileDialogMessage: Text?
+    @Entry var fileDialogConfirmationLabel: Text?
+}
+
 private nonisolated struct FileImporter<Source: View>: Primitive {
     let source: Source
     let isPresented: Binding<Bool>
@@ -36,7 +41,9 @@ private nonisolated struct FileImporter<Source: View>: Primitive {
             return type.preferredMIMEType?.components(separatedBy: ";").first ?? "*"
         }
         qs_file_import(owner, filters.joined(separator: "\n"), directories, multiple ? 1 : 0,
-                       context.environment.fileDialogDirectory?.path)
+                       context.environment.fileDialogDirectory?.path,
+                       context.environment.fileDialogMessage?.resolvedString(context.environment.locale),
+                       context.environment.fileDialogConfirmationLabel?.resolvedString(context.environment.locale))
         return elements
     }
 }
@@ -62,6 +69,25 @@ extension View {
                                          onCancellation: @escaping () -> Void) -> some View {
         FileImporter(source: self, isPresented: isPresented, types: allowedContentTypes, multiple: allowsMultipleSelection,
                      complete: onCompletion, cancel: onCancellation)
+    }
+
+    nonisolated public func fileDialogMessage(_ message: Text?) -> some View {
+        environment(\.fileDialogMessage, message)
+    }
+    nonisolated public func fileDialogMessage(_ messageKey: LocalizedStringKey) -> some View {
+        fileDialogMessage(Text(messageKey))
+    }
+    @_disfavoredOverload nonisolated public func fileDialogMessage<S>(_ message: S) -> some View where S: StringProtocol {
+        fileDialogMessage(Text(verbatim: String(message)))
+    }
+    nonisolated public func fileDialogConfirmationLabel(_ label: Text?) -> some View {
+        environment(\.fileDialogConfirmationLabel, label)
+    }
+    nonisolated public func fileDialogConfirmationLabel(_ labelKey: LocalizedStringKey) -> some View {
+        fileDialogConfirmationLabel(Text(labelKey))
+    }
+    @_disfavoredOverload nonisolated public func fileDialogConfirmationLabel<S>(_ label: S) -> some View where S: StringProtocol {
+        fileDialogConfirmationLabel(Text(verbatim: String(label)))
     }
 
     nonisolated public func fileDialogDefaultDirectory(_ defaultDirectory: URL?) -> some View {

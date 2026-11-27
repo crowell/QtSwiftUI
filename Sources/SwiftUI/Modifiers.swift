@@ -43,6 +43,21 @@ nonisolated struct Transform<Content: View>: Primitive, SubviewSource {
     }
     @MainActor func elements(in context: Context) -> [Element] { transform(content, context) }
 }
+private nonisolated struct EnvironmentWriter<Content: View, Value>: Primitive, SubviewSource {
+    let content: Content
+    let keyPath: WritableKeyPath<EnvironmentValues, Value>
+    let value: Value
+
+    @MainActor func elements(in context: Context) -> [Element] {
+        content.resolve(context.with(keyPath, value))
+    }
+    @MainActor func subviews(in context: Context) -> [Subview] {
+        content.collectSubviews(in: context.with(keyPath, value)).map { subview in
+            subview.applying { view, incoming in view.resolve(incoming.with(keyPath, value)) }
+        }
+    }
+}
+
 @MainActor @preconcurrency public protocol ViewModifier {
     associatedtype Body: View
     typealias Content = _ViewModifier_Content<Self>
@@ -75,8 +90,8 @@ extension ModifiedContent: Primitive, View, SubviewSource where Content: View, M
 }
 extension View {
     public func modifier<M: ViewModifier>(_ modifier: M) -> ModifiedContent<Self, M> { .init(content: self, modifier: modifier) }
-    public func environment<V>(_ keyPath: WritableKeyPath<EnvironmentValues, V>, _ value: V) -> some View {
-        Transform(content: self, readingContext: { $0.with(keyPath, value) }) { $0.resolve($1.with(keyPath, value)) }
+    nonisolated public func environment<V>(_ keyPath: WritableKeyPath<EnvironmentValues, V>, _ value: V) -> some View {
+        EnvironmentWriter(content: self, keyPath: keyPath, value: value)
     }
     nonisolated public func id<ID: Hashable>(_ id: ID) -> some View {
         IdentifiedView(content: self, id: id)

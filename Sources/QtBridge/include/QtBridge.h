@@ -232,7 +232,8 @@ typedef void (*QSMimeEntry)(void *context, const char *format, const unsigned ch
 void qs_mime_read(void *mime, int representations, void *context, QSMimeEntry entry);
 int qs_transfer_between(QSWindow *, int fromX, int fromY, int toX, int toY);
 void qs_context_request_scope(QSWidget group, int enabled);
-void qs_file_import(QSWidget owner, const char *mime_types, int directories, int multiple, const char *default_directory);
+void qs_file_import(QSWidget owner, const char *mime_types, int directories, int multiple, const char *default_directory,
+                    const char *message, const char *confirmation);
 int qs_alert_begin(QSWidget owner, const char *title, const char *message);
 void qs_alert_button(QSWidget owner, int index, const char *label, int role);
 void qs_alert_show(QSWidget owner);
