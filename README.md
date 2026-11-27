@@ -36,6 +36,10 @@ Selecting the contact name in the conversation header opens Conversation Details
 
 ![Conversation Details in the Serein Linux release](Screenshots/serein-linux-conversation-details.png)
 
+In Settings → Privacy, the Docker check changed the default timer for new chats from Off to two minutes. Reopening Privacy showed the [saved duration](Screenshots/serein-linux-privacy-default-timer.png). Reopening Custom Time restored both menu selections.
+
+![Setting a custom disappearing-message timer in the Serein Ubuntu release](Screenshots/serein-linux-custom-disappearing-timer.png)
+
 In Settings → Chats → Chat folders, the Docker check created Unread and 1:1 chats. It dragged 1:1 chats above Unread with the X11 pointer, reopened the list, and read back both row labels in their new positions.
 
 ![Serein’s reordered chat folders in the Ubuntu release executable](Screenshots/serein-linux-chat-folders.png)
@@ -59,6 +63,8 @@ From Conversation Details, Serein’s Nickname editor accepts a first name, last
 In the chat color picker, choosing crimson updates the sample bubbles. The Docker check opens Custom Color, switches to Gradient, checks that the modal backdrop blocks the Back button, drags the hue slider, and rotates the gradient by dragging its endpoint beyond the handle. Cancel returns to the crimson preset. Back opens the [conversation with crimson outgoing messages](Screenshots/serein-linux-chat-color-conversation.png).
 
 ![Editing a custom gradient in the running Serein Linux release](Screenshots/serein-linux-custom-chat-color.png)
+
+Desktop `TextField` supports required and optional bindings with Foundation's `ParseableFormatStyle`. In tests on Apple SwiftUI and Qt, entering `001234` in a numeric field set the value to 1234 immediately. Return displayed `1,234` with the US number format. Invalid text preserved the last valid required value and cleared an optional binding. Custom types can supply their own format and parse strategy.
 
 With another X11 app focused, the desktop received “The ferry leaves Harbor Pier at nine.” Returning to Serein sent a read sync for that message to the linked phone. Opening conversation search focused the field immediately. The Docker check typed “Harbor Pier” into both conversation and global search, copied the query back from each field, and verified that each showed the matching message row. Both single-line and vertical `TextField` selections follow the native caret when the enclosing view supplies a new text binding on each render.
 
@@ -391,7 +397,7 @@ The target is source compatibility with Apple's public SwiftUI APIs. The impleme
 
 `./Scripts/check-apple.sh ../serein` type-checks the example source with Apple's SwiftUI module on a Mac with Xcode. `./Scripts/check-api.sh` extracts public symbol graphs from Xcode and the Linux image. Pass `--by-kind` to see coverage for classes, structs, protocols and each member kind, or `--missing` to list individual missing declaration paths. The inventory groups declarations by symbol kind and path, counts overload spellings separately, and excludes underscored and synthesized members. A shared name alone cannot establish matching signatures, constraints, availability or behavior.
 
-The inventory against the macOS 27.2 SDK found 1,837 shared declaration paths out of 7,627 and 1,283 identical declaration spellings out of 8,735. Of the 5,790 absent paths, 716 are nominal type or protocol declarations (6 classes, 585 structs, 48 enums and 77 protocols). The examples exercise a smaller set at runtime. Navigation, window state restoration, broader animation support, text shaping parity, gestures and platform integration remain substantial gaps. Font metrics, control appearance and several layout behaviors differ from Apple's implementation.
+The inventory against the macOS 27.2 SDK found 1,839 shared declaration paths out of 7,627 and 1,289 identical declaration spellings out of 8,735. Of the 5,788 absent paths, 716 are nominal type or protocol declarations (6 classes, 585 structs, 48 enums and 77 protocols). The examples exercise a smaller set at runtime. Navigation, window state restoration, broader animation support, text shaping parity, gestures and platform integration remain substantial gaps. Font metrics, control appearance and several layout behaviors differ from Apple's implementation.
 
 After capturing the Linux examples, run `./Scripts/compare-artwork.sh ../serein` on macOS to render both illustrations with Apple's `ImageRenderer`. At a threshold of 8/255 in any RGB channel, 101 of 119,680 account artwork pixels (0.084%) and 91 of 49,928 key transparency pixels (0.182%) differed. The mean absolute channel differences were 0.104/255 and 0.095/255 respectively. Both reference images are saved in `.build/artwork/`.
 

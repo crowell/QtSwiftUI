@@ -8,6 +8,7 @@ struct TextFieldCallbacks {
         if !context.host.isMeasuringAlternative {
             context.host.liveStorage.insert(key)
             context.host.storage[key] = session
+            session.host = context.host
             session.callbacks = self
         }
         return session
@@ -15,6 +16,8 @@ struct TextFieldCallbacks {
 }
 
 @MainActor final class TextFieldEditingSession {
+    weak var host: Host?
+    var draft: (text: String, formatted: String?)?
     var callbacks = TextFieldCallbacks()
     private var focused = false
     private var typing = false
@@ -34,6 +37,10 @@ struct TextFieldCallbacks {
     }
 
     func commit() {
+        if draft != nil {
+            draft = nil
+            host?.update()
+        }
         typing = false
         callbacks.changed?(false)
         callbacks.committed?()

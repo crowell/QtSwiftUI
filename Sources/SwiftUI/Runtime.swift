@@ -395,6 +395,7 @@ protocol MountedProperty: DynamicProperty {
     private let get: () -> Value
     private let set: (Value, Transaction) -> Void
     private var assignedTransaction: Transaction?
+    private(set) var isConstant = false
     public var transaction: Transaction {
         get { assignedTransaction ?? Transaction() }
         set { assignedTransaction = newValue }
@@ -407,7 +408,11 @@ protocol MountedProperty: DynamicProperty {
         self.get = get
         self.set = set
     }
-    public static func constant(_ value: Value) -> Self { Self(get: { value }, set: { _ in }) }
+    public static func constant(_ value: Value) -> Self {
+        var binding = Self(get: { value }, set: { _ in })
+        binding.isConstant = true
+        return binding
+    }
     public var wrappedValue: Value {
         get { get() }
         nonmutating set {
@@ -426,6 +431,7 @@ protocol MountedProperty: DynamicProperty {
             set(root, transaction)
         })
         derived.assignedTransaction = assignedTransaction
+        derived.isConstant = isConstant
         return derived
     }
 }

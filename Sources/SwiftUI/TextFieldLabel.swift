@@ -38,13 +38,13 @@ enum FieldTitle {
 
 extension TextField {
     nonisolated public init(text: Binding<String>, prompt: Text? = nil, @ContentBuilder label: () -> Label) {
-        self.init(configuration: FieldTitle(label()), text: text, secure: false, prompt: prompt)
+        self.init(configuration: FieldTitle(label()), value: .text(text), prompt: prompt)
     }
     nonisolated public init(text: Binding<String>, prompt: Text? = nil, axis: Axis, @ContentBuilder label: () -> Label) {
-        self.init(configuration: FieldTitle(label()), text: text, secure: false, prompt: prompt, axis: axis)
+        self.init(configuration: FieldTitle(label()), value: .text(text), prompt: prompt, axis: axis)
     }
     nonisolated public init(text: Binding<String>, selection: Binding<TextSelection?>, prompt: Text? = nil, axis: Axis? = nil, @ContentBuilder label: () -> Label) {
-        self.init(configuration: FieldTitle(label()), text: text, secure: false, selection: selection, prompt: prompt, axis: axis ?? .horizontal)
+        self.init(configuration: FieldTitle(label()), value: .text(text), selection: selection, prompt: prompt, axis: axis ?? .horizontal)
     }
 }
 

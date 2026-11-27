@@ -3191,6 +3191,8 @@ int qs_read_text(QSWindow *window, const char *id, const char *expected) {
         }
         return 0;
     }
-    auto *label = window->findChild<QLabel *>(QString::fromUtf8(id));
+    const auto name = QString::fromUtf8(id);
+    if (auto *edit = window->findChild<QLineEdit *>(name)) return edit->text() == QString::fromUtf8(expected);
+    auto *label = window->findChild<QLabel *>(name);
     return label && label->text() == QString::fromUtf8(expected);
 }
