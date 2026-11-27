@@ -28,34 +28,82 @@ extension View {
     }
 }
 
+public typealias EmptyContent = EmptyView
 public typealias ContentBuilder = ViewBuilder
 
-@resultBuilder public enum ViewBuilder {
-    public static func buildExpression<V: View>(_ v: V) -> V { v }
-    public static func buildBlock() -> EmptyView { EmptyView() }
-    public static func buildBlock<V: View>(_ v: V) -> V { v }
-    public static func buildBlock<each V: View>(_ v: repeat each V) -> TupleView<(repeat each V)> {
-        TupleView((repeat each v))
+@resultBuilder public struct ViewBuilder {
+    public static func buildExpression<Content>(_ content: Content) -> Content { content }
+    public static func buildBlock() -> EmptyContent { EmptyContent() }
+    public static func buildBlock<Content>(_ content: Content) -> Content { content }
+    @_disfavoredOverload public static func buildBlock<each Content>(_ content: repeat each Content) -> TupleView<(repeat each Content)> where repeat each Content: View {
+        TupleView((repeat each content))
     }
-    public static func buildIf<V: View>(_ v: V?) -> V? { v }
-    public static func buildEither<T: View, F: View>(first: T) -> _ConditionalContent<T, F> { .init(first: first) }
-    public static func buildEither<T: View, F: View>(second: F) -> _ConditionalContent<T, F> { .init(second: second) }
-    public static func buildLimitedAvailability<V: View>(_ v: V) -> AnyView { AnyView(v) }
+    public static func buildBlock<each Content>(_ content: repeat each Content) -> TupleContent<repeat each Content> {
+        TupleContent((repeat each content))
+    }
+    public static func buildIf<Content>(_ content: Content?) -> Content? { content }
+    public static func buildEither<TrueContent, FalseContent>(first: TrueContent) -> _ConditionalContent<TrueContent, FalseContent> {
+        .init(first: first)
+    }
+    public static func buildEither<TrueContent, FalseContent>(second: FalseContent) -> _ConditionalContent<TrueContent, FalseContent> {
+        .init(second: second)
+    }
+    public static func buildLimitedAvailability<Content>(_ content: Content) -> AnyView where Content: View { AnyView(content) }
 }
 
 public struct EmptyView: Primitive {
     public nonisolated init() {}
     func elements(in context: Context) -> [Element] { [] }
 }
-public nonisolated struct TupleView<T>: Primitive {
+
+@MainActor protocol TupleViewChildren {
+    func forEachChild(_ visit: (Int, any View) -> Void)
+}
+
+extension TupleViewChildren {
+    func elements(in context: Context) -> [Element] {
+        var result: [Element] = []
+        forEachChild { index, view in
+            result += view.resolve(context.descending(.position(index)).preferenceBranch())
+        }
+        return result
+    }
+
+    func subviews(in context: Context) -> [Subview] {
+        var result: [Subview] = []
+        forEachChild { index, view in
+            result += view.collectSubviews(in: context.descending(.position(index)))
+        }
+        return result
+    }
+}
+
+public nonisolated struct TupleView<T>: Primitive, SubviewSource, TupleViewChildren {
     public var value: T
     public init(_ value: T) { self.value = value }
-    @MainActor func elements(in context: Context) -> [Element] {
-        Mirror(reflecting: value).children.enumerated().flatMap { index, child in
-            (child.value as? any View)?.resolve(context.descending(.position(index)).preferenceBranch()) ?? []
+    @MainActor func forEachChild(_ visit: (Int, any View) -> Void) {
+        for (index, child) in Mirror(reflecting: value).children.enumerated() {
+            if let view = child.value as? any View { visit(index, view) }
         }
     }
 }
+public struct TupleContent<each Content> {
+    public var content: (repeat each Content)
+    public init(_ content: (repeat each Content)) { self.content = content }
+    @_disfavoredOverload public init(_ content: repeat each Content) { self.init((repeat each content)) }
+    public var body: Never { fatalError("TupleContent is rendered directly") }
+}
+extension TupleContent: Sendable where repeat each Content: Sendable {}
+extension TupleContent: View, Primitive, SubviewSource, TupleViewChildren where repeat each Content: View {
+    @MainActor func forEachChild(_ visit: (Int, any View) -> Void) {
+        var index = 0
+        for view in repeat each content {
+            visit(index, view)
+            index += 1
+        }
+    }
+}
+
 public nonisolated struct _ConditionalContent<TrueContent, FalseContent> {
     enum Storage { case first(TrueContent), second(FalseContent) }
     let storage: Storage

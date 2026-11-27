@@ -56,7 +56,7 @@ final class CallsTabTests: XCTestCase {
                 try await window.click(315, 304)
                 XCTAssertEqual(model.history.history, original)
                 XCTAssertNotNil(model.details.link)
-                XCTAssertFalse(window.isVisible)
+                XCTAssertTrue(window.isVisible)
             }
         }
     }

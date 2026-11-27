@@ -27,12 +27,15 @@ private struct LazyRow {
 extension Group: LazyRowSource {
     @MainActor fileprivate func rows(at path: [Part]) -> [LazyRow] { SwiftUI.rows(content, at: path) }
 }
-extension TupleView: LazyRowSource {
-    @MainActor fileprivate func rows(at path: [Part]) -> [LazyRow] {
-        Mirror(reflecting: value).children.enumerated().flatMap { index, child -> [LazyRow] in
-            guard let child = child.value as? any View else { return [] }
-            return SwiftUI.rows(child, at: path + [.position(index)])
+extension TupleView: LazyRowSource {}
+extension TupleContent: LazyRowSource where repeat each Content: View {}
+private extension TupleViewChildren {
+    func rows(at path: [Part]) -> [LazyRow] {
+        var result: [LazyRow] = []
+        forEachChild { index, child in
+            result += SwiftUI.rows(child, at: path + [.position(index)])
         }
+        return result
     }
 }
 extension EmptyView: LazyRowSource {

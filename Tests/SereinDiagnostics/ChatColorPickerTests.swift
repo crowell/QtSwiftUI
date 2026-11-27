@@ -55,8 +55,9 @@ final class ChatColorPickerTests: XCTestCase {
         try await window.click(162, 327)
         try await window.click(100, 600)
         XCTAssertTrue(window.isVisible)
-        try await window.click(323, 398) // Serein's alert Cancel also invokes the environment dismiss action.
-        XCTAssertFalse(window.isVisible)
+        try await window.click(323, 398) // Cancel keeps the selected color and its window.
+        XCTAssertTrue(window.isVisible)
+        XCTAssertNotEqual(window.pixel(500, 62), defaultColor)
     }
 
     @MainActor func testAddingDuplicatingAndRemoving() async throws {

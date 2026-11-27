@@ -10,6 +10,14 @@ import AppKit
 #endif
 
 final class DialogTests: XCTestCase {
+    @MainActor func testAlertCancelUsesEnvironmentDismissWhenThereIsNoCloseCallback() async throws {
+        let screen = try await ScreenWindow(AxoAlertDialog.Cancel("Cancel"), width: 140, height: 44)
+        defer { screen.close() }
+        XCTAssertTrue(screen.isVisible)
+        try await screen.click(70, 22)
+        XCTAssertFalse(screen.isVisible)
+    }
+
     @MainActor func testProductionDialogGeometryAndActions() async throws {
         var cancelled = 0, left = 0
         let en = Localizer(locale: "en")

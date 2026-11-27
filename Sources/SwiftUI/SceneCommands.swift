@@ -32,13 +32,6 @@ extension EmptyView: Commands, CommandContent {
     fileprivate func collect(in context: Context, into menus: MenuEntries) {}
 }
 
-public struct TupleContent<each Content> {
-    public var content: (repeat each Content)
-    public init(_ content: (repeat each Content)) { self.content = content }
-    @_disfavoredOverload public init(_ content: repeat each Content) { self.init((repeat each content)) }
-    public var body: Never { fatalError("TupleContent is rendered directly") }
-}
-
 extension TupleContent: Commands, CommandContent where repeat each Content: Commands {
     fileprivate func collect(in context: Context, into menus: MenuEntries) {
         var index = 0

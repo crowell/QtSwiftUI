@@ -142,13 +142,6 @@ extension EmptyView: SubviewSource {
 extension Group: SubviewSource {
     @MainActor func subviews(in context: Context) -> [Subview] { content.collectSubviews(in: context) }
 }
-extension TupleView: SubviewSource {
-    @MainActor func subviews(in context: Context) -> [Subview] {
-        Mirror(reflecting: value).children.enumerated().flatMap { index, child in
-            (child.value as? any View)?.collectSubviews(in: context.descending(.position(index))) ?? []
-        }
-    }
-}
 extension Optional: SubviewSource where Wrapped: View {
     func subviews(in context: Context) -> [Subview] { self?.collectSubviews(in: context) ?? [] }
 }
