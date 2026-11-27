@@ -195,7 +195,7 @@ enum Part: Hashable {
     private let content: (Context) -> [Element]
     private(set) var window: OpaquePointer!
 
-    private let animationClock: () -> TimeInterval
+    let animationClock: () -> TimeInterval
     private(set) var frameTime: TimeInterval = 0
 
     /// App-scoped dynamic properties persist independently of native window render passes.

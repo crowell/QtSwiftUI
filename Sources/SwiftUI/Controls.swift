@@ -398,7 +398,11 @@ public struct ScrollView<Content: View>: Primitive {
         inner.scrollTargets = nil
         let observesTargets = context.preferences[ObjectIdentifier(FirstScrollVisibility.self)] != nil
         if !context.registerScrollArea.isEmpty || config.active || observesTargets {
-            let targets = ScrollAreaTargets(widget, axes: axes, direction: context.environment.layoutDirection)
+            let path = context.path + [.property("scroll motion")]
+            let motion = context.host.storage[path] as? ScrollMotion ?? ScrollMotion(host: context.host)
+            context.host.storage[path] = motion
+            context.host.liveStorage.insert(path)
+            let targets = ScrollAreaTargets(widget, axes: axes, direction: context.environment.layoutDirection, motion: motion)
             inner.scrollTargets = targets
             for register in context.registerScrollArea { register(targets) }
         }
@@ -419,6 +423,10 @@ public struct ScrollView<Content: View>: Primitive {
         }
         var geometry: ScrollGeometry?
         inner.publish(FirstScrollGeometry.self) { geometry }
+        let observesPhase = context.preferences[ObjectIdentifier(FirstScrollPhase.self)] != nil
+        qs_scroll_observe_phase(widget, observesPhase ? 1 : 0)
+        var phaseReport: ScrollPhaseReport?
+        inner.publish(FirstScrollPhase.self) { phaseReport }
         let view = stacked(content.resolve(inner), axis: .vertical, alignment: .center, spacing: 8)
         let horizontal = axes.contains(.horizontal), vertical = axes.contains(.vertical)
         qs_scroll_input(widget, context.environment.isScrollEnabled ? 1 : 0)
@@ -443,20 +451,23 @@ public struct ScrollView<Content: View>: Primitive {
             space.geometry = context.spaceGeometry(in: CGRect(origin: bounds.origin, size: CGSize(width: visible.width, height: visible.height)))
             var rect = Alignment.top.rect(size, in: CGRect(origin: .zero, size: contentSize))
             var shift = CGPoint.zero
-            if let mount {
-                shift = mount.prepare(widget: widget, config: config, axes: axes, direction: context.environment.layoutDirection,
+            if let mount, let area = inner.scrollTargets {
+                shift = mount.prepare(area: area, animation: context.animation, config: config, axes: axes, direction: context.environment.layoutDirection,
                                       size: size, viewport: qs_scroll_viewport(widget), prior: prior)
                 if horizontal { rect.origin.x = shift.x }
                 if vertical { rect.origin.y = shift.y }
             }
+            inner.scrollTargets?.motion.advance(widget: widget)
             view.place(rect, proposal)
             if let area = inner.scrollTargets { mount?.finish(area: area, config: config, host: context.host) }
             let viewport = qs_scroll_viewport(widget)
             if observesTargets {
                 visibility = inner.scrollTargets?.snapshot(in: CGRect(x: viewport.x, y: viewport.y, width: viewport.width, height: viewport.height))
             }
-            geometry = ScrollGeometry(contentOffset: CGPoint(x: viewport.x - shift.x, y: viewport.y - shift.y), contentSize: size,
+            let current = ScrollGeometry(contentOffset: CGPoint(x: viewport.x - shift.x, y: viewport.y - shift.y), contentSize: size,
                                       contentInsets: EdgeInsets(), containerSize: CGSize(width: viewport.width, height: viewport.height))
+            geometry = current
+            if observesPhase { phaseReport = ScrollPhaseReport(widget: widget, geometry: current, shift: shift) }
         }]
     }
 }

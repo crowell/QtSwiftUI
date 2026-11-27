@@ -133,12 +133,20 @@ import AppKit
         try await Task.sleep(for: .milliseconds(80))
     }
 
-    #if os(Linux)
     func wheel(down: Bool) async throws {
+        #if os(Linux)
         _ = qs_scroll_wheel(host.window, Int32(width / 2), Int32(height / 2), down ? -3 : 3)
+        #else
+        let scroll = try XCTUnwrap(scrollView(in: hosting))
+        let cg = try XCTUnwrap(CGEvent(scrollWheelEvent2Source: nil, units: .pixel, wheelCount: 1,
+                                       wheel1: down ? -24 : 24, wheel2: 0, wheel3: 0))
+        cg.setIntegerValueField(.scrollWheelEventIsContinuous, value: 1)
+        scroll.scrollWheel(with: try XCTUnwrap(NSEvent(cgEvent: cg)))
+        #endif
         try await settle()
     }
-    #else
+
+    #if !os(Linux)
     var showsVerticalScroller: Bool { scrollView(in: hosting)?.hasVerticalScroller == true }
     #endif
 

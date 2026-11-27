@@ -77,17 +77,18 @@ private struct ChangeObserver<Content: View, Value: Equatable>: Primitive {
     let content: Content, value: Value, initial: Bool, action: (Value, Value) -> Void
     func elements(in ctx: Context) -> [Element] {
         guard !ctx.host.isMeasuringAlternative else { return content.resolve(ctx) }
+        let children = content.resolve(ctx)
         ctx.host.liveStorage.insert(ctx.path)
         if let previous = ctx.host.storage[ctx.path] as? Previous<Value> {
             let old = previous.value
             if old != value {
                 previous.value = value
-                action(old, value)
+                ctx.host.afterLayout { action(old, value) }
             }
         } else {
             ctx.host.storage[ctx.path] = Previous(value)
-            if initial { action(value, value) }
+            if initial { ctx.host.afterLayout { action(value, value) } }
         }
-        return content.resolve(ctx)
+        return children
     }
 }

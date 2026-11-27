@@ -7,6 +7,7 @@ import QtBridge
         var estimated: Bool
     }
 
+    let motion: ScrollMotion
     let widget: UnsafeMutableRawPointer
     let axes: Axis.Set
     let direction: LayoutDirection
@@ -15,7 +16,8 @@ import QtBridge
     private var markedOrder: [AnyHashable] = []
     private var lazyIDs: [(name: @MainActor () -> AnyHashable?, target: Target)] = []
 
-    init(_ widget: UnsafeMutableRawPointer, axes: Axis.Set, direction: LayoutDirection) {
+    init(_ widget: UnsafeMutableRawPointer, axes: Axis.Set, direction: LayoutDirection, motion: ScrollMotion) {
+        self.motion = motion
         self.widget = widget
         self.axes = axes
         self.direction = direction
@@ -56,7 +58,7 @@ import QtBridge
         return lazyIDs.first { $0.name() == id }?.target
     }
 
-    func scroll(to rect: CGRect, anchor: UnitPoint?) {
+    func scroll(to rect: CGRect, anchor: UnitPoint?, animation: Animation?) {
         let viewport = qs_scroll_viewport(widget)
         func offset(start: CGFloat, size: CGFloat, current: CGFloat, length: CGFloat, fraction: CGFloat?) -> CGFloat {
             if let fraction { return start + fraction * (size - length) }
@@ -68,27 +70,32 @@ import QtBridge
             length: viewport.width, fraction: anchor.map { direction == .leftToRight ? $0.x : 1 - $0.x }) : viewport.x
         let y = axes.contains(.vertical) ? offset(start: rect.minY, size: rect.height, current: viewport.y,
             length: viewport.height, fraction: anchor?.y) : viewport.y
-        qs_scroll_set_offset(widget, x, y)
+        motion.move(widget: widget, to: CGPoint(x: x, y: y), animation: animation)
     }
 }
 
 @MainActor private final class ScrollReaderTargets {
     var areas: [ScrollAreaTargets] = []
-    private var pending: (AnyHashable, UnitPoint?)?
+    private var pending: (id: AnyHashable, anchor: UnitPoint?, animation: Animation?, motion: ScrollMotion, revision: UInt64)?
 
-    func scroll(_ id: AnyHashable, anchor: UnitPoint?) {
+    func scroll(_ id: AnyHashable, anchor: UnitPoint?, animation: Animation?) {
         pending = nil
         for area in areas {
             if let target = area.target(for: id) {
-                area.scroll(to: target.rect, anchor: anchor)
-                if target.estimated { pending = (id, anchor) }
+                area.scroll(to: target.rect, anchor: anchor, animation: animation)
+                if target.estimated { pending = (id, anchor, animation, area.motion, qs_scroll_user_revision(area.widget)) }
                 return
             }
         }
     }
 
     func refine() {
-        if let (id, anchor) = pending { scroll(id, anchor: anchor) }
+        guard let command = pending else { return }
+        guard let area = areas.first(where: { $0.motion === command.motion }),
+              qs_scroll_user_revision(area.widget) == command.revision,
+              let target = area.target(for: command.id) else { pending = nil; return }
+        area.scroll(to: target.rect, anchor: command.anchor, animation: command.animation)
+        if !target.estimated { pending = nil }
     }
 }
 
@@ -98,7 +105,8 @@ public struct ScrollViewProxy {
         // Hash the caller’s ID and read Qt geometry on the UI thread. The caller
         // retains ownership of non-Sendable IDs until the synchronous lookup ends.
         nonisolated(unsafe) let key = AnyHashable(id)
-        let scroll: @MainActor @Sendable () -> Void = { [weak targets] in targets?.scroll(key, anchor: anchor) }
+        let animation = Transaction.current?.animation
+        let scroll: @MainActor @Sendable () -> Void = { [weak targets] in targets?.scroll(key, anchor: anchor, animation: animation) }
         if Thread.isMainThread { MainActor.assumeIsolated(scroll) }
         else { DispatchQueue.main.sync { MainActor.assumeIsolated(scroll) } }
     }

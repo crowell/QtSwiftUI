@@ -1796,7 +1796,7 @@ QSWidget qs_create(QSWindow *window, QSWidget parent, QSKind kind, int id) {
         auto *scroll = new QScrollArea(container);
         window->observeFocus(scroll, id);
         scroll->setFrameShape(QFrame::NoFrame);
-        scroll->setProperty("qsScrollInput", QVariant::fromValue<QObject *>(new ScrollInput(scroll)));
+        scroll->setProperty("qsScrollInput", QVariant::fromValue<QObject *>(new ScrollInput(scroll, [window] { window->schedule(); })));
         for (auto *bar : {scroll->horizontalScrollBar(), scroll->verticalScrollBar()}) {
             QObject::connect(bar, &QScrollBar::valueChanged, window, [window] { window->schedule(); });
         }
@@ -1856,9 +1856,28 @@ void qs_scroll_set_offset(QSWidget w, double x, double y) {
     set(area->horizontalScrollBar(), x);
     set(area->verticalScrollBar(), y);
 }
-uint64_t qs_scroll_user_revision(QSWidget w) {
-    return static_cast<ScrollInput *>(widget(w)->property("qsScrollInput").value<QObject *>())->revision;
+QSSize qs_scroll_maximum(QSWidget w) {
+    auto *area = static_cast<QScrollArea *>(w);
+    return {double(area->horizontalScrollBar()->maximum()), double(area->verticalScrollBar()->maximum())};
 }
+static ScrollInput *scrollInput(QSWidget w) {
+    return static_cast<ScrollInput *>(widget(w)->property("qsScrollInput").value<QObject *>());
+}
+uint64_t qs_scroll_user_revision(QSWidget w) { return scrollInput(w)->revision; }
+void qs_scroll_observe_phase(QSWidget w, int enabled) {
+    auto *input = scrollInput(w);
+    input->observing = enabled;
+    if (!enabled) input->events.clear();
+}
+QSScrollPhase qs_scroll_phase(QSWidget w) { return scrollInput(w)->phase; }
+int qs_scroll_next_phase(QSWidget w, QSScrollPhaseEvent *out) {
+    auto &events = scrollInput(w)->events;
+    if (events.empty()) return 0;
+    *out = events.front();
+    events.pop_front();
+    return 1;
+}
+void qs_scroll_animating(QSWidget w, int enabled) { scrollInput(w)->animate(enabled); }
 void qs_scroll_input(QSWidget w, int enabled) {
     auto *input = static_cast<ScrollInput *>(widget(w)->property("qsScrollInput").value<QObject *>());
     input->setEnabled(enabled);

@@ -4,7 +4,7 @@ public struct Animation: Equatable, Sendable {
     private let curve: UnitCurve
     let duration: TimeInterval
     private var delays: [TimeInterval] = []
-    fileprivate var totalDuration: TimeInterval {
+    var totalDuration: TimeInterval {
         delays.reduce(duration) { max(0, $0 + $1) }
     }
 

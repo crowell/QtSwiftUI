@@ -81,6 +81,7 @@ extension View {
     private var bindingID: AnyHashable?
     private var deferredID: AnyHashable?
     private var idAnchor: UnitPoint?
+    private var commandAnimation: Animation?
     private var userRevision: UInt64 = 0
     private var holdsPosition = false
     private var didScrollByUser = false
@@ -89,8 +90,9 @@ extension View {
         direction == .leftToRight ? anchor.x : 1 - anchor.x
     }
 
-    func prepare(widget: UnsafeMutableRawPointer, config: ScrollConfiguration, axes: Axis.Set, direction: LayoutDirection,
+    func prepare(area: ScrollAreaTargets, animation: Animation?, config: ScrollConfiguration, axes: Axis.Set, direction: LayoutDirection,
                  size: CGSize, viewport: QSRect, prior: QSRect) -> CGPoint {
+        let widget = area.widget
         let maximum = CGSize(width: axes.contains(.horizontal) ? max(0, size.width - viewport.width) : 0,
                              height: axes.contains(.vertical) ? max(0, size.height - viewport.height) : 0)
         let shortAnchor = config.anchor(for: .alignment)
@@ -114,7 +116,7 @@ extension View {
             if abs(oldOffset.x - range.width * x) < 1 { next.x = maximum.width * x }
             if abs(oldOffset.y - range.height * anchor.y) < 1 { next.y = maximum.height * anchor.y }
         }
-        if changed || first { holdsPosition = true }
+        if changed || first { holdsPosition = true; commandAnimation = first ? nil : animation }
         else if userMoved || (!resized && oldOffset != offset) { holdsPosition = false }
         if changed || first || (resized && holdsPosition) {
             switch selected?.destination {
@@ -140,14 +142,22 @@ extension View {
         position = selected
         bindingID = id
         range = maximum
-        qs_scroll_set_offset(widget, axes.contains(.horizontal) ? next.x : viewport.x, axes.contains(.vertical) ? next.y : viewport.y)
+        let target = CGPoint(x: axes.contains(.horizontal) ? next.x : viewport.x, y: axes.contains(.vertical) ? next.y : viewport.y)
+        let commanded: Bool
+        switch selected?.destination {
+        case .point, .edge, .x, .y: commanded = changed
+        default: commanded = false
+        }
+        if commanded || target != CGPoint(x: viewport.x, y: viewport.y) {
+            area.motion.move(widget: widget, to: target, animation: changed ? commandAnimation : nil)
+        }
         return shift
     }
 
     func finish(area: ScrollAreaTargets, config: ScrollConfiguration, host: Host) {
         var resolved = false
         if let id = deferredID, let target = area.target(for: id) {
-            area.scroll(to: target.rect, anchor: idAnchor)
+            area.scroll(to: target.rect, anchor: idAnchor, animation: commandAnimation)
             if !target.estimated { deferredID = nil }
             resolved = true
         }
