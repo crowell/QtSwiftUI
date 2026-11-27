@@ -3,6 +3,7 @@ import QtBridge
 import UniformTypeIdentifiers
 
 private extension EnvironmentValues {
+    @Entry var fileDialogCustomizationID: String?
     @Entry var fileDialogMessage: Text?
     @Entry var fileDialogConfirmationLabel: Text?
 }
@@ -40,10 +41,16 @@ private nonisolated struct FileImporter<Source: View>: Primitive {
             if type == .data { return "*" }
             return type.preferredMIMEType?.components(separatedBy: ";").first ?? "*"
         }
+        let key = context.environment.fileDialogCustomizationID.map { "QtSwiftUI.fileDialog." + Data($0.utf8).base64EncodedString() }
         qs_file_import(owner, filters.joined(separator: "\n"), directories, multiple ? 1 : 0,
                        context.environment.fileDialogDirectory?.path,
                        context.environment.fileDialogMessage?.resolvedString(context.environment.locale),
-                       context.environment.fileDialogConfirmationLabel?.resolvedString(context.environment.locale))
+                       context.environment.fileDialogConfirmationLabel?.resolvedString(context.environment.locale),
+                       key, key.flatMap(UserDefaults.standard.string(forKey:))) { key, state in
+            guard let key, let state else { return }
+            UserDefaults.standard.set(String(cString: state), forKey: String(cString: key))
+            UserDefaults.standard.synchronize()
+        }
         return elements
     }
 }
@@ -69,6 +76,10 @@ extension View {
                                          onCancellation: @escaping () -> Void) -> some View {
         FileImporter(source: self, isPresented: isPresented, types: allowedContentTypes, multiple: allowsMultipleSelection,
                      complete: onCompletion, cancel: onCancellation)
+    }
+
+    nonisolated public func fileDialogCustomizationID(_ id: String) -> some View {
+        environment(\.fileDialogCustomizationID, id)
     }
 
     nonisolated public func fileDialogMessage(_ message: Text?) -> some View {

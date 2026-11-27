@@ -39,6 +39,56 @@ final class FileImporterTests: XCTestCase {
         XCTAssertEqual(qs_accessible_element(host.window, "Use artwork", -1, nil), 0)
     }
 
+    @MainActor func testCustomizationIDRemembersTheDirectoryAcrossWindows() async throws {
+        let root = FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString)
+        let initial = root.appendingPathComponent("Default")
+        let visited = root.appendingPathComponent("Stickers")
+        let filename = "sample.png"
+        for folder in [initial, visited] {
+            try FileManager.default.createDirectory(at: folder, withIntermediateDirectories: true)
+            try Data().write(to: folder.appendingPathComponent(filename))
+        }
+        let artwork = UUID().uuidString + "/art"
+        let avatar = UUID().uuidString + "/avatar"
+        defer {
+            try? FileManager.default.removeItem(at: root)
+            for id in [artwork, avatar] {
+                UserDefaults.standard.removeObject(forKey: "QtSwiftUI.fileDialog." + Data(id.utf8).base64EncodedString())
+            }
+        }
+
+        func open(_ id: String, visit: URL? = nil) -> URL? {
+            var shown = true
+            var result: URL?
+            let host = Host(title: "Import") { context in
+                Color.white.fileImporter(isPresented: Binding(get: { shown }, set: { shown = $0 }),
+                                         allowedContentTypes: [.png]) { result = try? $0.get() }
+                    .fileDialogDefaultDirectory(initial).fileDialogCustomizationID(id).resolve(context)
+            }
+            defer { host.close() }
+            host.open(width: 240, height: 160)
+            qs_flush()
+            if let visit {
+                XCTAssertEqual(qs_enter(host.window, "fileNameEdit", visit.path + "/"), 1)
+                _ = qs_key_return(host.window, "fileNameEdit")
+                qs_flush()
+                XCTAssertTrue(shown)
+                _ = qs_key_escape(host.window)
+            } else {
+                XCTAssertEqual(qs_enter(host.window, "fileNameEdit", filename), 1)
+                _ = qs_key_return(host.window, "fileNameEdit")
+            }
+            qs_flush()
+            XCTAssertFalse(shown)
+            return result
+        }
+        XCTAssertNil(open(artwork, visit: visited))
+        XCTAssertEqual(open(avatar)?.path, initial.appendingPathComponent(filename).path)
+        XCTAssertEqual(open(artwork)?.path, visited.appendingPathComponent(filename).path)
+        try FileManager.default.removeItem(at: visited)
+        XCTAssertEqual(open(artwork)?.path, initial.appendingPathComponent(filename).path)
+    }
+
     @MainActor func testSingleFileURLAndCancellation() async throws {
         let directory = FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString)
         try FileManager.default.createDirectory(at: directory, withIntermediateDirectories: true)

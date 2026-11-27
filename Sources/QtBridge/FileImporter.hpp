@@ -3,6 +3,8 @@
 #include <QDialogButtonBox>
 #include <QFileDialog>
 #include <QFileSystemModel>
+#include <QJsonDocument>
+#include <QJsonObject>
 #include <QMimeDatabase>
 #include <QPushButton>
 
@@ -75,6 +77,27 @@ public:
             }
         }
     }
+    void restoreConfiguration(const char *state, const char *defaultDirectory) {
+        QString folder = QString::fromUtf8(defaultDirectory);
+        if (state) {
+            const auto settings = QJsonDocument::fromJson(QByteArray(state)).object();
+            restoreState(QByteArray::fromBase64(settings.value("layout").toString().toLatin1()));
+            restoreGeometry(QByteArray::fromBase64(settings.value("geometry").toString().toLatin1()));
+            const auto saved = settings.value("directory").toString();
+            if (QDir::isAbsolutePath(saved) && QFileInfo(saved).isDir()) folder = saved;
+        }
+        if (!folder.isEmpty()) setDirectory(folder);
+    }
+
+    QByteArray configuration() const {
+        const QJsonObject settings{
+            {"directory", directory().absolutePath()},
+            {"layout", QString::fromLatin1(saveState().toBase64())},
+            {"geometry", QString::fromLatin1(saveGeometry().toBase64())}
+        };
+        return QJsonDocument(settings).toJson(QJsonDocument::Compact);
+    }
+
     void accept() override {
         for (const auto &url : selectedUrls()) {
             if (!url.isLocalFile()) return;
