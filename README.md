@@ -40,6 +40,10 @@ Serein’s Phone Number page reads two privacy preferences from the linked phone
 
 ![Phone number privacy settings from the linked Serein desktop in Ubuntu](Screenshots/serein-linux-phone-number-privacy.png)
 
+In Conversation Details, the desktop's disappearing-message menu is positioned from the trigger and selected row using SwiftUI anchor preferences. Reopening the menu aligned the selected five-minute row with the trigger. The test recipient decrypted the timer update and the [next message](Screenshots/serein-linux-disappearing-message.png) and verified the same duration and version on both.
+
+![Serein’s disappearing-message menu in Conversation Details on Ubuntu](Screenshots/serein-linux-conversation-timer-menu.png)
+
 In Settings → Privacy, the Docker check changed the default timer for new chats from Off to two minutes. Reopening Privacy showed the [saved duration](Screenshots/serein-linux-privacy-default-timer.png). Reopening Custom Time restored both menu selections.
 
 ![Setting a custom disappearing-message timer in the Serein Ubuntu release](Screenshots/serein-linux-custom-disappearing-timer.png)
@@ -384,7 +388,7 @@ For a client package alongside this checkout, add `.package(path: "../QtSwiftUI"
 
 ## Compatibility and verification
 
-The target is source compatibility with Apple's public SwiftUI APIs. The implementation is partial. The conversation and preferences windows are standalone examples. Serein's complete SignalUI target and app still require more SwiftUI APIs and Linux replacements for direct Apple framework dependencies, including CoreText and AppKit.
+The target is source compatibility with Apple's public SwiftUI APIs. The implementation is partial. The conversation and preferences windows are standalone examples. Serein’s Linux port builds the production SignalUI target and SignalSafe executable with QtSwiftUI and separate Linux implementations for desktop integration.
 
 | Area | Exercised behavior |
 | --- | --- |
@@ -413,7 +417,7 @@ The target is source compatibility with Apple's public SwiftUI APIs. The impleme
 
 `./Scripts/check-apple.sh ../serein` type-checks the example source with Apple's SwiftUI module on a Mac with Xcode. `./Scripts/check-api.sh` extracts public symbol graphs from Xcode and the Linux image. Pass `--by-kind` to see coverage for classes, structs, protocols and each member kind, or `--missing` to list individual missing declaration paths. The inventory groups declarations by symbol kind and path, counts overload spellings separately, and excludes underscored and synthesized members. A shared name alone cannot establish matching signatures, constraints, availability or behavior.
 
-The inventory against the macOS 27.2 SDK found 1,846 shared declaration paths out of 7,627 and 1,300 identical declaration spellings out of 8,735. Of the 5,781 absent paths, 715 are nominal type or protocol declarations (6 classes, 584 structs, 48 enums and 77 protocols). The examples exercise a smaller set at runtime. Navigation, window state restoration, broader animation support, text shaping parity, gestures and platform integration remain substantial gaps. Font metrics, control appearance and several layout behaviors differ from Apple's implementation.
+The inventory against the macOS 27.2 SDK found 1,848 shared declaration paths out of 7,627 and 1,307 identical declaration spellings out of 8,735. Of the 5,779 absent paths, 715 are nominal type or protocol declarations (6 classes, 584 structs, 48 enums and 77 protocols). The examples exercise a smaller set at runtime. Navigation, window state restoration, broader animation support, text shaping parity, gestures and platform integration remain substantial gaps. Font metrics, control appearance and several layout behaviors differ from Apple's implementation.
 
 After capturing the Linux examples, run `./Scripts/compare-artwork.sh ../serein` on macOS to render both illustrations with Apple's `ImageRenderer`. At a threshold of 8/255 in any RGB channel, 101 of 119,680 account artwork pixels (0.084%) and 91 of 49,928 key transparency pixels (0.182%) differed. The mean absolute channel differences were 0.104/255 and 0.095/255 respectively. Both reference images are saved in `.build/artwork/`.
 
