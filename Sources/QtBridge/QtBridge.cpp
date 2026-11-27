@@ -677,6 +677,7 @@ struct QSWindow final : QWidget {
     QSDragHandler dragHandler = nullptr;
     QSKeyHandler keyHandler = nullptr;
     bool pending = false, framePending = false, snapshot = false;
+    bool dragsByBackground = false;
     struct Placement { QPointF anchor; QPointer<QSWindow> previous; };
     std::optional<Placement> initialPlacement;
     WindowShortcuts shortcuts;
@@ -911,6 +912,15 @@ struct QSWindow final : QWidget {
         item->setProperty("swiftId", id);
         item->installEventFilter(this);
     }
+    void mousePressEvent(QMouseEvent *mouse) override {
+        // Interactive children accept the press before it reaches the window.
+        if (dragsByBackground && mouse->button() == Qt::LeftButton &&
+            windowHandle() && windowHandle()->startSystemMove()) {
+            mouse->accept();
+            return;
+        }
+        QWidget::mousePressEvent(mouse);
+    }
     void keyPressEvent(QKeyEvent *key) override {
         if (key->key() == Qt::Key_Escape && key->modifiers() == Qt::NoModifier) {
             QWidget *scope = focusWidget();
@@ -1044,6 +1054,7 @@ void qs_position_window(QSWindow *window, double x, double y, QSWindow *previous
     }
     window->move(origin);
 }
+void qs_window_background_drag(QSWindow *window, int enabled) { window->dragsByBackground = enabled != 0; }
 void qs_window_raise(QSWindow *window) {
     if (window->isMinimized()) window->showNormal(); else window->show();
     window->raise();

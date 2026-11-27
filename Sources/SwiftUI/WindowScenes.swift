@@ -11,6 +11,7 @@ import QtBridge
     var size: CGSize?
     var position: UnitPoint?
     var appDefaults: UserDefaults?
+    var backgroundDrag = WindowInteractionBehavior.automatic
     var level = WindowLevel.automatic
     var resizability = WindowResizability.automatic
     let content: (Context) -> [Element]
@@ -149,9 +150,9 @@ public nonisolated struct Window<Content: View>: SceneCollection {
     }
 }
 
-private nonisolated struct WindowGeometryScene<S: Scene, Value>: SceneCollection {
+nonisolated struct WindowPropertyScene<S: Scene, Value>: SceneCollection {
     let scene: S
-    let key: WritableKeyPath<WindowScene, Value?>
+    let key: WritableKeyPath<WindowScene, Value>
     let value: Value
     var body: Never { fatalError("Primitive scene") }
     @MainActor var windows: [WindowScene] {
@@ -164,9 +165,9 @@ private nonisolated struct WindowGeometryScene<S: Scene, Value>: SceneCollection
 }
 extension Scene {
     nonisolated public func defaultPosition(_ position: UnitPoint) -> some Scene {
-        WindowGeometryScene(scene: self, key: \.position, value: position)
+        WindowPropertyScene(scene: self, key: \.position, value: position)
     }
-    nonisolated public func defaultSize(_ size: CGSize) -> some Scene { WindowGeometryScene(scene: self, key: \.size, value: size) }
+    nonisolated public func defaultSize(_ size: CGSize) -> some Scene { WindowPropertyScene(scene: self, key: \.size, value: size) }
     nonisolated public func defaultSize(width: CGFloat, height: CGFloat) -> some Scene {
         defaultSize(CGSize(width: width, height: height))
     }
@@ -275,6 +276,7 @@ extension EnvironmentValues {
             }
             let current = self.scenes(context.environment)
             guard current.indices.contains(index) else { return [] }
+            qs_window_background_drag(source.host.window, current[index].backgroundDrag.enabled == true ? 1 : 0)
             qs_set_window_level(source.host.window, current[index].level.native)
             source.host.resizability = current[index].resizability
             return current[index].windowContent(in: context)

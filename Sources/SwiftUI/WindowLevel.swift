@@ -18,21 +18,18 @@ public struct WindowLevel: Sendable, Hashable {
     }
 }
 
-private nonisolated struct LeveledScene<Content: Scene>: SceneCollection {
-    let content: Content
-    let level: WindowLevel
-    var body: Never { fatalError("Primitive scene modifier") }
-    @MainActor var windows: [WindowScene] {
-        content.sceneWindows.map { window in
-            var result = window
-            result.level = level
-            return result
-        }
-    }
+public struct WindowInteractionBehavior: Sendable {
+    let enabled: Bool?
+    public static let automatic = Self(enabled: nil)
+    public static let enabled = Self(enabled: true)
+    public static let disabled = Self(enabled: false)
 }
 
 extension Scene {
     nonisolated public func windowLevel(_ level: WindowLevel) -> some Scene {
-        LeveledScene(content: self, level: level)
+        WindowPropertyScene(scene: self, key: \.level, value: level)
+    }
+    nonisolated public func windowBackgroundDragBehavior(_ behavior: WindowInteractionBehavior) -> some Scene {
+        WindowPropertyScene(scene: self, key: \.backgroundDrag, value: behavior)
     }
 }
