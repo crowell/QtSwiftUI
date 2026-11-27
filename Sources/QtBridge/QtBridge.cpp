@@ -739,7 +739,7 @@ struct QSWindow final : QWidget {
     }
     bool redirectPointer(QWidget *source, QMouseEvent *mouse) {
         const bool press = mouse->type() == QEvent::MouseButtonPress || mouse->type() == QEvent::MouseButtonDblClick;
-        QWidget *hit = nullptr;
+        QPointer<QWidget> hit;
         if (press || (mouse->type() == QEvent::MouseMove && !mouse->buttons())) {
             if (!dynamic_cast<ShapeWidget *>(source) && !dynamic_cast<GroupWidget *>(source)) return false;
             const auto at = mapFromGlobal(mouse->globalPosition().toPoint());
@@ -759,6 +759,16 @@ struct QSWindow final : QWidget {
         }
         if (hit == source) return false;
         if (hit) {
+            if (press && mouse->button() == Qt::LeftButton) {
+                // Direct widget delivery bypasses Qt's platform-window focus selection.
+                for (auto *item = hit.data(); item && item != this; item = item->parentWidget()) {
+                    if (item->isEnabled() && (item->focusPolicy() & Qt::ClickFocus)) {
+                        item->setFocus(Qt::MouseFocusReason);
+                        if (!hit) return true;
+                        break;
+                    }
+                }
+            }
             QMouseEvent forwarded(mouse->type(), hit->mapFromGlobal(mouse->globalPosition()), mouse->globalPosition(),
                                   mouse->button(), mouse->buttons(), mouse->modifiers(), mouse->pointingDevice());
             forwarded.setTimestamp(mouse->timestamp());

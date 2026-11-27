@@ -14,6 +14,25 @@ final class EditorSelectionTests: XCTestCase {
         XCTAssertEqual(TextSelection(ranges: ranges).affinity, .automatic)
     }
 
+    @MainActor func testClickThroughStrokeTransfersTextInputToTheEditor() async {
+        var subject = "", message = ""
+        let host = Host(title: "Feedback") { context in
+            VStack(spacing: 0) {
+                TextField("Subject", text: Binding(get: { subject }, set: { subject = $0 })).frame(height: 40)
+                TextEditor(text: Binding(get: { message }, set: { message = $0 }))
+                    .overlay { RoundedRectangle(cornerRadius: 12).strokeBorder(.gray, lineWidth: 1) }
+            }.resolve(context)
+        }
+        defer { host.close() }
+        host.open(width: 240, height: 140)
+        _ = qs_click_point(host.window, 50, 20)
+        XCTAssertEqual(qs_commit_text(host.window, "A", 1), 1)
+        _ = qs_click_point(host.window, 50, 70)
+        XCTAssertEqual(qs_commit_text(host.window, "B", 1), 1)
+        XCTAssertEqual(subject, "A")
+        XCTAssertEqual(message, "B")
+    }
+
     @MainActor func testUnicodeRangeMovesBothWaysAndReplacesSelectedText() async {
         enum Control: CaseIterable { case editor, field, multilineField }
         for control in Control.allCases {
