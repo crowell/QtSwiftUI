@@ -77,5 +77,4 @@ public:
         verticalScrollBar()->setValue(scroll);
     }
 
-    QByteArray utf8;
 };

@@ -6,6 +6,11 @@ template<class Editor>
 class SubmitKeyEditor : public Editor {
 public:
     using Editor::Editor;
+    const unsigned char *utf8Value(const QString &text, size_t *count) {
+        utf8 = text.toUtf8();
+        *count = size_t(utf8.size());
+        return reinterpret_cast<const unsigned char *>(utf8.constData());
+    }
     QVariant inputMethodQuery(Qt::InputMethodQuery query) const override {
         if (query == Qt::ImEnterKeyType) {
             const auto key = this->property("qsEnterKey");
@@ -13,4 +18,6 @@ public:
         }
         return Editor::inputMethodQuery(query);
     }
+private:
+    QByteArray utf8;
 };

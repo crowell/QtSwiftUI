@@ -15,20 +15,26 @@ extension View {
         let value = text.wrappedValue
         value.withCString { qs_editor_text(widget, $0, value.utf8.count) }
     }
-    func updateText(_ editor: UnsafeMutableRawPointer) {
-        var count = 0
-        let bytes = qs_editor_value(editor, &count)
-        let value = String(decoding: UnsafeBufferPointer(start: bytes, count: count), as: UTF8.self)
-        if value != text.wrappedValue {
-            text.wrappedValue = value
-            if value != text.wrappedValue { synchronize(editor) }
+    let updateText = { [weak host = context.host] (editor: UnsafeMutableRawPointer) -> String in
+        let value = nativeEditorText(editor)
+        guard value != text.wrappedValue else { return value }
+        text.wrappedValue = value
+        let accepted = text.wrappedValue
+        if accepted != value {
+            if kind == QSMultilineField {
+                // A TextField can read a parent's snapshot until the next render.
+                host?.update()
+            } else {
+                synchronize(editor)
+                return accepted
+            }
         }
+        return value
     }
     let widget = context.widget(kind, cursorChanged: { editor in
         guard let selection else { return }
-        updateText(editor)
-        selection.changed(editor)
-    }, tap: updateText)
+        selection.changed(editor, text: updateText(editor))
+    }, tap: { _ = updateText($0) })
     synchronize(widget)
     selection?.apply(to: widget)
     return widget

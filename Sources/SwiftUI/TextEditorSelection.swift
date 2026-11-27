@@ -38,6 +38,12 @@ extension View {
     }
 }
 
+@MainActor func nativeEditorText(_ widget: UnsafeMutableRawPointer) -> String {
+    var count = 0
+    let bytes = qs_editor_value(widget, &count)
+    return String(decoding: UnsafeBufferPointer(start: bytes, count: count), as: UTF8.self)
+}
+
 @MainActor struct EditorSelection {
     let binding: Binding<TextSelection?>
     let text: Binding<String>
@@ -49,8 +55,8 @@ extension View {
         ranges.withUnsafeBufferPointer { qs_editor_select(widget, $0.baseAddress, $0.count, affinity == .upstream ? 1 : 0) }
     }
 
-    func changed(_ widget: UnsafeMutableRawPointer) {
-        let text = text.wrappedValue
+    // The native cursor indexes the edited string. A binding can still read the previous render.
+    func changed(_ widget: UnsafeMutableRawPointer, text: String) {
         let range = qs_editor_selection(widget)
         guard range.start >= 0, range.end >= range.start, Int(range.end) <= text.utf16.count else { return }
         let start = String.Index(utf16Offset: Int(range.start), in: text)

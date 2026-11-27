@@ -221,7 +221,7 @@ public struct Toggle<Label: View>: Primitive {
     }
 }
 @MainActor private func field(_ title: String, promptColor: String, text: Binding<String>, secure: Bool, selection: EditorSelection?, in context: Context) -> Element {
-    let widget = context.widget(secure ? QSSecureEdit : QSEdit, cursorChanged: { selection?.changed($0) },
+    let widget = context.widget(secure ? QSSecureEdit : QSEdit, cursorChanged: { selection?.changed($0, text: nativeEditorText($0)) },
                                 action: { text.wrappedValue = $0 })
     qs_text(widget, text.wrappedValue)
     selection?.apply(to: widget)

@@ -1776,10 +1776,10 @@ void qs_editor_text(QSWidget w, const char *utf8, size_t count) {
     static_cast<PlainTextEditor *>(w)->applyText(QString::fromUtf8(utf8, qsizetype(count)));
 }
 const unsigned char *qs_editor_value(QSWidget w, size_t *count) {
+    if (auto *line = dynamic_cast<SubmitKeyEditor<QLineEdit> *>(widget(w)))
+        return line->utf8Value(line->text(), count);
     auto *editor = static_cast<PlainTextEditor *>(w);
-    editor->utf8 = editor->value().toUtf8();
-    *count = size_t(editor->utf8.size());
-    return reinterpret_cast<const unsigned char *>(editor->utf8.constData());
+    return editor->utf8Value(editor->value(), count);
 }
 void qs_scroll_background(QSWidget w, int visible, int dark) {
     auto *area = static_cast<QAbstractScrollArea *>(w);

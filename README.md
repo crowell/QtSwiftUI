@@ -34,7 +34,7 @@ In the chat color picker, choosing crimson updates the sample bubbles. The Docke
 
 ![Editing a custom gradient in the running Serein Linux release](Screenshots/serein-linux-custom-chat-color.png)
 
-With another X11 app focused, the desktop received “The ferry leaves Harbor Pier at nine.” Returning to Serein sent a read sync for that message to the linked phone. Opening conversation search focused the field immediately. Typing “Harbor Pier” found the incoming message.
+With another X11 app focused, the desktop received “The ferry leaves Harbor Pier at nine.” Returning to Serein sent a read sync for that message to the linked phone. Opening conversation search focused the field immediately. The Docker check typed “Harbor Pier” into both conversation and global search, copied the query back from each field, and verified that each showed the matching message row. Both single-line and vertical `TextField` selections follow the native caret when the enclosing view supplies a new text binding on each render.
 
 ![A matching message in the running Serein conversation search](Screenshots/serein-linux-conversation-search.png)
 
