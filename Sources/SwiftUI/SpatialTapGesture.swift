@@ -17,7 +17,7 @@ nonisolated public struct SpatialTapGesture: Gesture, NativeGesture {
         self.init(count: count, coordinateSpace: coordinateSpace.coordinateSpace)
         inputs = inputKinds
     }
-    @MainActor func recognizer(changed: @escaping (Any) -> Void, ended: @escaping (Any) -> Void) -> Recognizer {
+    @MainActor func recognizer(in context: Context, changed: @escaping (Any) -> Void, ended: @escaping (Any) -> Void) -> Recognizer {
         Recognizer(inputs: inputs, taps: count, spatialTap: { context, widget in
             let transform = context.windowToSpace(coordinateSpace, widget: widget)
             let point = qs_tap_location(widget)

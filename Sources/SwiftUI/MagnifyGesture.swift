@@ -20,7 +20,7 @@ nonisolated public struct MagnifyGesture: Gesture, NativeGesture {
         inputs = inputKinds
     }
 
-    @MainActor func recognizer(changed: @escaping (Any) -> Void, ended: @escaping (Any) -> Void) -> Recognizer {
+    @MainActor func recognizer(in context: Context, changed: @escaping (Any) -> Void, ended: @escaping (Any) -> Void) -> Recognizer {
         Recognizer(inputs: inputs, magnifyDelta: max(0, minimumScaleDelta), magnify: { sample in
             let value = Value(time: Date(timeIntervalSinceReferenceDate: sample.time), magnification: sample.factor,
                               velocity: sample.velocity, startAnchor: UnitPoint(x: sample.anchorX, y: sample.anchorY),
@@ -35,7 +35,7 @@ nonisolated public struct MagnificationGesture: Gesture, NativeGesture {
     public typealias Value = CGFloat
     public var minimumScaleDelta: CGFloat
     public init(minimumScaleDelta: CGFloat = 0.01) { self.minimumScaleDelta = minimumScaleDelta }
-    @MainActor func recognizer(changed: @escaping (Any) -> Void, ended: @escaping (Any) -> Void) -> Recognizer {
+    @MainActor func recognizer(in context: Context, changed: @escaping (Any) -> Void, ended: @escaping (Any) -> Void) -> Recognizer {
         Recognizer(magnifyDelta: max(0, minimumScaleDelta), magnify: { sample in
             let value = CGFloat(sample.factor)
             if sample.ended != 0 { ended(value) } else { changed(value) }

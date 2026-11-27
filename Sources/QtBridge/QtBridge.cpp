@@ -1496,10 +1496,14 @@ QSWidget qs_create(QSWindow *window, QSWidget parent, QSKind kind, int id) {
     case QSPopover:
         return new NativePopover(container->window(), [window, id] { window->event(window->context, id, QSActivate, ""); });
     case QSLabel: {
-        return new PlainLabel(container);
+        auto *label = new PlainLabel(container);
+        label->installEventFilter(window);
+        return label;
     }
     case QSAttributedLabel: {
         auto *label = new AttributedLabel(container);
+        // QTextBrowser consumes pointer input on its viewport before it reaches the label.
+        label->viewport()->installEventFilter(window);
         QObject::connect(label, &QTextBrowser::anchorClicked, window, [=](const QUrl &url) {
             window->event(window->context, id, QSActivate, url.toEncoded().constData());
         });

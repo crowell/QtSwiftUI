@@ -39,7 +39,6 @@ struct PointerDrag {
         if (release) tracking = false;
         if (!recognized && std::hypot(distance.x(), distance.y()) < threshold) return {};
         if (!press && !release && !moved && recognized) return {};
-        if (release && !recognized) return {};
         recognized = true;
         return QSDragSample{startTime + double(tick - startTick) / 1000.0, start.x(), start.y(),
                             point.x(), point.y(), velocity.x(), velocity.y(), int(release)};

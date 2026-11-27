@@ -34,7 +34,7 @@ public struct DragGesture: Gesture, NativeGesture {
         self.init(minimumDistance: minimumDistance, coordinateSpace: coordinateSpace.coordinateSpace)
         inputs = inputKinds
     }
-    func recognizer(changed: @escaping (Any) -> Void, ended: @escaping (Any) -> Void) -> Recognizer {
+    func recognizer(in context: Context, changed: @escaping (Any) -> Void, ended: @escaping (Any) -> Void) -> Recognizer {
         Recognizer(inputs: inputs, dragDistance: max(0, minimumDistance), drag: { sample, context, widget in
             let value = Value(sample: sample, transform: context.windowToSpace(coordinateSpace, widget: widget))
             if sample.ended != 0 { ended(value) } else { changed(value) }
@@ -53,10 +53,24 @@ nonisolated public struct _ChangedGesture<Content: Gesture>: Gesture, NativeGest
     public typealias Value = Content.Value
     fileprivate let content: Content
     fileprivate let action: (Value) -> Void
-    @MainActor func recognizer(changed: @escaping (Any) -> Void, ended: @escaping (Any) -> Void) -> Recognizer {
-        content.resolve(changed: { value in
-            if let typed = value as? Value { action(typed) }
+    @MainActor func recognizer(in context: Context, changed: @escaping (Any) -> Void, ended: @escaping (Any) -> Void) -> Recognizer {
+        let path = context.path
+        context.host.liveStorage.insert(path)
+        let history = context.host.storage[path] as? GestureHistory<Value> ?? GestureHistory()
+        context.host.storage[path] = history
+        var recognizer = content.resolve(in: context, changed: { value in
+            if let typed = value as? Value, history.last != .some(typed) {
+                history.last = .some(typed)
+                action(typed)
+            }
             changed(value)
         }, ended: ended)
+        let reset = recognizer.reset
+        recognizer.reset = { history.last = nil; reset?() }
+        return recognizer
     }
+}
+
+private final class GestureHistory<Value> {
+    var last: Value?
 }

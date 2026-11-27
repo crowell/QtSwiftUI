@@ -66,8 +66,8 @@ nonisolated public struct GestureStateGesture<Base: Gesture, State>: Gesture, Na
         self.body = body
     }
 
-    @MainActor func recognizer(changed: @escaping (Any) -> Void, ended: @escaping (Any) -> Void) -> Recognizer {
-        var result = base.resolve(changed: { value in
+    @MainActor func recognizer(in context: Context, changed: @escaping (Any) -> Void, ended: @escaping (Any) -> Void) -> Recognizer {
+        var result = base.resolve(in: context, changed: { value in
             if let typed = value as? Value { state.change { body(typed, &$0, &$1) } }
             changed(value)
         }, ended: ended)
