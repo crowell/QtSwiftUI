@@ -10,7 +10,7 @@ extension Never: Gesture {
     public typealias Value = Never
 }
 
-public struct GestureMask: OptionSet, Sendable {
+@frozen public struct GestureMask: OptionSet {
     public let rawValue: UInt32
     public init(rawValue: UInt32) { self.rawValue = rawValue }
     public static let none: Self = []
@@ -18,6 +18,8 @@ public struct GestureMask: OptionSet, Sendable {
     public static let subviews = Self(rawValue: 2)
     public static let all: Self = [.gesture, .subviews]
 }
+
+extension GestureMask: Sendable {}
 
 public struct GestureInputKinds: OptionSet, Sendable {
     public let rawValue: Int8
@@ -103,13 +105,28 @@ nonisolated public struct _EndedGesture<Content: Gesture>: Gesture, NativeGestur
 
 extension View {
     nonisolated public func gesture<T: Gesture>(_ gesture: T, including mask: GestureMask = .all) -> some View {
-        GestureAttachment(content: self, gesture: gesture, mask: mask, simultaneous: false)
+        GestureAttachment(content: self, gesture: gesture, mask: mask, priority: QSNormalGesture)
+    }
+    nonisolated public func highPriorityGesture<T: Gesture>(_ gesture: T, including mask: GestureMask = .all) -> some View {
+        GestureAttachment(content: self, gesture: gesture, mask: mask, priority: QSHighPriorityGesture)
+    }
+    nonisolated public func highPriorityGesture<T: Gesture>(_ gesture: T, isEnabled: Bool) -> some View {
+        highPriorityGesture(gesture, including: isEnabled ? .all : .subviews)
     }
     nonisolated public func simultaneousGesture<T: Gesture>(_ gesture: T, including mask: GestureMask = .all) -> some View {
-        GestureAttachment(content: self, gesture: gesture, mask: mask, simultaneous: true)
+        GestureAttachment(content: self, gesture: gesture, mask: mask, priority: QSSimultaneousGesture)
     }
     nonisolated public func simultaneousGesture<T: Gesture>(_ gesture: T, isEnabled: Bool) -> some View {
         simultaneousGesture(gesture, including: isEnabled ? .all : .subviews)
+    }
+    nonisolated public func gesture<T: Gesture>(_ gesture: T, name: String, isEnabled: Bool = true) -> some View {
+        GestureAttachment(content: self, gesture: gesture, mask: isEnabled ? .all : .subviews, priority: QSNormalGesture, name: name)
+    }
+    nonisolated public func highPriorityGesture<T: Gesture>(_ gesture: T, name: String, isEnabled: Bool = true) -> some View {
+        GestureAttachment(content: self, gesture: gesture, mask: isEnabled ? .all : .subviews, priority: QSHighPriorityGesture, name: name)
+    }
+    nonisolated public func simultaneousGesture<T: Gesture>(_ gesture: T, name: String, isEnabled: Bool = true) -> some View {
+        GestureAttachment(content: self, gesture: gesture, mask: isEnabled ? .all : .subviews, priority: QSSimultaneousGesture, name: name)
     }
     nonisolated public func gesture<T: Gesture>(_ gesture: T, isEnabled: Bool) -> some View {
         self.gesture(gesture, including: isEnabled ? .all : .subviews)
@@ -120,7 +137,8 @@ private nonisolated struct GestureAttachment<Content: View, T: Gesture>: Primiti
     let content: Content
     let gesture: T
     let mask: GestureMask
-    let simultaneous: Bool
+    let priority: QSGesturePriority
+    var name: String?
 
     @MainActor func elements(in context: Context) -> [Element] { apply(to: content, in: context) }
     @MainActor func subviews(in context: Context) -> [Subview] {
@@ -130,7 +148,7 @@ private nonisolated struct GestureAttachment<Content: View, T: Gesture>: Primiti
     }
 
     @MainActor private func apply(to view: any View, in ctx: Context) -> [Element] {
-        let inner = ctx.with(\.gesturesEnabled, ctx.environment.gesturesEnabled && mask.contains(.subviews))
+        let inner = ctx.with(\.gesturesEnabled, ctx.environment.gesturesEnabled && (priority == QSHighPriorityGesture || mask.contains(.subviews)))
         let enabled = ctx.environment.isEnabled && ctx.environment.gesturesEnabled && mask.contains(.gesture)
         let recognizer = enabled ? gesture.resolve(in: ctx, changed: { _ in }, ended: { _ in }) : nil
         let reset = recognizer?.reset
@@ -145,7 +163,7 @@ private nonisolated struct GestureAttachment<Content: View, T: Gesture>: Primiti
                                } }, cancelGesture: reset,
                                action: { _ in recognizer?.ended(); reset?() })
         qs_group_gesture(group, Int32(clamping: recognizer?.taps ?? 0), recognizer?.movesWindow == true ? 1 : 0,
-                         simultaneous ? 1 : 0, recognizer?.dragDistance ?? -1, recognizer?.magnifyDelta ?? -1, Int32(recognizer?.inputs.rawValue ?? 0), recognizer?.modifiers.rawValue ?? 0)
+                         priority, recognizer?.dragDistance ?? -1, recognizer?.magnifyDelta ?? -1, Int32(recognizer?.inputs.rawValue ?? 0), recognizer?.modifiers.rawValue ?? 0, name)
         return inner.children(of: view, inside: group)
     }
 }

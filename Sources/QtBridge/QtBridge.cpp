@@ -11,6 +11,8 @@
 #include "CanvasBlur.hpp"
 #include "MaterialBackdrop.hpp"
 #include "PointerDrag.hpp"
+#include "DeferredPointer.hpp"
+#include <utility>
 #include "Magnification.hpp"
 #include "KeyboardModifiers.hpp"
 #include "NativeMenu.hpp"
@@ -147,7 +149,10 @@ public:
     bool sizedToContent = false;
     QRect hitBounds() const { return sizedToContent ? rect() : layoutRect; }
     bool exposeChildren = true, combineChildren = false;
-    bool windowDrag = false, trackingDrag = false, simultaneous = false;
+    bool windowDrag = false, trackingDrag = false;
+    QSGesturePriority priority = QSNormalGesture;
+    bool hasMouseGesture() const { return tapCount > 0 || windowDrag || pointerDrag.threshold >= 0; }
+    std::unique_ptr<DeferredPointer> priorityPointer;
     QPointF dragOrigin;
     PointerDrag pointerDrag;
     Magnification pinch;
@@ -817,6 +822,118 @@ struct QSWindow final : QWidget {
         return true;
     }
 
+    DeferredPointer::Scopes skippedPointers;
+    DeferredPointer &deferredFor(GroupWidget *group) {
+        if (!group->priorityPointer) {
+            group->priorityPointer = std::make_unique<DeferredPointer>();
+            auto &timer = group->priorityPointer->timeout;
+            timer.setSingleShot(true);
+            QObject::connect(&timer, &QTimer::timeout, group, [this, group] { sendDeferredPointer(group, false); });
+        }
+        return *group->priorityPointer;
+    }
+
+    void sendDeferredPointer(GroupWidget *group, bool simultaneousWon) {
+        auto &pending = *group->priorityPointer;
+        auto target = pending.target;
+        auto samples = std::exchange(pending.samples, {});
+        DeferredPointer::Dispatch restoring(this, skippedPointers);
+        skippedPointers = pending.skipped;
+        skippedPointers.append(group);
+        if (simultaneousWon) {
+            // The simultaneous gesture shares the sequence with its content.
+            for (auto *ancestor = group->parentWidget(); ancestor && ancestor != this; ancestor = ancestor->parentWidget()) {
+                auto *scope = dynamic_cast<GroupWidget *>(ancestor);
+                if (scope && scope->priority == QSHighPriorityGesture) skippedPointers.append(scope);
+            }
+        } else {
+            pending.clear();
+            group->cancelPointer();
+        }
+        for (const auto &sample : samples) {
+            if (!target || !target->isEnabled() || !target->isVisible()) break;
+            sample.send(target);
+        }
+    }
+
+    bool priorityPointerEvent(GroupWidget *group, QWidget *target, QMouseEvent *mouse) {
+        QPointer<GroupWidget> alive = group;
+        auto &pending = deferredFor(group);
+        const auto type = mouse->type();
+        const bool press = type == QEvent::MouseButtonPress || type == QEvent::MouseButtonDblClick;
+        const bool release = type == QEvent::MouseButtonRelease;
+        if (mouse->button() != Qt::LeftButton && !(type == QEvent::MouseMove && (mouse->buttons() & Qt::LeftButton))) return false;
+        const auto point = group->mapFromGlobal(mouse->globalPosition());
+        const bool inside = group->hitBounds().contains(point.toPoint());
+        const bool moved = (point - group->pressPosition).manhattanLength() > QApplication::startDragDistance();
+        if (press && pending.timeout.isActive()) {
+            const auto tick = mouse->timestamp() ? mouse->timestamp() : Magnification::now();
+            if (moved || tick - group->lastTapTick > quint64(QApplication::doubleClickInterval()) || pending.target != target) {
+                sendDeferredPointer(group, false);
+                if (!alive) return true;
+            }
+            pending.timeout.stop();
+        }
+        if (press ? !inside : pending.samples.empty() && !pending.claimed) return false;
+        if (pending.samples.empty() && !pending.claimed) pending.skipped = skippedPointers;
+        if (!pending.claimed || group->priority == QSSimultaneousGesture) pending.remember(target, *mouse);
+        const bool wasTapping = group->trackingTap;
+        const bool handled = recognize(group, mouse);
+        if (!alive) return true;
+        if (!handled && !(type == QEvent::MouseMove && group->tapCount && wasTapping)) {
+            if (press) pending.clear();
+            else sendDeferredPointer(group, false);
+            return !press;
+        }
+
+        if (group->tapCount) {
+            if (release && wasTapping && inside && !moved) {
+                if (group->consecutiveTaps) {
+                    pending.timeout.start(QApplication::doubleClickInterval());
+                } else {
+                    if (group->priority == QSSimultaneousGesture) sendDeferredPointer(group, true);
+                    if (alive) pending.clear();
+                }
+            } else if (!group->trackingTap) sendDeferredPointer(group, false);
+        } else if (group->pointerDrag.recognized || group->trackingDrag || pending.claimed) {
+            pending.claimed = !release;
+            if (group->priority == QSSimultaneousGesture) sendDeferredPointer(group, true);
+            else pending.samples.clear();
+            if (release && alive) pending.clear();
+        } else if (release) sendDeferredPointer(group, false);
+        return true;
+    }
+
+    bool routePriorityPointer(QWidget *target, QMouseEvent *mouse) {
+        if (mouse->button() != Qt::LeftButton && !(mouse->type() == QEvent::MouseMove && (mouse->buttons() & Qt::LeftButton))) return false;
+        QList<QPointer<GroupWidget>> scopes;
+        QPointer<GroupWidget> outerHigh = nullptr;
+        for (auto *item = target; item && item != this; item = item->parentWidget()) {
+            auto *scope = dynamic_cast<GroupWidget *>(item);
+            if (!scope || scope->priority == QSNormalGesture || !scope->hasMouseGesture()
+                || !scope->isEnabled() || skippedPointers.contains(scope)) continue;
+            scopes.prepend(scope);
+            if (scope->priority == QSHighPriorityGesture) outerHigh = scope;
+        }
+        if (!outerHigh) return false;
+        // Outer simultaneous observers participate alongside the entire subtree.
+        // An inner simultaneous attachment can recognize with its own control
+        // before an enclosing exclusive recognizer is allowed to take the stream.
+        for (const auto &scope : scopes) {
+            if (!scope || scope->priority != QSSimultaneousGesture) continue;
+            if (scope->isAncestorOf(outerHigh)) recognize(scope, mouse);
+            else if (priorityPointerEvent(scope, target, mouse)) return true;
+            if (!outerHigh) return true;
+            skippedPointers.append(scope.data());
+        }
+        for (const auto &scope : scopes) {
+            if (!scope || scope->priority != QSHighPriorityGesture) continue;
+            if (priorityPointerEvent(scope, target, mouse)) return true;
+            skippedPointers.append(scope.data());
+        }
+        return false;
+    }
+
     void schedule() {
         if (pending || snapshot) return;
         pending = true;
@@ -870,13 +987,8 @@ struct QSWindow final : QWidget {
             event(context, source->property("swiftId").toInt(), QSHoverChanged, input->type() == QEvent::Enter ? "1" : "0");
         }
         auto *group = dynamic_cast<GroupWidget *>(source);
-        if (group && group->pinch.minimum >= 0 && group->isEnabled()) {
-            if (input->type() == QEvent::NativeGesture && nativePinch(group, static_cast<QNativeGestureEvent *>(input))) {
-                input->accept();
-                return true;
-            }
-            if (input->type() == QEvent::Gesture && touchPinch(group, static_cast<QGestureEvent *>(input))) return true;
-        }
+        if ((input->type() == QEvent::NativeGesture || input->type() == QEvent::Gesture) &&
+            routePinch(qobject_cast<QWidget *>(source), input)) return true;
         if (group && group->testAttribute(Qt::WA_Hover) &&
             (input->type() == QEvent::HoverEnter || input->type() == QEvent::HoverMove || input->type() == QEvent::HoverLeave)) {
             std::optional<QPointF> point;
@@ -896,7 +1008,10 @@ struct QSWindow final : QWidget {
                 if (!scope) continue;
                 const bool tracking = scope->trackingTap || scope->trackingDrag || scope->pointerDrag.tracking;
                 if (input->type() == QEvent::UngrabMouse && !tracking) continue;
-                if (parent == source || (scope->simultaneous && tracking)) cancelGesture(scope);
+                if (parent == source || ((scope->priority != QSNormalGesture) && tracking)) {
+                    if (scope->priorityPointer) scope->priorityPointer->clear();
+                    cancelGesture(scope);
+                }
             }
         }
         if (input->type() == QEvent::MouseButtonPress || input->type() == QEvent::MouseButtonDblClick ||
@@ -904,13 +1019,15 @@ struct QSWindow final : QWidget {
             auto *target = qobject_cast<QWidget *>(source);
             auto *mouse = static_cast<QMouseEvent *>(input);
             if (redirectPointer(target, mouse)) return true;
+            DeferredPointer::Dispatch restoring(this, skippedPointers);
+            if (routePriorityPointer(target, mouse)) { input->accept(); return true; }
             // A native control can consume the event before it propagates to its parent.
             for (QWidget *ancestor = target; ancestor && ancestor != this; ancestor = ancestor->parentWidget()) {
                 auto *observer = dynamic_cast<GroupWidget *>(ancestor);
-                if (observer && observer->simultaneous && observer->isEnabled())
+                if (observer && observer->priority == QSSimultaneousGesture && observer->isEnabled() && !skippedPointers.contains(observer))
                     recognize(observer, mouse);
             }
-            if (group && !group->simultaneous && recognize(group, mouse)) {
+            if (group && group->priority == QSNormalGesture && recognize(group, mouse)) {
                 input->accept();
                 return true;
             }
@@ -937,6 +1054,41 @@ struct QSWindow final : QWidget {
             schedule();
         }
         return false;
+    }
+    bool routePinch(QWidget *target, QEvent *input) {
+        QList<QPointer<GroupWidget>> high, ordinary;
+        for (auto *item = target; item && item != this; item = item->parentWidget()) {
+            auto *scope = dynamic_cast<GroupWidget *>(item);
+            if (!scope || scope->pinch.minimum < 0 || !scope->isEnabled()) continue;
+            if (scope->priority == QSHighPriorityGesture) high.prepend(scope);
+            else ordinary.append(scope);
+        }
+        auto *native = input->type() == QEvent::NativeGesture ? static_cast<QNativeGestureEvent *>(input) : nullptr;
+        auto *touch = native ? nullptr : static_cast<QGestureEvent *>(input)->gesture(Qt::PinchGesture);
+        if (!native && !touch) return false;
+        auto deliver = [&](GroupWidget *scope) {
+            return native ? nativePinch(scope, native) : touchPinch(scope, static_cast<QGestureEvent *>(input));
+        };
+        if (high.isEmpty()) {
+            if (ordinary.isEmpty() || ordinary.first() != target || !deliver(ordinary.first())) return false;
+        } else {
+            bool handled = false, claimed = false;
+            const bool begin = native ? native->gestureType() == Qt::BeginNativeGesture : touch->state() == Qt::GestureStarted;
+            for (const auto &scope : high + ordinary) {
+                if (!scope) continue;
+                // On macOS a child that crossed its scale threshold first keeps
+                // receiving updates when a higher-priority gesture later begins.
+                if (claimed && !begin && !scope->pinch.recognized && scope->priority != QSSimultaneousGesture) continue;
+                if (deliver(scope)) {
+                    handled = true;
+                    if (!scope) return true;
+                    if (scope->pinch.recognized && scope->priority != QSSimultaneousGesture) claimed = true;
+                }
+            }
+            if (!handled) return false;
+        }
+        input->accept();
+        return true;
     }
     void magnified(GroupWidget *group, double factor, QPointF local, quint64 tick, bool ended) {
         const auto bounds = group->layoutRect;
@@ -1016,13 +1168,17 @@ struct QSWindow final : QWidget {
             const bool inside = group->hitBounds().contains(point.toPoint());
             const bool tracking = group->pointerDrag.tracking;
             const auto sample = group->pointerDrag.update(*mouse, mapFromGlobal(mouse->globalPosition()), inside);
-            if (sample && dragHandler) dragHandler(context, group->property("swiftId").toInt(), *sample);
+            if (sample && dragHandler) {
+                QPointer<GroupWidget> alive = group;
+                dragHandler(context, group->property("swiftId").toInt(), *sample);
+                if (!alive) return true;
+            }
             // A press below the drag threshold can still complete an enclosing tap.
             // Once the drag wins, discard that tap for the remainder of the sequence.
-            if (tracking || group->pointerDrag.tracking) {
+            if (group->priority == QSNormalGesture && (tracking || group->pointerDrag.tracking)) {
                 for (auto *parent = group->parentWidget(); parent && parent != this; parent = parent->parentWidget()) {
                     auto *tap = dynamic_cast<GroupWidget *>(parent);
-                    if (!tap || !tap->tapCount || tap->simultaneous) continue;
+                    if (!tap || !tap->tapCount || tap->priority != QSNormalGesture) continue;
                     if (group->pointerDrag.recognized) tap->trackingTap = false;
                     else recognize(tap, mouse);
                     break;
@@ -1154,7 +1310,7 @@ static void sendAccessibleEvent(GroupWidget *target, QSEventKind kind, const QSt
 static void activateAccessibleButton(QAbstractButton *button) {
     for (auto *parent = button->parentWidget(); parent; parent = parent->parentWidget()) {
         auto *group = dynamic_cast<GroupWidget *>(parent);
-        if (group && group->simultaneous && group->tapCount == 1) sendAccessibleEvent(group, QSActivate);
+        if (group && group->priority == QSSimultaneousGesture && group->tapCount == 1) sendAccessibleEvent(group, QSActivate);
     }
     button->click();
 }
@@ -1483,11 +1639,12 @@ int qs_reduce_motion(QSWindow *window) {
 double qs_window_scale(QSWindow *window) { return window->devicePixelRatioF(); }
 void qs_set_key_handler(QSWindow *window, QSKeyHandler handler) { window->keyHandler = handler; }
 void qs_set_drag_handler(QSWindow *window, QSDragHandler handler) { window->dragHandler = handler; }
-void qs_group_gesture(QSWidget w, int taps, int drag, int simultaneous, double dragDistance, double magnifyDelta, int inputs, intptr_t modifiers) {
+void qs_group_gesture(QSWidget w, int taps, int drag, QSGesturePriority priority, double dragDistance, double magnifyDelta, int inputs, intptr_t modifiers, const char *name) {
     auto *group = static_cast<GroupWidget *>(w);
     group->tapCount = taps;
     group->windowDrag = drag;
-    group->simultaneous = simultaneous;
+    group->priority = priority;
+    group->setProperty("qsGestureName", name ? QVariant(QString::fromUtf8(name)) : QVariant());
     const bool touch = magnifyDelta >= 0 && (inputs & 1);
     if (touch != (group->pinch.minimum >= 0 && (group->gestureInputs & 1))) {
         if (touch) group->grabGesture(Qt::PinchGesture);
@@ -1500,6 +1657,7 @@ void qs_group_gesture(QSWidget w, int taps, int drag, int simultaneous, double d
     group->setAttribute(Qt::WA_AcceptTouchEvents, touch || group->directInteraction);
     group->pointerDrag.threshold = dragDistance;
     if (dragDistance < 0) group->pointerDrag.tracking = false;
+    if (group->priorityPointer && !group->hasMouseGesture()) group->priorityPointer->clear();
 }
 QSMagnifySample qs_magnify_sample(QSWidget w) { return static_cast<GroupWidget *>(w)->pinch.sample; }
 void qs_close(QSWindow *window) {
