@@ -78,7 +78,11 @@ In the chat color picker, choosing crimson updates the sample bubbles. The Docke
 
 ![Editing a custom gradient in the running Serein Linux release](Screenshots/serein-linux-custom-chat-color.png)
 
-A separate Docker run saved a green-to-blue gradient, closed and reopened the picker, and checked the selected swatch and both ends of the preview. The test phone received the next message typed into the [running conversation](Screenshots/serein-linux-saved-gradient.png).
+A separate Docker run saved a green-to-blue gradient, closed and reopened the picker, and checked the selected swatch and both ends of the preview. The test phone received the next message typed into the [running conversation](Screenshots/serein-linux-saved-gradient.png). In some X11 runs during concurrent builds the dial stayed vertical after the drag. The cause remains open.
+
+The [Reset all chat colors dialog](Screenshots/serein-linux-reset-chat-colors.png) uses Serein’s shared alert layout. Confirming changed a crimson conversation back to the default blue. Reopening the picker showed the restored color. Cancel closed the desktop window on Serein PR head `767c644`. The local Serein branch handles Cancel inside the picker.
+
+Cross-platform tests cover all 16 edge selections for `EdgeInsets.inset(by:edges:)`, negative corner sizes, and vector arithmetic on insets and angles. They also check the SDK’s JSON representations and animation data for `UnitPoint` and `Angle`. [Apple’s corner inset documentation](https://developer.apple.com/documentation/swiftui/edgeinsets/inset%28by%3Aedges%3A%29)
 
 The same geometry tests on macOS and Ubuntu check named and global frames through nested rotation and scaling in both layout directions, independent bounds for each child of a named group, and a scroll viewport before and after scrolling. They also tap and drag in a scaled named space. `GeometryProxy.bounds(of:)` returns the named ancestor’s bounds in the reader’s coordinates. Crossing a rotation returns `nil`, including when a later rotation restores the original orientation.
 
@@ -424,7 +428,7 @@ The target is source compatibility with Apple's public SwiftUI APIs. The impleme
 
 `./Scripts/check-apple.sh ../serein` type-checks the example source with Apple's SwiftUI module on a Mac with Xcode. `./Scripts/check-api.sh` extracts public symbol graphs from Xcode and the Linux image. Pass `--by-kind` to see coverage for classes, structs, protocols and each member kind, or `--missing` to list individual missing declaration paths. The inventory groups declarations by symbol kind and path, counts overload spellings separately, and excludes underscored and synthesized members. A shared name alone cannot establish matching signatures, constraints, availability or behavior.
 
-The inventory against the macOS 27.2 SDK found 1,853 shared declaration paths out of 7,627 and 1,322 identical declaration spellings out of 8,735. Of the 5,774 absent paths, 715 are nominal type or protocol declarations (6 classes, 584 structs, 48 enums and 77 protocols). The examples exercise a smaller set at runtime. Navigation, window state restoration, broader animation support, text shaping parity, gestures and platform integration remain substantial gaps. Font metrics, control appearance and several layout behaviors differ from Apple's implementation.
+The inventory against the macOS 27.2 SDK found 1,893 shared declaration paths out of 7,627 and 1,367 identical declaration spellings out of 8,735. Of the 5,734 absent paths, 714 are nominal type or protocol declarations (6 classes, 583 structs, 48 enums and 77 protocols). The examples exercise a smaller set at runtime. Navigation, window state restoration, broader animation support, text shaping parity, gestures and platform integration remain substantial gaps. Font metrics, control appearance and several layout behaviors differ from Apple's implementation.
 
 After capturing the Linux examples, run `./Scripts/compare-artwork.sh ../serein` on macOS to render both illustrations with Apple's `ImageRenderer`. At a threshold of 8/255 in any RGB channel, 101 of 119,680 account artwork pixels (0.084%) and 91 of 49,928 key transparency pixels (0.182%) differed. The mean absolute channel differences were 0.104/255 and 0.095/255 respectively. Both reference images are saved in `.build/artwork/`.
 

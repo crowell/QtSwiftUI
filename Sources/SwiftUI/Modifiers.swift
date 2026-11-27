@@ -1,10 +1,3 @@
-public struct EdgeInsets: Equatable, Sendable {
-    public var top, leading, bottom, trailing: CGFloat
-    public init(top: CGFloat, leading: CGFloat, bottom: CGFloat, trailing: CGFloat) {
-        self.top = top; self.leading = leading; self.bottom = bottom; self.trailing = trailing
-    }
-    public init() { self.init(top: 0, leading: 0, bottom: 0, trailing: 0) }
-}
 @frozen public enum HorizontalEdge: Int8, CaseIterable, Codable, Sendable {
     case leading, trailing
     @frozen public struct Set: OptionSet, Sendable {

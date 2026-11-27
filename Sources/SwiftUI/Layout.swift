@@ -9,9 +9,21 @@ public struct ProposedViewSize: Equatable, Hashable, Sendable {
         CGSize(width: width ?? size.width, height: height ?? size.height)
     }
 }
-public struct UnitPoint: Hashable, Sendable {
+@frozen public struct UnitPoint: Hashable, Sendable, Codable {
     public var x, y: CGFloat
+    public init() { self.init(x: 0, y: 0) }
     public init(x: CGFloat, y: CGFloat) { self.x = x; self.y = y }
+    public init(from decoder: any Decoder) throws {
+        var coordinates = try decoder.unkeyedContainer()
+        x = try coordinates.decode(CGFloat.self)
+        y = try coordinates.decode(CGFloat.self)
+    }
+    public func encode(to encoder: any Encoder) throws {
+        var coordinates = encoder.unkeyedContainer()
+        try coordinates.encode(x)
+        try coordinates.encode(y)
+    }
+
     public static let zero = Self(x: 0, y: 0), center = Self(x: 0.5, y: 0.5)
     public static let top = Self(x: 0.5, y: 0), bottom = Self(x: 0.5, y: 1)
     public static let leading = Self(x: 0, y: 0.5), trailing = Self(x: 1, y: 0.5)

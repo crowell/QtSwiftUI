@@ -19,6 +19,41 @@ public protocol Animatable {
     associatedtype AnimatableData: VectorArithmetic
     var animatableData: AnimatableData { get set }
 }
+public protocol _VectorMath: Animatable {}
+extension _VectorMath {
+    public var magnitude: Double { animatableData.magnitudeSquared.squareRoot() }
+    public mutating func negate() { animatableData = .zero - animatableData }
+    public static prefix func - (operand: Self) -> Self {
+        var value = operand
+        value.negate()
+        return value
+    }
+    public static func += (lhs: inout Self, rhs: Self) { lhs.animatableData += rhs.animatableData }
+    public static func -= (lhs: inout Self, rhs: Self) { lhs.animatableData -= rhs.animatableData }
+    public static func *= (lhs: inout Self, rhs: Double) { lhs.animatableData.scale(by: rhs) }
+    public static func /= (lhs: inout Self, rhs: Double) { lhs *= 1 / rhs }
+    public static func + (lhs: Self, rhs: Self) -> Self {
+        var value = lhs
+        value += rhs
+        return value
+    }
+    public static func - (lhs: Self, rhs: Self) -> Self {
+        var value = lhs
+        value -= rhs
+        return value
+    }
+    public static func * (lhs: Self, rhs: Double) -> Self {
+        var value = lhs
+        value *= rhs
+        return value
+    }
+    public static func / (lhs: Self, rhs: Double) -> Self {
+        var value = lhs
+        value /= rhs
+        return value
+    }
+}
+
 extension Animatable where Self: VectorArithmetic {
     public var animatableData: Self { get { self } set { self = newValue } }
 }
@@ -82,12 +117,20 @@ extension CGRect: Animatable {
         set { (origin.animatableData, size.animatableData) = (newValue.first, newValue.second) }
     }
 }
+// The desktop SDK gives normalized points and radians 128 animation units per unit.
+private let normalizedAnimationScale = 128.0
+
 extension UnitPoint: Animatable {
-    public var animatableData: AnimatablePair<CGFloat, CGFloat> {
-        get { .init(x, y) }
-        set { (x, y) = (newValue.first, newValue.second) }
+    public typealias AnimatableData = AnimatablePair<CGFloat, CGFloat>
+    public var animatableData: AnimatableData {
+        get { .init(x * normalizedAnimationScale, y * normalizedAnimationScale) }
+        set { (x, y) = (newValue.first / normalizedAnimationScale, newValue.second / normalizedAnimationScale) }
     }
 }
-extension Angle: Animatable {
-    public var animatableData: Double { get { radians } set { radians = newValue } }
+extension Angle: _VectorMath {
+    public typealias AnimatableData = Double
+    public var animatableData: Double {
+        get { radians * normalizedAnimationScale }
+        set { radians = newValue / normalizedAnimationScale }
+    }
 }

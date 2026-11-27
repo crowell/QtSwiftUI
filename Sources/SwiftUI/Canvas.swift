@@ -4,12 +4,21 @@ extension Path: Shape {
     public nonisolated func path(in rect: CGRect) -> Self { self }
 }
 
-public struct Angle: Hashable, Comparable, Sendable {
+@frozen public struct Angle: Hashable, Comparable, Sendable, Codable {
     public var radians: Double
-    public var degrees: Double { get { radians * 180 / .pi } set { radians = newValue * .pi / 180 } }
+    public var degrees: Double {
+        get { radians * (180 / .pi) }
+        set { radians = newValue * (.pi / 180) }
+    }
+    public init() { self.init(radians: 0) }
     public init(radians: Double) { self.radians = radians }
-    public init(degrees: Double) { radians = degrees * .pi / 180 }
-    public static let zero = Self(radians: 0)
+    public init(degrees: Double) { radians = degrees * (.pi / 180) }
+    public init(from decoder: any Decoder) throws { radians = try decoder.singleValueContainer().decode(Double.self) }
+    public func encode(to encoder: any Encoder) throws {
+        var value = encoder.singleValueContainer()
+        try value.encode(radians)
+    }
+    public static var zero: Self { Self() }
     public static func radians(_ value: Double) -> Self { Self(radians: value) }
     public static func degrees(_ value: Double) -> Self { Self(degrees: value) }
     public static func < (lhs: Self, rhs: Self) -> Bool { lhs.radians < rhs.radians }
