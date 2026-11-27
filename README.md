@@ -76,7 +76,7 @@ The desktop `ViewBuilder` and `ContentBuilder` accept mixed Swift values, option
 
 Desktop `Text` accepts Foundation format styles that produce strings or attributed strings, and reference or object values with a `Formatter`. Numbers and dates resolve in the view’s environment. Attributed values and substrings preserve their runs inside localized text, and `Canvas` uses its graphics environment to draw formatted labels.
 
-In the linked release app, Serein’s [custom mute calendar](Screenshots/serein-linux-custom-mute-calendar.png) and time picker set a mute expiration for December 15 at 9:05 PM GMT. The [conversation menu](Screenshots/serein-linux-muted-until.png) displayed that date and time, and the test phone decrypted its updated contact record and verified the exact timestamp.
+In the linked release app, Serein’s [custom mute calendar](Screenshots/serein-linux-custom-mute-calendar.png) and time picker set a mute expiration for December 15 at 9:05 PM GMT. The [conversation menu](Screenshots/serein-linux-muted-until.png) displayed that date and time, and the test phone decrypted its updated contact record and verified the exact timestamp. On X11, the popup’s native shape follows its rounded panel and arrow. The production check compares the pixels on either side of the arrow with the dialog underneath.
 
 ![The chosen mute date and time in Serein’s production Linux executable](Screenshots/serein-linux-custom-mute.png)
 

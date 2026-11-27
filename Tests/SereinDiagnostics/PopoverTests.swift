@@ -88,6 +88,54 @@ extension ScreenWindow {
 }
 
 final class PopoverTests: XCTestCase {
+    #if os(Linux)
+    @MainActor func testX11PopoverOwnsItsBodyAndArrowAndLeavesCornersToTheParent() async throws {
+        try XCTSkipUnless(ProcessInfo.processInfo.environment["QTSWIFTUI_X11_POPOVER"] == "1" &&
+                          ProcessInfo.processInfo.environment["QT_QPA_PLATFORM"] == "xcb" &&
+                          FileManager.default.isExecutableFile(atPath: "/usr/bin/xdotool"))
+        func pointerWindow(at point: CGPoint, scale: CGFloat) throws -> String {
+            let process = Process(), result = Pipe()
+            process.executableURL = URL(fileURLWithPath: "/usr/bin/xdotool")
+            process.arguments = ["mousemove", String(Int((point.x * scale).rounded())), String(Int((point.y * scale).rounded())), "getmouselocation", "--shell"]
+            process.standardOutput = result
+            try process.run()
+            process.waitUntilExit()
+            XCTAssertEqual(process.terminationStatus, 0)
+            let fields = String(decoding: result.fileHandleForReading.readDataToEndOfFile(), as: UTF8.self).split(separator: "\n")
+            return String(try XCTUnwrap(fields.first { $0.hasPrefix("WINDOW=") }))
+        }
+        for edge in [Edge.bottom, .leading, .trailing, .top] {
+            let model = Presentation()
+            let anchor = Color.blue.frame(width: 60, height: 30)
+                .popover(isPresented: Binding(get: { model.showing }, set: { model.showing = $0 }), arrowEdge: edge) {
+                    Color.white.frame(width: 120, height: 70)
+                }
+            let screen = try await ScreenWindow(anchor, width: 480, height: 420, keyboard: true)
+            defer { screen.close() }
+            let window = qs_window_frame(screen.host.window)
+            let scale = qs_window_scale(screen.host.window)
+            let parent = try pointerWindow(at: CGPoint(x: window.x + 240, y: window.y + 210), scale: scale)
+            model.showing = true
+            try await screen.settlePopover()
+            let popup = try XCTUnwrap(screen.popoverFrame).offsetBy(dx: window.x, dy: window.y)
+            let body = try pointerWindow(at: CGPoint(x: popup.midX, y: popup.midY), scale: scale)
+            XCTAssertNotEqual(body, parent)
+            for x in [popup.minX + 1, popup.maxX - 2] {
+                for y in [popup.minY + 1, popup.maxY - 2] {
+                    XCTAssertEqual(try pointerWindow(at: CGPoint(x: x, y: y), scale: scale), parent)
+                }
+            }
+            let tip: CGPoint = switch edge {
+            case .bottom: CGPoint(x: popup.midX, y: popup.minY + 4)
+            case .top: CGPoint(x: popup.midX, y: popup.maxY - 4)
+            case .leading: CGPoint(x: popup.maxX - 4, y: popup.midY)
+            case .trailing: CGPoint(x: popup.minX + 4, y: popup.midY)
+            }
+            XCTAssertEqual(try pointerWindow(at: tip, scale: scale), body)
+        }
+    }
+    #endif
+
     @MainActor func testArrowEdgesAndEscapeBinding() async throws {
         struct Sample: View {
             @Bindable var model: Presentation

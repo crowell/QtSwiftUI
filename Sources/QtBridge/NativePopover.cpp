@@ -4,7 +4,7 @@
 #include <QKeyEvent>
 #include <QMouseEvent>
 #include <QPainter>
-#include <QPainterPath>
+#include <QRegion>
 #include <QScreen>
 #include <QtMath>
 
@@ -67,6 +67,14 @@ QRect NativePopover::present(const QRectF &anchor, QSizeF content, QSPopoverEdge
     dark = darkMode;
     tip = anchor.center() - bounds.topLeft();
     setGeometry(bounds);
+    const auto nextOutline = panelOutline();
+    if (nextOutline != outline) {
+        outline = nextOutline;
+        // An X11 server without a compositor presents transparent window pixels as black.
+        // Shape the native window so those pixels expose the actual window behind it.
+        if (QGuiApplication::platformName() == QStringLiteral("xcb"))
+            setMask(QRegion(outline.toFillPolygon().toPolygon()));
+    }
     if (!isVisible()) show();
     update();
     return rect().adjusted(margin, margin, -margin, -margin);
@@ -88,10 +96,10 @@ void NativePopover::keyPressEvent(QKeyEvent *event) {
     else QWidget::keyPressEvent(event);
 }
 void NativePopover::mousePressEvent(QMouseEvent *event) {
-    if (!rect().contains(event->position().toPoint())) { close(); event->accept(); }
+    if (!outline.contains(event->position())) { close(); event->accept(); }
     else QWidget::mousePressEvent(event);
 }
-void NativePopover::paintEvent(QPaintEvent *) {
+QPainterPath NativePopover::panelOutline() const {
     QRectF panel = QRectF(rect()).adjusted(1, 1, -1, -1);
     QPolygonF pointer;
     if (edge == QSPopoverAbove || edge == QSPopoverBelow) {
@@ -107,12 +115,16 @@ void NativePopover::paintEvent(QPaintEvent *) {
         const qreal x = right ? panel.left() : panel.right();
         pointer << QPointF(x, y - arrow) << QPointF(right ? 1 : width() - 1, y) << QPointF(x, y + arrow);
     }
-    QPainterPath outline, triangle;
-    outline.addRoundedRect(panel, radius, radius);
+    QPainterPath body, triangle;
+    body.addRoundedRect(panel, radius, radius);
     triangle.addPolygon(pointer);
+    return body.united(triangle);
+}
+
+void NativePopover::paintEvent(QPaintEvent *) {
     QPainter painter(this);
     painter.setRenderHint(QPainter::Antialiasing);
     painter.setBrush(dark ? QColor(52, 52, 52) : QColor(250, 250, 250));
     painter.setPen(dark ? QColor(100, 100, 100) : QColor(180, 180, 180));
-    painter.drawPath(outline.united(triangle));
+    painter.drawPath(outline);
 }

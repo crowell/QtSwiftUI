@@ -1,6 +1,7 @@
 #pragma once
 
 #include "QtBridge.h"
+#include <QPainterPath>
 #include <QWidget>
 #include <functional>
 
@@ -21,5 +22,7 @@ private:
     std::function<void()> dismissed;
     QSPopoverEdge edge = QSPopoverAbove;
     QPointF tip;
+    QPainterPath outline;
+    QPainterPath panelOutline() const;
     bool dark = false;
 };
