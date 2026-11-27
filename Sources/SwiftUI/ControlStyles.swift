@@ -22,17 +22,45 @@ public nonisolated struct _TextFieldStyleLabel: Primitive {
     @MainActor func elements(in context: Context) -> [Element] { [] }
 }
 
+enum FieldBorder: Int32 {
+    case square, plain, rounded
+}
+
+extension TextField where Label == _TextFieldStyleLabel {
+    fileprivate func border(_ border: FieldBorder) -> some View {
+        environment(\.fieldBorder, border)
+    }
+}
+
+public struct BorderedTextFieldStyle: TextFieldStyle {
+    public init() {}
+    public func _body(configuration: TextField<_Label>) -> some View { configuration.border(.rounded) }
+}
+
+extension TextFieldStyle where Self == BorderedTextFieldStyle {
+    public static var bordered: BorderedTextFieldStyle { .init() }
+}
+
+public struct SquareBorderTextFieldStyle: TextFieldStyle {
+    public init() {}
+    public func _body(configuration: TextField<_Label>) -> some View { configuration.border(.square) }
+}
+
+extension TextFieldStyle where Self == SquareBorderTextFieldStyle {
+    public static var squareBorder: SquareBorderTextFieldStyle { .init() }
+}
+
 public struct PlainTextFieldStyle: TextFieldStyle {
     public init() {}
     public func _body(configuration: TextField<_Label>) -> some View {
-        Transform(content: configuration) { view, ctx in view.resolve(ctx.with(\.plainField, true)) }
+        configuration.border(.plain)
     }
 }
 
 public struct RoundedBorderTextFieldStyle: TextFieldStyle {
     public init() {}
     public func _body(configuration: TextField<_Label>) -> some View {
-        Transform(content: configuration) { view, ctx in view.resolve(ctx.with(\.roundedField, true)) }
+        configuration.border(.rounded)
     }
 }
 extension TextFieldStyle where Self == RoundedBorderTextFieldStyle {

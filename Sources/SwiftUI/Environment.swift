@@ -46,8 +46,7 @@ public struct EnvironmentValues {
     var hidesControlLabels = false
     var menuStyle: (@MainActor (MenuStyleConfiguration) -> AnyView)?
     var fileDialogDirectory: URL?
-    var plainField = false
-    var roundedField = false
+    var fieldBorder = FieldBorder.square
     var toggleStyle: (@MainActor (ToggleStyleConfiguration) -> AnyView)?
     var fieldStyle: (@MainActor (TextField<_TextFieldStyleLabel>) -> AnyView)?
     var allowsHits = true

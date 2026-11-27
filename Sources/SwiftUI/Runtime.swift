@@ -19,6 +19,7 @@ enum Part: Hashable {
     var collectingPickerLabels = false
     var defaultFocusRegions: [DefaultFocusRegion] = []
     var menuEntries: MenuEntries?
+    var fieldLabelReader: FieldLabelReader?
     var windowValue: Binding<AnyHashable?>?
     @EnvironmentSnapshot var environment = EnvironmentValues()
     var preferences: [ObjectIdentifier: any PreferenceScope] = [:]
