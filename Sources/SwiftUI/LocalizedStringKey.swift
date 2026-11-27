@@ -8,12 +8,26 @@ public struct LocalizedStringKey: Equatable, ExpressibleByStringInterpolation {
     fileprivate final class Argument: Equatable {
         let value: Any
         let matches: ((Any) -> Bool)?
-        let render: (String, Locale) -> String
+        let attributed: Bool
+        let render: (String, EnvironmentValues) -> TextContent
 
-        init<T: Equatable>(_ value: T, comparesValue: Bool = false, render: @escaping (String, Locale) -> String) {
+        init(_ value: Any, matching: ((Any) -> Bool)? = nil, attributed: Bool,
+             content: @escaping (String, EnvironmentValues) -> TextContent) {
             self.value = value
-            matches = comparesValue ? { ($0 as? T) == value } : nil
-            self.render = render
+            matches = matching
+            self.attributed = attributed
+            render = content
+        }
+
+        convenience init<T: Equatable>(_ value: T, comparesValue: Bool, attributed: Bool,
+                                       content: @escaping (String, EnvironmentValues) -> TextContent) {
+            self.init(value, matching: comparesValue ? { ($0 as? T) == value } : nil, attributed: attributed, content: content)
+        }
+
+        convenience init<T: Equatable>(_ value: T, comparesValue: Bool = false, render: @escaping (String, Locale) -> String) {
+            self.init(value, comparesValue: comparesValue, attributed: false) { specifier, environment in
+                .plain(render(specifier, environment.locale))
+            }
         }
         static func == (lhs: Argument, rhs: Argument) -> Bool {
             if lhs === rhs { return true }
@@ -24,6 +38,7 @@ public struct LocalizedStringKey: Equatable, ExpressibleByStringInterpolation {
 
     private let key: String
     private let arguments: [Argument]
+    var usesAttributedText: Bool { arguments.contains(where: \.attributed) }
     public init(_ value: String) { key = value; arguments = [] }
     public init(stringLiteral value: String) { self.init(value) }
     public init(stringInterpolation: StringInterpolation) {
@@ -77,28 +92,46 @@ public struct LocalizedStringKey: Equatable, ExpressibleByStringInterpolation {
             })
         }
         public mutating func appendInterpolation<Subject: ReferenceConvertible>(_ subject: Subject, formatter: Formatter? = nil) {
-            key += "%@"
-            arguments.append(Argument(subject) { _, _ in formatter?.string(for: subject) ?? String(describing: subject) })
+            appendSubject(subject, formatter: formatter)
         }
         public mutating func appendInterpolation<Subject: NSObject>(_ subject: Subject, formatter: Formatter? = nil) {
+            appendSubject(subject, formatter: formatter)
+        }
+        private mutating func appendSubject<Subject: Equatable>(_ subject: Subject, formatter: Formatter?) {
             key += "%@"
-            arguments.append(Argument(subject) { _, _ in formatter?.string(for: subject) ?? String(describing: subject) })
+            if let formatter {
+                let source = TextSource.formatted(subject, using: formatter)
+                arguments.append(Argument(subject, attributed: false) { _, environment in source.resolve(in: environment) })
+            } else {
+                arguments.append(Argument(subject) { _, _ in String(describing: subject) })
+            }
         }
         public mutating func appendInterpolation<F: FormatStyle>(_ input: F.FormatInput, format: F)
         where F.FormatInput: Equatable, F.FormatOutput == String {
             key += "%@"
-            arguments.append(Argument(Formatted(value: input, style: format), comparesValue: true) { _, locale in format.locale(locale).format(input) })
+            arguments.append(Argument(Formatted(value: input, style: format), comparesValue: true, attributed: false) { _, environment in
+                .plain(environment.format(input, with: format))
+            })
         }
         public mutating func appendInterpolation<F: FormatStyle>(_ input: F.FormatInput, format: F)
         where F.FormatInput: Equatable, F.FormatOutput == AttributedString {
             key += "%@"
-            arguments.append(Argument(Formatted(value: input, style: format), comparesValue: true) { _, locale in
-                String(format.locale(locale).format(input).characters)
+            arguments.append(Argument(Formatted(value: input, style: format), comparesValue: true, attributed: true) { _, environment in
+                .attributed(format.locale(environment.locale).format(input))
             })
         }
         public mutating func appendInterpolation(_ text: Text) {
             key += "%@"
-            arguments.append(Argument(text.string) { _, locale in text.resolvedString(locale) })
+            arguments.append(Argument(text, attributed: text.source.usesAttributedText) { _, environment in
+                text.source.resolve(in: environment)
+            })
+        }
+        public mutating func appendInterpolation(_ attributedString: AttributedString) {
+            key += "%@"
+            arguments.append(Argument(attributedString, comparesValue: true, attributed: true) { _, _ in .attributed(attributedString) })
+        }
+        public mutating func appendInterpolation(_ attributedSubstring: AttributedSubstring) {
+            appendInterpolation(AttributedString(attributedSubstring))
         }
         @_disfavoredOverload public mutating func appendInterpolation<T>(_ object: T) {
             appendInterpolation(String(describing: object))
@@ -128,18 +161,19 @@ public struct LocalizedStringKey: Equatable, ExpressibleByStringInterpolation {
         return Bundle(url: url) ?? bundle
     }
 
-    func resolve(locale: Locale, table: String?, bundle: Bundle?) -> String {
-        let format = localizedBundle(bundle ?? .main, locale: locale).localizedString(forKey: key, value: nil, table: table)
-        guard !arguments.isEmpty else { return format }
+    func resolve(in environment: EnvironmentValues, table: String?, bundle: Bundle?) -> TextContent {
+        let format = localizedBundle(bundle ?? .main, locale: environment.locale).localizedString(forKey: key, value: nil, table: table)
+        guard !arguments.isEmpty else { return .plain(format) }
         let template = format as NSString
         let matches = Self.placeholders.matches(in: format, range: NSRange(location: 0, length: template.length))
-        var result = "", cursor = 0, next = 0
+        var result = TextContent.plain("")
+        var cursor = 0, next = 0
         for match in matches {
             let range = match.range
-            result += template.substring(with: NSRange(location: cursor, length: range.location - cursor))
+            result.append(.plain(template.substring(with: NSRange(location: cursor, length: range.location - cursor))))
             cursor = NSMaxRange(range)
             let conversion = match.range(at: 2)
-            guard conversion.location != NSNotFound else { result += "%"; continue }
+            guard conversion.location != NSNotFound else { result.append(.plain("%")); continue }
             let position = match.range(at: 1)
             let index: Int
             if position.location == NSNotFound {
@@ -149,11 +183,12 @@ public struct LocalizedStringKey: Equatable, ExpressibleByStringInterpolation {
                 index = (Int(template.substring(with: position)) ?? 0) - 1
             }
             if arguments.indices.contains(index) {
-                result += arguments[index].render("%" + template.substring(with: conversion), locale)
+                result.append(arguments[index].render("%" + template.substring(with: conversion), environment))
             } else {
-                result += template.substring(with: range)
+                result.append(.plain(template.substring(with: range)))
             }
         }
-        return result + template.substring(from: cursor)
+        result.append(.plain(template.substring(from: cursor)))
+        return result
     }
 }

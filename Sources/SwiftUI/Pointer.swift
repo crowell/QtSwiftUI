@@ -56,7 +56,7 @@ extension View {
     public func help(_ key: LocalizedStringKey) -> some View { help(Text(key)) }
     public func help(_ text: Text) -> some View {
         Transform(content: self) { view, context in
-            view.resolve(context.with(\.helpText, text.resolvedString(context.environment.locale)))
+            view.resolve(context.with(\.helpText, text.resolvedString(context.environment)))
         }
     }
 

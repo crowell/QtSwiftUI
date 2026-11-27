@@ -43,7 +43,7 @@ extension View {
 
 extension Label: MenuEntrySource where Title == Text, Icon == Image {
     @MainActor func collect(in context: Context, into entries: MenuEntries) {
-        entries.rows.append(.init(title: title.resolvedString(context.environment.locale), systemImage: icon.systemName,
+        entries.rows.append(.init(title: title.resolvedString(context.environment), systemImage: icon.systemName,
                                   enabled: context.collectingPickerLabels && context.environment.isEnabled))
     }
 }

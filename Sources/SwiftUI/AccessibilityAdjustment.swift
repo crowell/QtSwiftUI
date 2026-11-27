@@ -37,10 +37,10 @@ nonisolated public struct AccessibilityAttachmentModifier: PrimitiveModifier {
     @MainActor func applying(to content: AnyView) -> any View {
         Transform(content: content) { view, context in
             var context = context
-            let locale = context.environment.locale
-            if let label { context.environment.label = label.resolvedString(locale) }
-            if let value { context.environment.accessibleValue = value.resolvedString(locale) }
-            if let hint { context.environment.accessibleHint = hint.resolvedString(locale) }
+            let environment = context.environment
+            if let label { context.environment.label = label.resolvedString(environment) }
+            if let value { context.environment.accessibleValue = value.resolvedString(environment) }
+            if let hint { context.environment.accessibleHint = hint.resolvedString(environment) }
             // The outermost attachment is the last modifier the caller applied.
             let decided = context.environment.accessibilityTraits.union(context.environment.removedAccessibilityTraits)
             let added = addedTraits.subtracting(decided)
@@ -49,7 +49,7 @@ nonisolated public struct AccessibilityAttachmentModifier: PrimitiveModifier {
             var callbacks = actions
             var names = Array(actions.keys)
             for (title, handler) in namedActions {
-                let name = title.resolvedString(locale)
+                let name = title.resolvedString(environment)
                 if callbacks[name] == nil { names.append(name) }
                 callbacks[name] = handler
             }

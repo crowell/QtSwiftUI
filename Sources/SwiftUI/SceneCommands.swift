@@ -100,7 +100,7 @@ public nonisolated struct CommandMenu<Content: View>: CommandContent {
         let container = inner.widget(QSGroup)
         qs_drawing_only(container)
         inner.parent = container
-        menus.rows.append(.init(title: title.resolvedString(context.environment.locale), children: MenuEntries.read(items, in: inner)))
+        menus.rows.append(.init(title: title.resolvedString(context.environment), children: MenuEntries.read(items, in: inner)))
     }
 }
 

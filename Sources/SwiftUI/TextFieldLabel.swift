@@ -10,10 +10,10 @@ enum FieldTitle {
         else { self = .view(AnyView(label)) }
     }
 
-    @MainActor func resolve(in context: Context) -> (text: Text, locale: Locale)? {
+    @MainActor func resolve(in context: Context) -> (text: Text, environment: EnvironmentValues)? {
         switch self {
         case .text(let text):
-            return (text, context.environment.locale)
+            return (text, context.environment)
         case .view(let label):
             let reader = FieldLabelReader()
             var inner = context.descending(.property("text field label"))
@@ -33,7 +33,7 @@ enum FieldTitle {
 }
 
 @MainActor final class FieldLabelReader {
-    var first: (text: Text, locale: Locale)?
+    var first: (text: Text, environment: EnvironmentValues)?
 }
 
 extension TextField {

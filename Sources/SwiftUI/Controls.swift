@@ -31,30 +31,25 @@ extension Context {
     }
 }
 public nonisolated struct Text: Primitive {
-    private var literal = ""
-    private var localized: (key: LocalizedStringKey, table: String?, bundle: Bundle?)?
-    var string: String { resolvedString(.autoupdatingCurrent) }
-    func resolvedString(_ locale: Locale) -> String {
-        guard let localized else { return literal }
-        return localized.key.resolve(locale: locale, table: localized.table, bundle: localized.bundle)
-    }
+    let source: TextSource
+    init(source: TextSource) { self.source = source }
+    var string: String { resolvedString(EnvironmentValues()) }
+    func resolvedString(_ environment: EnvironmentValues) -> String { source.resolve(in: environment).string }
     public init(_ key: LocalizedStringKey, tableName: String? = nil, bundle: Bundle? = nil, comment: StaticString? = nil) {
-        localized = (key, tableName, bundle)
+        source = .localized(key, tableName, bundle)
     }
     nonisolated var underlineOverride: TextLineDecoration?
     nonisolated var strikethroughOverride: TextLineDecoration?
-    nonisolated private(set) var attributed: AttributedString?
     @_disfavoredOverload public nonisolated init(_ attributedContent: AttributedString) {
-        literal = String(attributedContent.characters)
-        attributed = attributedContent
+        source = .attributed(attributedContent)
     }
     private(set) var foregroundOverride: AnyShapeStyle?
     private var attributes: [(inout EnvironmentValues) -> Void] = []
-    @_disfavoredOverload public nonisolated init<S: StringProtocol>(_ content: S) { literal = String(content) }
-    public nonisolated init(verbatim content: String) { literal = content }
+    @_disfavoredOverload public nonisolated init<S: StringProtocol>(_ content: S) { source = .plain(String(content)) }
+    public nonisolated init(verbatim content: String) { source = .plain(content) }
     public func font(_ font: Font?) -> Text { modified { $0.font = font } }
     public func accessibilityLabel(_ label: Text) -> Text {
-        modified { environment in environment.label = label.resolvedString(environment.locale) }
+        modified { environment in environment.label = label.resolvedString(environment) }
     }
     public func accessibilityLabel(_ labelKey: LocalizedStringKey) -> Text { accessibilityLabel(Text(labelKey)) }
     @_disfavoredOverload public func accessibilityLabel<S: StringProtocol>(_ label: S) -> Text { accessibilityLabel(Text(label)) }
@@ -90,7 +85,7 @@ public nonisolated struct Text: Primitive {
     @MainActor func elements(in context: Context) -> [Element] {
         if let reader = context.fieldLabelReader {
             return [Element { _ in .zero } place: { _, _ in
-                if reader.first == nil { reader.first = (self, context.environment.locale) }
+                if reader.first == nil { reader.first = (self, context.environment) }
             }]
         }
         if context.environment.accessibilityTraits.contains(.isLink) {
@@ -102,21 +97,21 @@ public nonisolated struct Text: Primitive {
             return child.children(of: self, inside: group)
         }
         let ctx = styled(context)
-        let string = resolvedString(ctx.environment.locale)
+        let content = source.resolve(in: ctx.environment)
         let widget: UnsafeMutableRawPointer
         let spacing = ctx.environment.lineSpacing.isFinite ? max(0, ctx.environment.lineSpacing) : 0
         let richLayout = (underlineOverride ?? ctx.environment.textUnderline) != nil
             || (strikethroughOverride ?? ctx.environment.textStrikethrough) != nil || spacing > 0
-        if let attributed = attributed ?? (richLayout ? AttributedString(string) : nil) {
+        if let rich = content.attributed ?? (richLayout ? content.attributedString : nil) {
             widget = ctx.widget(QSAttributedLabel, action: { value in
                 if let link = URL(string: value) { ctx.environment.openURL(link) }
             })
             ctx.style(widget)
-            configure(attributed, on: widget, in: ctx.environment)
+            configure(rich, on: widget, in: ctx.environment)
         } else {
             widget = ctx.widget(QSLabel)
             qs_selectable(widget, ctx.environment.selectableText ? 1 : 0)
-            qs_text(widget, string)
+            qs_text(widget, content.string)
             ctx.style(widget)
         }
         let limit = Int32(clamping: ctx.environment.lineLimit.map { max(1, $0) } ?? 0)
@@ -165,9 +160,9 @@ public struct Button<Label: View>: Primitive {
         configure(widget)
         context.installShortcut(on: widget)
         qs_plain_button(widget, style != nil ? 1 : 0)
-        if style == nil, let text = label as? Text, text.attributed == nil, text.underlineOverride == nil, context.environment.textUnderline == nil,
+        if style == nil, let text = label as? Text, !text.source.usesAttributedText, text.underlineOverride == nil, context.environment.textUnderline == nil,
            text.strikethroughOverride == nil, context.environment.textStrikethrough == nil {
-            qs_text(widget, text.resolvedString(context.environment.locale))
+            qs_text(widget, text.resolvedString(context.environment))
             return [text.styled(context).control(widget)]
         }
         var ctx = context
@@ -224,8 +219,8 @@ public struct Toggle<Label: View>: Primitive {
             qs_text(widget, "")
             return [context.control(widget)]
         }
-        if let text = (label as? Text) ?? (label as? ToggleStyleConfiguration.Label)?.plainText, text.attributed == nil {
-            qs_text(widget, text.resolvedString(context.environment.locale))
+        if let text = (label as? Text) ?? (label as? ToggleStyleConfiguration.Label)?.plainText, !text.source.usesAttributedText {
+            qs_text(widget, text.resolvedString(context.environment))
             return [text.styled(context).control(widget)]
         }
         return [stacked([context.control(widget)] + label.resolve(context.descending(.position(0))), axis: .horizontal, alignment: .center, spacing: 4, direction: context.environment.layoutDirection)]
@@ -297,10 +292,10 @@ public nonisolated struct TextField<Label: View>: Primitive {
         }
         let label = title.resolve(in: context)
         var context = context
-        let name = label.map { $0.text.resolvedString($0.locale) } ?? ""
+        let name = label.map { $0.text.resolvedString($0.environment) } ?? ""
         if context.environment.label.isEmpty { context.environment.label = name }
         let hint = prompt ?? label?.text
-        let placeholder = prompt?.resolvedString(context.environment.locale) ?? name
+        let placeholder = prompt?.resolvedString(context.environment) ?? name
         let hintStyle = hint?.styledEnvironment(context.environment)
         let promptColor = hint?.foregroundOverride?.resolvedPaint(in: context.environment).representativeColor.hex(context.environment.colorScheme) ?? ""
         let (text, editing) = value.resolve(in: context, callbacks: callbacks)

@@ -44,8 +44,8 @@ private nonisolated struct FileImporter<Source: View>: Primitive {
         let key = context.environment.fileDialogCustomizationID.map { "QtSwiftUI.fileDialog." + Data($0.utf8).base64EncodedString() }
         qs_file_import(owner, filters.joined(separator: "\n"), directories, multiple ? 1 : 0,
                        context.environment.fileDialogDirectory?.path,
-                       context.environment.fileDialogMessage?.resolvedString(context.environment.locale),
-                       context.environment.fileDialogConfirmationLabel?.resolvedString(context.environment.locale),
+                       context.environment.fileDialogMessage?.resolvedString(context.environment),
+                       context.environment.fileDialogConfirmationLabel?.resolvedString(context.environment),
                        key, key.flatMap(UserDefaults.standard.string(forKey:))) { key, state in
             guard let key, let state else { return }
             UserDefaults.standard.set(String(cString: state), forKey: String(cString: key))
