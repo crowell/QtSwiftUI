@@ -1,16 +1,53 @@
 import QtBridge
 
-public struct AccessibilityTraits: OptionSet, Sendable {
-    public var rawValue: UInt64
-    public init(rawValue: UInt64) { self.rawValue = rawValue }
-    public static let startsMediaSession = Self(rawValue: 1024)
-    public static let allowsDirectInteraction = Self(rawValue: 512)
-    public static let isLink = Self(rawValue: 256)
-    public static let isSearchField = Self(rawValue: 128)
-    public static let isImage = Self(rawValue: 1)
-    public static let updatesFrequently = Self(rawValue: 2)
-    public static let isSelected = Self(rawValue: 16), isButton = Self(rawValue: 32), isToggle = Self(rawValue: 64)
-    public static let isHeader = Self(rawValue: 4), isModal = Self(rawValue: 8)
+public struct AccessibilityTraits: SetAlgebra, Sendable {
+    public typealias Element = AccessibilityTraits
+    public typealias ArrayLiteralElement = AccessibilityTraits
+
+    private var bits: UInt64
+    private init(bits: UInt64) { self.bits = bits }
+    public init() { bits = 0 }
+
+    public static let isImage = Self(bits: 1 << 0)
+    public static let updatesFrequently = Self(bits: 1 << 1)
+    public static let isHeader = Self(bits: 1 << 2)
+    public static let isModal = Self(bits: 1 << 3)
+    public static let isSelected = Self(bits: 1 << 4)
+    public static let isButton = Self(bits: 1 << 5)
+    public static let isToggle = Self(bits: 1 << 6)
+    public static let isSearchField = Self(bits: 1 << 7)
+    public static let isLink = Self(bits: 1 << 8)
+    public static let allowsDirectInteraction = Self(bits: 1 << 9)
+    public static let startsMediaSession = Self(bits: 1 << 10)
+    public static let isStaticText = Self(bits: 1 << 11)
+    public static let isTabBar = Self(bits: 1 << 12)
+
+    public func union(_ other: AccessibilityTraits) -> AccessibilityTraits { Self(bits: bits | other.bits) }
+    public func intersection(_ other: AccessibilityTraits) -> AccessibilityTraits { Self(bits: bits & other.bits) }
+    public func symmetricDifference(_ other: AccessibilityTraits) -> AccessibilityTraits { Self(bits: bits ^ other.bits) }
+    public mutating func formUnion(_ other: AccessibilityTraits) { bits |= other.bits }
+    public mutating func formIntersection(_ other: AccessibilityTraits) { bits &= other.bits }
+    public mutating func formSymmetricDifference(_ other: AccessibilityTraits) { bits ^= other.bits }
+    public func contains(_ member: AccessibilityTraits) -> Bool { bits & member.bits == member.bits }
+
+    // SwiftUI treats a composite trait as one member. These return values are
+    // observable, including the empty result of removing the final trait.
+    @discardableResult
+    public mutating func insert(_ newMember: AccessibilityTraits) -> (inserted: Bool, memberAfterInsert: AccessibilityTraits) {
+        let inserted = !contains(newMember)
+        formUnion(newMember)
+        return (inserted, self)
+    }
+    @discardableResult
+    public mutating func remove(_ member: AccessibilityTraits) -> AccessibilityTraits? {
+        bits &= ~member.bits
+        return self
+    }
+    @discardableResult
+    public mutating func update(with newMember: AccessibilityTraits) -> AccessibilityTraits? {
+        formIntersection(newMember)
+        return bits == 0 ? nil : self
+    }
 }
 public struct AccessibilityChildBehavior: Equatable, Sendable {
     fileprivate let behavior: Int32

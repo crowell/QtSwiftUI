@@ -61,15 +61,20 @@ nonisolated public struct AccessibilityAttachmentModifier: PrimitiveModifier {
                     }
                 }
             }
+            let roleTraits = added.intersection([.isHeader, .isModal, .isStaticText, .isTabBar])
+            func applyRoles(to group: QSWidget?) {
+                qs_group_semantics(group, roleTraits.contains(.isHeader) ? 1 : 0, roleTraits.contains(.isModal) ? 1 : 0,
+                                   roleTraits.contains(.isStaticText) ? 1 : 0, roleTraits.contains(.isTabBar) ? 1 : 0)
+            }
             if adjustment == nil && callbacks.isEmpty {
-                guard !added.intersection([.isHeader, .isModal]).isEmpty else { return view.resolve(context) }
+                guard !roleTraits.isEmpty else { return view.resolve(context) }
                 let group = context.widget(QSGroup)
-                qs_group_semantics(group, added.contains(.isHeader) ? 1 : 0, added.contains(.isModal) ? 1 : 0)
+                applyRoles(to: group)
                 return context.children(of: view, inside: group)
             }
             let target = AccessibleAdjustment(adjustment, actions: callbacks, names: names)
             let group = context.widget(QSGroup, adjustment: adjustment, accessibilityAction: { target.actions[$0]?() })
-            qs_group_semantics(group, added.contains(.isHeader) ? 1 : 0, added.contains(.isModal) ? 1 : 0)
+            applyRoles(to: group)
             let children = context.with(\.adjustment, target).children(of: view, inside: group)
             // Explicit accessibility elements preserve their own names, values and children.
             // A bare view gets a combined element to own the adjustment actions.

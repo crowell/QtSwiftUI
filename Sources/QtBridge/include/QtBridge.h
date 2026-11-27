@@ -214,7 +214,7 @@ void qs_group_scale(QSWidget, double x, double y, double anchorX, double anchorY
 void qs_group_rotation(QSWidget, double degrees, double anchorX, double anchorY);
 void qs_group_shape(QSWidget, const QSPath *, int evenOdd);
 void qs_group_clip(QSWidget, const QSPath *, int evenOdd, int antialias);
-void qs_group_semantics(QSWidget, int heading, int modal);
+void qs_group_semantics(QSWidget, int heading, int modal, int static_text, int tab_bar);
 void qs_group_finish_layout(QSWidget, int sizeToPositionedContent);
 void qs_match_place(QSWidget drawing, QSWidget marker, double x, double y, double width, double height);
 typedef enum { QSPointerAutomatic, QSPointerArrow, QSPointerText, QSPointerCross, QSPointerOpenHand,
@@ -282,6 +282,7 @@ void qs_place(QSWidget, double x, double y, double width, double height);
 void qs_flush(void);
 int qs_accessible_value_is(QSWindow *, const char *name, const char *value);
 int qs_accessible_checked(QSWindow *, const char *name);
+int qs_has_accessible_role(QSWindow *, const char *name, const char *role);
 int qs_accessible_element(QSWindow *, const char *name, int childCount, const char *action);
 int qs_select_import_entry(QSWindow *, const char *path, int extend);
 int qs_click(QSWindow *, const char *identifier);

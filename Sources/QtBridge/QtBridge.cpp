@@ -30,6 +30,7 @@
 #include "FileImporter.hpp"
 #include <string.h>
 #include <QAccessibleWidget>
+#include <QMetaEnum>
 #include <QCheckBox>
 #include <QDir>
 #include <QDesktopServices>
@@ -180,7 +181,7 @@ public:
     }
     bool isImage = false;
     bool heading = false, adjustable = false;
-    bool modal = false;
+    bool modal = false, staticText = false, tabBar = false;
     bool updatesFrequently = false;
     QString accessibleValue;
     std::optional<QPainterPath> contentShape;
@@ -289,12 +290,14 @@ public:
         if (group->property("qsAXButton").toBool()) return QAccessible::Button;
         if (group->modal) return QAccessible::Dialog;
         if (group->heading) return QAccessible::Heading;
+        if (group->tabBar) return QAccessible::PageTabList;
+        if (group->staticText) return QAccessible::StaticText;
         return group->isImage ? QAccessible::Graphic : QAccessible::Grouping;
     }
     QString text(QAccessible::Text kind) const override {
         if (kind == QAccessible::Value && !group->accessibleValue.isEmpty()) return group->accessibleValue;
         auto value = QAccessibleWidget::text(kind);
-        if (kind == QAccessible::Name && value.isEmpty() && group->heading) {
+        if (kind == QAccessible::Name && value.isEmpty() && (group->heading || group->staticText)) {
             if (auto *label = group->findChild<QLabel *>()) return label->accessibleName().isEmpty() ? label->text() : label->accessibleName();
         }
         if (group->combineChildren && value.isEmpty() && (kind == QAccessible::Name || kind == QAccessible::Value)) {
@@ -493,7 +496,8 @@ public:
         : QAccessibleWidget(button, QAccessible::Button), button(button) { button->setProperty("qsAXLink", link); }
     QAccessible::Role role() const override {
         if (button->property("qsAXMenu").toBool()) return QAccessible::ButtonMenu;
-        return button->property("qsAXLink").toBool() ? QAccessible::Link : QAccessible::Button;
+        if (button->property("qsAXLink").toBool()) return QAccessible::Link;
+        return button->property("qsAXToggle").toBool() ? QAccessible::CheckBox : QAccessible::Button;
     }
     QString text(QAccessible::Text kind) const override {
         const QString value = QAccessibleWidget::text(kind);
@@ -508,10 +512,11 @@ public:
     }
     QStringList actionNames() const override {
         if (role() == QAccessible::ButtonMenu) return {pressAction(), showMenuAction()};
+        if (role() == QAccessible::CheckBox) return {toggleAction()};
         return {pressAction()};
     }
     void doAction(const QString &action) override {
-        if (button->isEnabled() && (action == pressAction() || (role() == QAccessible::ButtonMenu && action == showMenuAction()))) {
+        if (button->isEnabled() && actionNames().contains(action)) {
             notifyMediaAction(button);
             activateAccessibleButton(button);
         }
@@ -520,6 +525,8 @@ public:
         auto state = QAccessibleWidget::state();
         state.linked = role() == QAccessible::Link;
         state.selected = button->property("qsSelected").toBool();
+        state.checkable = role() == QAccessible::CheckBox;
+        state.checked = state.checkable && state.selected;
         state.pressed = button->isDown();
         state.hasPopup = role() == QAccessible::ButtonMenu;
         state.defaultButton = button->isDefault();
@@ -2066,11 +2073,13 @@ void qs_group_clip(QSWidget w, const QSPath *path, int evenOdd, int antialias) {
     effect->antialias = antialias;
     effect->update();
 }
-void qs_group_semantics(QSWidget w, int heading, int modal) {
+void qs_group_semantics(QSWidget w, int heading, int modal, int staticText, int tabBar) {
     auto *group = static_cast<GroupWidget *>(w);
     group->heading = heading;
     group->modal = modal;
-    group->exposeChildren = !heading || modal;
+    group->staticText = staticText;
+    group->tabBar = tabBar;
+    group->exposeChildren = modal || tabBar || (!heading && !staticText);
 }
 void qs_surface_material(QSWidget w, double radius, unsigned tint) {
     auto *surface = static_cast<Surface *>(w);
@@ -2580,15 +2589,17 @@ void qs_enabled(QSWidget w, int enabled) { widget(w)->setEnabled(enabled); }
 void qs_accessible_control(QSWidget w, int selected, int button, int toggle, int link, int startsMedia) {
     auto *item = widget(w);
     const bool changed = item->property("qsSelected").toBool() != bool(selected);
+    const bool toggleChanged = item->property("qsAXToggle").toBool() != bool(toggle);
     item->setProperty("qsSelected", bool(selected));
     item->setProperty("qsAXLink", bool(link));
     item->setProperty("qsAXButton", bool(button));
     item->setProperty("qsAXToggle", bool(toggle));
     item->setProperty("qsStartsMedia", bool(startsMedia));
-    if (changed) {
+    if (changed || toggleChanged) {
         QAccessible::State state;
-        state.selected = true;
-        state.checked = bool(toggle);
+        state.selected = changed;
+        state.checkable = toggleChanged;
+        state.checked = toggleChanged || (changed && toggle);
         QAccessibleStateChangeEvent event(item, state);
         QAccessible::updateAccessibility(&event);
     }
@@ -2747,6 +2758,15 @@ int qs_accessible_checked(QSWindow *window, const char *name) {
         if (object->text(QAccessible::Name) == QString::fromUtf8(name)) return object->state().checked ? 1 : 0;
     }
     return -1;
+}
+int qs_has_accessible_role(QSWindow *window, const char *name, const char *role) {
+    const int expected = QMetaEnum::fromType<QAccessible::Role>().keyToValue(role);
+    for (auto *widget : window->findChildren<QWidget *>()) {
+        auto *object = QAccessible::queryAccessibleInterface(widget);
+        if (object && !object->state().invisible && object->role() == expected &&
+            object->text(QAccessible::Name) == QString::fromUtf8(name)) return 1;
+    }
+    return 0;
 }
 int qs_accessible_element(QSWindow *window, const char *name, int childCount, const char *action) {
     for (auto *widget : window->findChildren<QWidget *>()) {
