@@ -95,7 +95,36 @@ private struct StackingApp: App {
     }
 }
 
+private struct PositionedApp: App {
+    func scene(_ name: String, at anchor: UnitPoint) -> some Scene {
+        Window(name, id: name) { Text(name) }
+            .defaultSize(width: 220, height: 100)
+            .defaultPosition(anchor)
+            .defaultLaunchBehavior(.presented)
+    }
+    var body: some Scene {
+        scene("Top left", at: .topLeading)
+        scene("Bottom right", at: .bottomTrailing)
+        scene("Quarter", at: .init(x: 0.25, y: 0.5))
+    }
+}
+
 final class WindowSceneTests: XCTestCase {
+    @MainActor func testInitialWindowFramesAlignAnchorsWithinTheScreen() async throws {
+        let windows = AppWindows(PositionedApp())
+        defer { windows.finish() }
+        let hosts = try XCTUnwrap(windows.launchWindows())
+        qs_flush()
+        let frames = hosts.map { qs_window_frame($0.window) }
+        XCTAssertEqual(frames.count, 3)
+        guard frames.count == 3 else { return }
+        let x = frames[1].x - frames[0].x, y = frames[1].y - frames[0].y
+        XCTAssertGreaterThan(x, 0)
+        XCTAssertGreaterThan(y, 0)
+        XCTAssertEqual(frames[2].x, frames[0].x + x * 0.25, accuracy: 1)
+        XCTAssertEqual(frames[2].y, frames[0].y + y * 0.5, accuracy: 1)
+    }
+
     @MainActor func testWindowLevelsApplyPerSceneAndUpdateLive() async throws {
         XCTAssertEqual(Set([WindowLevel.automatic, .normal, .desktop, .floating]).count, 4)
         let windows = AppWindows(StackingApp())

@@ -9,6 +9,7 @@ import QtBridge
     var valueType: ObjectIdentifier?
     var initialValue: (() -> AnyHashable)?
     var size: CGSize?
+    var position: UnitPoint?
     var appDefaults: UserDefaults?
     var level = WindowLevel.automatic
     var resizability = WindowResizability.automatic
@@ -148,21 +149,26 @@ public nonisolated struct Window<Content: View>: SceneCollection {
     }
 }
 
-private nonisolated struct SizedScene<S: Scene>: SceneCollection {
-    let scene: S, size: CGSize
+private nonisolated struct WindowGeometryScene<S: Scene, Value>: SceneCollection {
+    let scene: S
+    let key: WritableKeyPath<WindowScene, Value?>
+    let value: Value
     var body: Never { fatalError("Primitive scene") }
     @MainActor var windows: [WindowScene] {
         scene.sceneWindows.map { scene in
             var result = scene
-            result.size = size
+            result[keyPath: key] = value
             return result
         }
     }
 }
 extension Scene {
-    nonisolated public func defaultSize(_ size: CGSize) -> some Scene { SizedScene(scene: self, size: size) }
+    nonisolated public func defaultPosition(_ position: UnitPoint) -> some Scene {
+        WindowGeometryScene(scene: self, key: \.position, value: position)
+    }
+    nonisolated public func defaultSize(_ size: CGSize) -> some Scene { WindowGeometryScene(scene: self, key: \.size, value: size) }
     nonisolated public func defaultSize(width: CGFloat, height: CGFloat) -> some Scene {
-        SizedScene(scene: self, size: CGSize(width: width, height: height))
+        defaultSize(CGSize(width: width, height: height))
     }
 }
 
@@ -209,10 +215,12 @@ extension EnvironmentValues {
     private let appState = Host()
     private struct Instance {
         let sceneIndex: Int
+        let order: Int
         let host: Host
         let presentation: WindowPresentation
     }
     private var instances: [UUID: Instance] = [:]
+    private var nextOrder = 0
 
     init(_ app: Application) {
         self.app = app
@@ -273,9 +281,16 @@ extension EnvironmentValues {
         }
         qs_set_window_level(host.window, definition.level.native)
         host.observeClose { [weak self] in self?.instances.removeValue(forKey: key)?.host.close() }
-        instances[key] = Instance(sceneIndex: index, host: host, presentation: presentation)
+        let previous = definition.position.flatMap { _ in
+            instances.values.filter { $0.sceneIndex == index }.max { $0.order < $1.order }?.host
+        }
+        instances[key] = Instance(sceneIndex: index, order: nextOrder, host: host, presentation: presentation)
+        nextOrder += 1
         let size = definition.size ?? CGSize(width: 640, height: 480)
         host.open(width: Int(size.width), height: Int(size.height))
+        if let position = definition.position {
+            qs_position_window(host.window, position.x, position.y, previous?.window)
+        }
         return host
     }
 

@@ -677,6 +677,8 @@ struct QSWindow final : QWidget {
     QSDragHandler dragHandler = nullptr;
     QSKeyHandler keyHandler = nullptr;
     bool pending = false, framePending = false, snapshot = false;
+    struct Placement { QPointF anchor; QPointer<QSWindow> previous; };
+    std::optional<Placement> initialPlacement;
     WindowShortcuts shortcuts;
     NativeTransfer transfers;
 
@@ -696,6 +698,13 @@ struct QSWindow final : QWidget {
         });
     }
     bool eventFilter(QObject *source, QEvent *input) override {
+        if (input->type() == QEvent::Expose && initialPlacement && source == windowHandle() && windowHandle()->isExposed()) {
+            const auto placement = *initialPlacement;
+            initialPlacement.reset();
+            source->removeEventFilter(this);
+            qs_position_window(this, placement.anchor.x(), placement.anchor.y(), placement.previous);
+            return false;
+        }
         if (source == focusWidget() && handleClipboardKey(focusWidget(), input, transfers.handler, context)) return true;
         if (transfers.filter(qobject_cast<QWidget *>(source), input, context)) return true;
         if (keyHandler && source == focusWidget() && (input->type() == QEvent::KeyPress || input->type() == QEvent::KeyRelease)) {
@@ -1011,6 +1020,29 @@ void qs_set_window_level(QSWindow *window, QSWindowLevel level) {
         window->setAttribute(Qt::WA_ShowWithoutActivating, withoutActivation);
         if (active && focus) focus->setFocus(Qt::OtherFocusReason);
     }
+}
+void qs_position_window(QSWindow *window, double x, double y, QSWindow *previous) {
+    auto *screen = previous ? previous->screen() : window->screen();
+    if (!screen || !std::isfinite(x) || !std::isfinite(y)) return;
+    // On X11 the frame margins are available after the window manager maps the window.
+    if (auto *handle = window->windowHandle(); handle && !handle->isExposed()) {
+        window->initialPlacement = QSWindow::Placement{QPointF(x, y), previous};
+        handle->installEventFilter(window);
+        return;
+    }
+    const auto available = screen->availableGeometry();
+    const auto frame = window->frameGeometry();
+    const int dx = std::max(0, available.width() - frame.width());
+    const int dy = std::max(0, available.height() - frame.height());
+    if (window->isRightToLeft()) x = 1 - x;
+    QPoint origin = available.topLeft() + QPoint(int(dx * std::clamp(x, 0.0, 1.0)), int(dy * std::clamp(y, 0.0, 1.0)));
+    if (previous) {
+        const int step = std::max(1, window->style()->pixelMetric(QStyle::PM_TitleBarHeight, nullptr, window));
+        auto offset = previous->frameGeometry().topLeft() - available.topLeft() + QPoint(step, step);
+        if (offset.x() > dx || offset.y() > dy) offset = QPoint(step / 2, step / 2);
+        origin = available.topLeft() + QPoint(std::clamp(offset.x(), 0, dx), std::clamp(offset.y(), 0, dy));
+    }
+    window->move(origin);
 }
 void qs_window_raise(QSWindow *window) {
     if (window->isMinimized()) window->showNormal(); else window->show();
@@ -2727,6 +2759,10 @@ static NativePopover *activePopover(QSWindow *owner) {
     for (auto *parent = popup ? popup->parentWidget() : nullptr; parent; parent = parent->parentWidget())
         if (parent == owner) return popup;
     return nullptr;
+}
+QSRect qs_window_frame(QSWindow *window) {
+    const auto r = window->frameGeometry();
+    return {double(r.x()), double(r.y()), double(r.width()), double(r.height())};
 }
 QSRect qs_active_popover_frame(QSWindow *window) {
     auto *popup = activePopover(window);
