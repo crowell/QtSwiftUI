@@ -872,6 +872,14 @@ struct QSWindow final : QWidget {
             else if (reason == Qt::MouseFocusReason) value = "mouse";
             else if (reason == Qt::TabFocusReason || reason == Qt::BacktabFocusReason) value = "tab";
             event(context, source->property("swiftId").toInt(), QSFocusChanged, value);
+            auto *focused = qobject_cast<QWidget *>(source);
+            for (auto *parent = focused ? focused->parentWidget() : nullptr; parent && parent != this; parent = parent->parentWidget()) {
+                if (!parent->property("qsFocusable").toBool()) continue;
+                auto *proxy = parent->focusProxy();
+                while (proxy && proxy != focused) proxy = proxy->focusProxy();
+                if (proxy) event(context, parent->property("swiftId").toInt(), QSFocusChanged, value);
+            }
+            schedule();
         }
         return false;
     }
@@ -1540,6 +1548,7 @@ QSWidget qs_create(QSWindow *window, QSWidget parent, QSKind kind, int id) {
     }
     case QSScroll: {
         auto *scroll = new QScrollArea(container);
+        window->observeFocus(scroll, id);
         scroll->setFrameShape(QFrame::NoFrame);
         scroll->setProperty("qsScrollInput", QVariant::fromValue<QObject *>(new ScrollInput(scroll)));
         for (auto *bar : {scroll->horizontalScrollBar(), scroll->verticalScrollBar()}) {
@@ -2283,11 +2292,17 @@ void qs_group_focus(QSWidget w, int enabled, int interactions) {
         group->setFocusPolicy(Qt::NoFocus);
         return;
     }
+    const auto eligibleProxy = [group](QWidget *child) {
+        if (!child || child->focusPolicy() == Qt::NoFocus || !group->isAncestorOf(child)) return false;
+        for (auto *ancestor = child; ancestor != group; ancestor = ancestor->parentWidget())
+            if (ancestor->property("qsFocusable").toBool()) return false;
+        return true;
+    };
     QWidget *proxy = group->focusProxy();
-    if (!proxy || !group->isAncestorOf(proxy)) {
+    if (!eligibleProxy(proxy)) {
         proxy = nullptr;
         for (auto *child : group->findChildren<QWidget *>()) {
-            if (child->focusPolicy() == Qt::NoFocus) continue;
+            if (!eligibleProxy(child)) continue;
             proxy = child;
             break;
         }
@@ -2572,6 +2587,7 @@ int qs_menu_indicator_width(QSWidget w) {
 }
 int qs_button_down(QSWidget w) { return static_cast<QPushButton *>(w)->isDown(); }
 int qs_window_has_focus(QSWindow *window) { return window->focusWidget() != nullptr; }
+int qs_widget_has_focus(QSWidget w) { return widget(w)->hasFocus(); }
 int qs_try_focus(QSWidget w) {
     auto *item = widget(w);
     if (!item->isEnabled() || item->focusPolicy() == Qt::NoFocus) return 0;

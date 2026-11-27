@@ -74,7 +74,7 @@ enum Part: Hashable {
         }
         return owner
     }
-    func widget(_ kind: QSKind, pressed: ((Bool) -> Void)? = nil, exitCommand: (() -> Void)? = nil,
+    func widget(_ kind: QSKind, focusChanged: ((Bool) -> Void)? = nil, pressed: ((Bool) -> Void)? = nil, exitCommand: (() -> Void)? = nil,
                 cursorChanged: ((UnsafeMutableRawPointer) -> Void)? = nil,
                 tap: ((UnsafeMutableRawPointer) -> Void)? = nil, transfer: TransferAction? = nil,
                 adjustment: ((AccessibilityAdjustmentDirection) -> Void)? = nil,
@@ -109,6 +109,7 @@ enum Part: Hashable {
             case QSFocusChanged:
                 if value != "0", let host, host.defaultFocus.entered(id: entry.id, reason: value) { host.update() }
                 focus?.change(value != "0")
+                focusChanged?(value != "0")
             case QSSubmit: submit?(.text)
             case QSMagnified: magnify?(qs_magnify_sample(entry.widget))
             case QSGestureCancelled: cancelGesture?()

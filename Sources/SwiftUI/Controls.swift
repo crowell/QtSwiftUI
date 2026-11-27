@@ -167,7 +167,8 @@ public struct Button<Label: View>: Primitive {
         ctx.environment.isLink = false
         ctx.environment.accessibilityTraits.remove(.isLink)
         ctx.environment.focus = nil
-        let configured = style?(.init(label: .init(content: AnyView(label)), isPressed: qs_button_down(widget) != 0), context)
+        ctx.environment.isFocused = qs_widget_has_focus(widget) != 0
+        let configured = style?(.init(label: .init(content: AnyView(label)), isPressed: qs_button_down(widget) != 0), ctx)
         let child = stacked((configured ?? AnyView(label)).resolve(ctx.descending(.position(0))), axis: .horizontal, alignment: .center, spacing: 4, direction: ctx.environment.layoutDirection)
         let scale = context.environment.controlSize.qtScale
         let dx: CGFloat = style == nil ? 8 * scale : 0, dy: CGFloat = style == nil ? 5 * scale : 0

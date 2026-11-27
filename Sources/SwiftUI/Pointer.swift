@@ -2,10 +2,16 @@ import QtBridge
 
 extension Context {
     func children<V: View>(of view: V, inside group: UnsafeMutableRawPointer,
-                           prepare: ((CGSize) -> Void)? = nil) -> [Element] {
+                           focusForDescendants: Bool? = nil, prepare: ((CGSize) -> Void)? = nil) -> [Element] {
         var inner = descending(.position(0))
         inner.parent = group
-        let child = stacked(view.resolve(inner), axis: .vertical, alignment: .center, spacing: 8)
+        let elements: [Element]
+        if let focusForDescendants {
+            elements = view.resolveFocusChildren(in: inner, focused: focusForDescendants)
+        } else {
+            elements = view.resolve(inner)
+        }
+        let child = stacked(elements, axis: .vertical, alignment: .center, spacing: 8)
         return [child.grouped(in: group, prepare: prepare)]
     }
 }

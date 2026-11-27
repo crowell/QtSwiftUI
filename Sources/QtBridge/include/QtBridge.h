@@ -266,6 +266,7 @@ int qs_popup_item_state(QSWindow *, const char *title);
 int qs_click_popup_item(QSWindow *, const char *title);
 int qs_button_down(QSWidget);
 int qs_window_has_focus(QSWindow *);
+int qs_widget_has_focus(QSWidget);
 int qs_try_focus(QSWidget);
 void qs_focus(QSWidget, int active);
 void qs_enabled(QSWidget, int);

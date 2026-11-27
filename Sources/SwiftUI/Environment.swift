@@ -89,6 +89,7 @@ public struct EnvironmentValues {
     var preferredFocus: Set<Namespace.ID> = []
     var focusReset = ResetFocusAction { _ in }
     var focus: FocusLink?
+    public internal(set) var isFocused = false
     public var isFocusEffectEnabled = true
     var submit: ((SubmitTriggers) -> Void)?
     var submitLabel: SubmitLabel?
