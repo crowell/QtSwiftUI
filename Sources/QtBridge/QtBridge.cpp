@@ -64,6 +64,7 @@
 #include "PickerButtons.hpp"
 #include <QStandardItemModel>
 #include <QResizeEvent>
+#include <QWindowStateChangeEvent>
 #include <QScrollArea>
 #include <QScrollBar>
 #include <QScroller>
@@ -945,6 +946,10 @@ struct QSWindow final : QWidget {
     void resizeEvent(QResizeEvent *) override { schedule(); }
     void moveEvent(QMoveEvent *) override { schedule(); }
     void closeEvent(QCloseEvent *event) override {
+        if (!windowFlags().testFlag(Qt::WindowCloseButtonHint)) {
+            event->ignore();
+            return;
+        }
         QWidget::closeEvent(event);
         if (closed && event->isAccepted()) QTimer::singleShot(0, this, [this] {
             if (!isVisible() && closed) closed(context);
@@ -952,6 +957,15 @@ struct QSWindow final : QWidget {
     }
     void changeEvent(QEvent *change) override {
         QWidget::changeEvent(change);
+        if (change->type() == QEvent::WindowStateChange && isMinimized() && !qs_window_allows_minimize(this)) {
+            const auto previous = static_cast<QWindowStateChangeEvent *>(change)->oldState();
+            if (!previous.testFlag(Qt::WindowMinimized)) {
+                // Some window managers offer Minimize even without the Qt button hint.
+                QTimer::singleShot(0, this, [this, previous] {
+                    if (isMinimized() && !qs_window_allows_minimize(this)) setWindowState(previous);
+                });
+            }
+        }
         if (change->type() == QEvent::WindowStateChange || change->type() == QEvent::ActivationChange || change->type() == QEvent::PaletteChange) schedule();
     }
 };
@@ -1008,13 +1022,10 @@ QSWindowLevel qs_window_level(QSWindow *window) {
     if (flags.testFlag(Qt::WindowStaysOnBottomHint)) return QSDesktopWindow;
     return QSNormalWindow;
 }
-void qs_set_window_level(QSWindow *window, QSWindowLevel level) {
-    if (level == qs_window_level(window)) return;
-    auto flags = window->windowFlags();
-    flags.setFlag(Qt::WindowStaysOnTopHint, level == QSFloatingWindow);
-    flags.setFlag(Qt::WindowStaysOnBottomHint, level == QSDesktopWindow);
+static void applyWindowFlags(QSWindow *window, Qt::WindowFlags flags) {
+    if (flags == window->windowFlags()) return;
     // Changing a QWidget's window flags hides it. Preserve its presentation
-    // and the focused control when a live scene changes level.
+    // and the focused control when a live scene changes its window flags.
     const bool visible = window->isVisible();
     const bool active = window->isActiveWindow();
     const auto geometry = window->geometry();
@@ -1030,6 +1041,20 @@ void qs_set_window_level(QSWindow *window, QSWindowLevel level) {
         window->setAttribute(Qt::WA_ShowWithoutActivating, withoutActivation);
         if (active && focus) focus->setFocus(Qt::OtherFocusReason);
     }
+}
+void qs_set_window_level(QSWindow *window, QSWindowLevel level) {
+    auto flags = window->windowFlags();
+    flags.setFlag(Qt::WindowStaysOnTopHint, level == QSFloatingWindow);
+    flags.setFlag(Qt::WindowStaysOnBottomHint, level == QSDesktopWindow);
+    applyWindowFlags(window, flags);
+}
+int qs_window_allows_minimize(QSWindow *window) { return window->windowFlags().testFlag(Qt::WindowMinimizeButtonHint); }
+void qs_window_controls(QSWindow *window, int dismiss, int minimize) {
+    auto flags = window->windowFlags();
+    flags.setFlag(Qt::CustomizeWindowHint, !dismiss || !minimize);
+    flags.setFlag(Qt::WindowCloseButtonHint, dismiss != 0);
+    flags.setFlag(Qt::WindowMinimizeButtonHint, minimize != 0);
+    applyWindowFlags(window, flags);
 }
 void qs_position_window(QSWindow *window, double x, double y, QSWindow *previous) {
     auto *screen = previous ? previous->screen() : window->screen();
@@ -1170,6 +1195,7 @@ void qs_application_appearance(int mode) {
 void qs_active_window_state(int fullscreen) {
     auto *window = QApplication::activeWindow();
     if (!window) return;
+    if (auto *scene = dynamic_cast<QSWindow *>(window); scene && !fullscreen && !qs_window_allows_minimize(scene)) return;
     if (!fullscreen) window->showMinimized();
     else if (window->isFullScreen()) window->showNormal();
     else window->showFullScreen();

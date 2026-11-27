@@ -23,6 +23,8 @@ void qs_set_window_level(QSWindow *, enum QSWindowLevel level);
 enum QSWindowLevel qs_window_level(QSWindow *);
 void qs_window_raise(QSWindow *);
 void qs_window_background_drag(QSWindow *, int enabled);
+void qs_window_controls(QSWindow *, int dismiss, int minimize);
+int qs_window_allows_minimize(QSWindow *);
 void qs_position_window(QSWindow *, double x, double y, QSWindow *previous);
 void qs_window_limits(QSWindow *, double minWidth, double minHeight, double maxWidth, double maxHeight);
 void qs_request_window_close(QSWindow *);

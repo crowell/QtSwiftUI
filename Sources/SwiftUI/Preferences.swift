@@ -42,6 +42,12 @@ extension PreferenceKey where Value: ExpressibleByNilLiteral {
 }
 
 extension Context {
+    mutating func readPreference<K: PreferenceKey>(_ key: K.Type) -> () -> K.Value {
+        let values = PreferenceValues<K>()
+        preferences[ObjectIdentifier(key)] = values
+        return { values.producer()?() ?? K.defaultValue }
+    }
+
     mutating func publish<K: PreferenceKey>(_ key: K.Type, _ read: @escaping () -> K.Value) {
         let observer = preferences.removeValue(forKey: ObjectIdentifier(key)) as? PreferenceValues<K>
         observer?.inputs.append { read }

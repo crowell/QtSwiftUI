@@ -95,6 +95,35 @@ private struct StackingApp: App {
     }
 }
 
+private struct WindowControlApp: App {
+    let probe = SceneProbe()
+    @State private var guarded = true
+
+    var body: some Scene {
+        Window("Guarded", id: "guarded") {
+            VStack {
+                if guarded {
+                    GeometryReader { _ in
+                        Text("Guarded")
+                            .windowDismissBehavior(.disabled)
+                            .windowDismissBehavior(.automatic)
+                    }
+                    Text("Other preference")
+                        .windowDismissBehavior(.enabled)
+                        .windowMinimizeBehavior(.disabled)
+                }
+                Button("Unlock") { guarded = false }.accessibilityIdentifier("unlock")
+                ProbeContent(key: "panel", probe: probe)
+            }
+            .windowDismissBehavior(.enabled)
+            .windowMinimizeBehavior(.automatic)
+        }.defaultLaunchBehavior(.presented)
+        Window("Independent", id: "other") {
+            ProbeContent(key: "other", probe: probe)
+        }.defaultLaunchBehavior(.presented)
+    }
+}
+
 private struct PositionedApp: App {
     func scene(_ name: String, at anchor: UnitPoint) -> some Scene {
         Window(name, id: name) { Text(name) }
@@ -110,6 +139,33 @@ private struct PositionedApp: App {
 }
 
 final class WindowSceneTests: XCTestCase {
+    @MainActor func testWindowInteractionsRespectDescendantsAndRestoreDefaults() async throws {
+        func settle() async {
+            for _ in 0..<3 { qs_flush(); await Task.yield() }
+        }
+        let app = WindowControlApp()
+        let windows = AppWindows(app)
+        defer { windows.finish() }
+        let hosts = try XCTUnwrap(windows.launchWindows())
+        XCTAssertEqual(hosts.count, 2)
+        let guarded = try XCTUnwrap(hosts.first)
+        let dismiss = try XCTUnwrap(app.probe.dismiss)
+        XCTAssertEqual(qs_window_allows_minimize(guarded.window), 0)
+        XCTAssertNotEqual(qs_window_allows_minimize(hosts[1].window), 0)
+        dismiss(id: "guarded")
+        await settle()
+        XCTAssertEqual(app.probe.closed, 0)
+        dismiss(id: "other")
+        await settle()
+        XCTAssertEqual(app.probe.closed, 1)
+        XCTAssertEqual(qs_click(guarded.window, "unlock"), 1)
+        await settle()
+        XCTAssertNotEqual(qs_window_allows_minimize(guarded.window), 0)
+        dismiss(id: "guarded")
+        await settle()
+        XCTAssertEqual(app.probe.closed, 2)
+    }
+
     @MainActor func testInitialWindowFramesAlignAnchorsWithinTheScreen() async throws {
         let windows = AppWindows(PositionedApp())
         defer { windows.finish() }

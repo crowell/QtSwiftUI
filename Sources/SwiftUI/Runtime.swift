@@ -328,6 +328,7 @@ enum Part: Hashable {
         }
         hasMaterial = false
         qs_shortcut_begin(window)
+        let windowControls = viewport == nil ? nil : context.readPreference(WindowControls.self)
         let roots = content(context)
         let root = stacked(roots, axis: .vertical, alignment: .center, spacing: 8)
         if let resizability, let viewport {
@@ -356,6 +357,7 @@ enum Part: Hashable {
             }
         }
         if hasMaterial && drawable { qs_window_materials(window) }
+        windowControls?().apply(to: window)
         qs_shortcut_finish(window)
         storage = storage.filter { liveStorage.contains($0.key) }
         return drawable ? size : .zero
