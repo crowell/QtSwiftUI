@@ -106,6 +106,7 @@ private struct WindowControlApp: App {
                     GeometryReader { _ in
                         Text("Guarded")
                             .windowDismissBehavior(.disabled)
+                            .windowFullScreenBehavior(.disabled)
                             .windowDismissBehavior(.automatic)
                     }
                     Text("Other preference")
@@ -117,6 +118,7 @@ private struct WindowControlApp: App {
             }
             .windowDismissBehavior(.enabled)
             .windowMinimizeBehavior(.automatic)
+            .windowFullScreenBehavior(.enabled)
         }.defaultLaunchBehavior(.presented)
         Window("Independent", id: "other") {
             ProbeContent(key: "other", probe: probe)
@@ -150,6 +152,7 @@ final class WindowSceneTests: XCTestCase {
         XCTAssertEqual(hosts.count, 2)
         let guarded = try XCTUnwrap(hosts.first)
         let dismiss = try XCTUnwrap(app.probe.dismiss)
+        XCTAssertEqual(qs_window_allows_full_screen(guarded.window), 0)
         XCTAssertEqual(qs_window_allows_minimize(guarded.window), 0)
         XCTAssertNotEqual(qs_window_allows_minimize(hosts[1].window), 0)
         dismiss(id: "guarded")
@@ -160,6 +163,7 @@ final class WindowSceneTests: XCTestCase {
         XCTAssertEqual(app.probe.closed, 1)
         XCTAssertEqual(qs_click(guarded.window, "unlock"), 1)
         await settle()
+        XCTAssertNotEqual(qs_window_allows_full_screen(guarded.window), 0)
         XCTAssertNotEqual(qs_window_allows_minimize(guarded.window), 0)
         dismiss(id: "guarded")
         await settle()
@@ -231,6 +235,7 @@ final class WindowSceneTests: XCTestCase {
             let windows = AppWindows(app)
             defer { windows.finish() }
             let host = try XCTUnwrap(windows.launchWindows()?.first)
+            XCTAssertEqual(qs_window_allows_full_screen(host.window) == 0, restrictMaximum)
             XCTAssertEqual(try captureSize(host, width: 40, height: 30), CGSize(width: 100, height: 60))
             XCTAssertEqual(try captureSize(host, width: 500, height: 400),
                            restrictMaximum ? CGSize(width: 250, height: 160) : CGSize(width: 500, height: 400))

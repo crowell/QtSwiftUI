@@ -3,6 +3,7 @@ import QtBridge
 struct WindowControls: PreferenceKey {
     var dismiss: Bool?
     var minimize: Bool?
+    var fullScreen: Bool?
 
     static var defaultValue: Self { Self() }
     static func reduce(value: inout Self, nextValue: () -> Self) {
@@ -12,10 +13,12 @@ struct WindowControls: PreferenceKey {
     mutating func fillDefaults(from other: Self) {
         dismiss = dismiss ?? other.dismiss
         minimize = minimize ?? other.minimize
+        fullScreen = fullScreen ?? other.fullScreen
     }
 
     func apply(to window: OpaquePointer?) {
-        qs_window_controls(window, dismiss == false ? 0 : 1, minimize == false ? 0 : 1)
+        qs_window_controls(window, dismiss == false ? 0 : 1, minimize == false ? 0 : 1,
+                           fullScreen.map { $0 ? 1 : 0 } ?? -1)
     }
 }
 
@@ -30,6 +33,9 @@ private nonisolated struct WindowControlView<Content: View>: View {
 extension View {
     nonisolated public func windowDismissBehavior(_ behavior: WindowInteractionBehavior) -> some View {
         WindowControlView(content: self, controls: WindowControls(dismiss: behavior.enabled))
+    }
+    nonisolated public func windowFullScreenBehavior(_ behavior: WindowInteractionBehavior) -> some View {
+        WindowControlView(content: self, controls: WindowControls(fullScreen: behavior.enabled))
     }
     nonisolated public func windowMinimizeBehavior(_ behavior: WindowInteractionBehavior) -> some View {
         WindowControlView(content: self, controls: WindowControls(minimize: behavior.enabled))

@@ -679,6 +679,7 @@ struct QSWindow final : QWidget {
     QSKeyHandler keyHandler = nullptr;
     bool pending = false, framePending = false, snapshot = false;
     bool dragsByBackground = false;
+    std::optional<bool> fullScreenEnabled;
     struct Placement { QPointF anchor; QPointer<QSWindow> previous; };
     std::optional<Placement> initialPlacement;
     WindowShortcuts shortcuts;
@@ -955,14 +956,19 @@ struct QSWindow final : QWidget {
             if (!isVisible() && closed) closed(context);
         });
     }
+    bool disallowsTransitionFrom(Qt::WindowStates previous) {
+        const auto added = windowState() & ~previous;
+        return (added.testFlag(Qt::WindowMinimized) && !qs_window_allows_minimize(this)) ||
+               (added.testFlag(Qt::WindowFullScreen) && !qs_window_allows_full_screen(this));
+    }
     void changeEvent(QEvent *change) override {
         QWidget::changeEvent(change);
-        if (change->type() == QEvent::WindowStateChange && isMinimized() && !qs_window_allows_minimize(this)) {
+        if (change->type() == QEvent::WindowStateChange) {
             const auto previous = static_cast<QWindowStateChangeEvent *>(change)->oldState();
-            if (!previous.testFlag(Qt::WindowMinimized)) {
-                // Some window managers offer Minimize even without the Qt button hint.
+            if (disallowsTransitionFrom(previous)) {
+                // A window manager can request these transitions independently of the application menu.
                 QTimer::singleShot(0, this, [this, previous] {
-                    if (isMinimized() && !qs_window_allows_minimize(this)) setWindowState(previous);
+                    if (disallowsTransitionFrom(previous)) setWindowState(previous);
                 });
             }
         }
@@ -1049,7 +1055,13 @@ void qs_set_window_level(QSWindow *window, QSWindowLevel level) {
     applyWindowFlags(window, flags);
 }
 int qs_window_allows_minimize(QSWindow *window) { return window->windowFlags().testFlag(Qt::WindowMinimizeButtonHint); }
-void qs_window_controls(QSWindow *window, int dismiss, int minimize) {
+int qs_window_allows_full_screen(QSWindow *window) {
+    if (window->fullScreenEnabled) return *window->fullScreenEnabled;
+    const auto *screen = window->screen();
+    return !screen || window->maximumSize().expandedTo(screen->size()) == window->maximumSize();
+}
+void qs_window_controls(QSWindow *window, int dismiss, int minimize, int fullscreen) {
+    window->fullScreenEnabled = fullscreen < 0 ? std::nullopt : std::optional<bool>(fullscreen != 0);
     auto flags = window->windowFlags();
     flags.setFlag(Qt::CustomizeWindowHint, !dismiss || !minimize);
     flags.setFlag(Qt::WindowCloseButtonHint, dismiss != 0);
@@ -1195,7 +1207,10 @@ void qs_application_appearance(int mode) {
 void qs_active_window_state(int fullscreen) {
     auto *window = QApplication::activeWindow();
     if (!window) return;
-    if (auto *scene = dynamic_cast<QSWindow *>(window); scene && !fullscreen && !qs_window_allows_minimize(scene)) return;
+    if (auto *scene = dynamic_cast<QSWindow *>(window)) {
+        if (!fullscreen && !qs_window_allows_minimize(scene)) return;
+        if (fullscreen && !qs_window_allows_full_screen(scene)) return;
+    }
     if (!fullscreen) window->showMinimized();
     else if (window->isFullScreen()) window->showNormal();
     else window->showFullScreen();
