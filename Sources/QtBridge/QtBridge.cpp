@@ -680,6 +680,18 @@ struct QSWindow final : QWidget {
     bool pending = false, framePending = false, snapshot = false;
     bool dragsByBackground = false;
     std::optional<bool> fullScreenEnabled;
+    QSize contentMinimum{0, 0}, contentMaximum{QWIDGETSIZE_MAX, QWIDGETSIZE_MAX};
+    std::optional<QSize> lockedNormalSize;
+
+    void applySizeLimits(bool fullScreen) {
+        QSize lower = contentMinimum, upper = contentMaximum;
+        if (lockedNormalSize) {
+            *lockedNormalSize = lockedNormalSize->expandedTo(lower).boundedTo(upper);
+            if (!fullScreen) lower = upper = *lockedNormalSize;
+        }
+        if (minimumSize() != lower) setMinimumSize(lower);
+        if (maximumSize() != upper) setMaximumSize(upper);
+    }
     struct Placement { QPointF anchor; QPointer<QSWindow> previous; };
     std::optional<Placement> initialPlacement;
     WindowShortcuts shortcuts;
@@ -965,6 +977,7 @@ struct QSWindow final : QWidget {
         QWidget::changeEvent(change);
         if (change->type() == QEvent::WindowStateChange) {
             const auto previous = static_cast<QWindowStateChangeEvent *>(change)->oldState();
+            if (isFullScreen() != previous.testFlag(Qt::WindowFullScreen)) applySizeLimits(isFullScreen());
             if (disallowsTransitionFrom(previous)) {
                 // A window manager can request these transitions independently of the application menu.
                 QTimer::singleShot(0, this, [this, previous] {
@@ -1009,6 +1022,10 @@ QSWindow *qs_window(const char *title, void *context, QSRender render, QSEvent e
     return window;
 }
 void qs_open(QSWindow *window, int width, int height) {
+    if (window->lockedNormalSize) {
+        window->lockedNormalSize = QSize(width, height);
+        window->applySizeLimits(window->isFullScreen());
+    }
     window->resize(width, height);
     window->show();
     qs_flush();
@@ -1017,10 +1034,9 @@ void qs_request_window_close(QSWindow *window) { window->close(); }
 void qs_window_limits(QSWindow *window, double minWidth, double minHeight, double maxWidth, double maxHeight) {
     auto lower = [](double limit) { return std::isfinite(limit) ? int(std::ceil(std::clamp(limit, 0.0, double(QWIDGETSIZE_MAX)))) : 0; };
     auto upper = [](double limit) { return std::isfinite(limit) ? int(std::floor(std::clamp(limit, 0.0, double(QWIDGETSIZE_MAX)))) : QWIDGETSIZE_MAX; };
-    QSize minimum(lower(minWidth), lower(minHeight));
-    QSize maximum = QSize(upper(maxWidth), upper(maxHeight)).expandedTo(minimum);
-    if (window->minimumSize() != minimum) window->setMinimumSize(minimum);
-    if (window->maximumSize() != maximum) window->setMaximumSize(maximum);
+    window->contentMinimum = QSize(lower(minWidth), lower(minHeight));
+    window->contentMaximum = QSize(upper(maxWidth), upper(maxHeight)).expandedTo(window->contentMinimum);
+    window->applySizeLimits(window->isFullScreen());
 }
 QSWindowLevel qs_window_level(QSWindow *window) {
     const auto flags = window->windowFlags();
@@ -1055,15 +1071,25 @@ void qs_set_window_level(QSWindow *window, QSWindowLevel level) {
     applyWindowFlags(window, flags);
 }
 int qs_window_allows_minimize(QSWindow *window) { return window->windowFlags().testFlag(Qt::WindowMinimizeButtonHint); }
+int qs_window_allows_resize(QSWindow *window) { return window->minimumSize() != window->maximumSize(); }
 int qs_window_allows_full_screen(QSWindow *window) {
     if (window->fullScreenEnabled) return *window->fullScreenEnabled;
+    if (window->lockedNormalSize || window->contentMinimum == window->contentMaximum) return false;
     const auto *screen = window->screen();
-    return !screen || window->maximumSize().expandedTo(screen->size()) == window->maximumSize();
+    return !screen || window->contentMaximum.expandedTo(screen->size()) == window->contentMaximum;
 }
-void qs_window_controls(QSWindow *window, int dismiss, int minimize, int fullscreen) {
+void qs_window_controls(QSWindow *window, int dismiss, int minimize, int resize, int fullscreen) {
+    if (resize) window->lockedNormalSize.reset();
+    else if (!window->lockedNormalSize) {
+        const auto normal = window->normalGeometry();
+        window->lockedNormalSize = window->isFullScreen() && normal.isValid() ? normal.size() : window->size();
+    }
+    window->applySizeLimits(window->isFullScreen());
     window->fullScreenEnabled = fullscreen < 0 ? std::nullopt : std::optional<bool>(fullscreen != 0);
     auto flags = window->windowFlags();
-    flags.setFlag(Qt::CustomizeWindowHint, !dismiss || !minimize);
+    const bool canResize = resize && window->contentMinimum != window->contentMaximum;
+    flags.setFlag(Qt::CustomizeWindowHint, !dismiss || !minimize || !canResize);
+    flags.setFlag(Qt::WindowMaximizeButtonHint, canResize);
     flags.setFlag(Qt::WindowCloseButtonHint, dismiss != 0);
     flags.setFlag(Qt::WindowMinimizeButtonHint, minimize != 0);
     applyWindowFlags(window, flags);

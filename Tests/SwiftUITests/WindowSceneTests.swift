@@ -56,10 +56,12 @@ private struct ProbeApp: App {
 
 private struct ResizableApp: App {
     var sizing = WindowResizability.contentSize
+    var resize = WindowInteractionBehavior.automatic
     init() {}
     var body: some Scene {
         Window("Resize", id: "size") {
             Color.white.frame(minWidth: 100, maxWidth: 250, minHeight: 60, maxHeight: 160)
+                .windowResizeBehavior(resize)
         }
         .defaultSize(CGSize(width: 200, height: 100))
         .windowResizability(sizing)
@@ -107,6 +109,7 @@ private struct WindowControlApp: App {
                         Text("Guarded")
                             .windowDismissBehavior(.disabled)
                             .windowFullScreenBehavior(.disabled)
+                            .windowResizeBehavior(.disabled)
                             .windowDismissBehavior(.automatic)
                     }
                     Text("Other preference")
@@ -119,6 +122,7 @@ private struct WindowControlApp: App {
             .windowDismissBehavior(.enabled)
             .windowMinimizeBehavior(.automatic)
             .windowFullScreenBehavior(.enabled)
+            .windowResizeBehavior(.enabled)
         }.defaultLaunchBehavior(.presented)
         Window("Independent", id: "other") {
             ProbeContent(key: "other", probe: probe)
@@ -153,6 +157,8 @@ final class WindowSceneTests: XCTestCase {
         let guarded = try XCTUnwrap(hosts.first)
         let dismiss = try XCTUnwrap(app.probe.dismiss)
         XCTAssertEqual(qs_window_allows_full_screen(guarded.window), 0)
+        XCTAssertEqual(qs_window_allows_resize(guarded.window), 0)
+        XCTAssertNotEqual(qs_window_allows_resize(hosts[1].window), 0)
         XCTAssertEqual(qs_window_allows_minimize(guarded.window), 0)
         XCTAssertNotEqual(qs_window_allows_minimize(hosts[1].window), 0)
         dismiss(id: "guarded")
@@ -164,6 +170,7 @@ final class WindowSceneTests: XCTestCase {
         XCTAssertEqual(qs_click(guarded.window, "unlock"), 1)
         await settle()
         XCTAssertNotEqual(qs_window_allows_full_screen(guarded.window), 0)
+        XCTAssertNotEqual(qs_window_allows_resize(guarded.window), 0)
         XCTAssertNotEqual(qs_window_allows_minimize(guarded.window), 0)
         dismiss(id: "guarded")
         await settle()
@@ -240,6 +247,25 @@ final class WindowSceneTests: XCTestCase {
             XCTAssertEqual(try captureSize(host, width: 500, height: 400),
                            restrictMaximum ? CGSize(width: 250, height: 160) : CGSize(width: 500, height: 400))
         }
+    }
+
+    @MainActor func testProgrammaticResizeHonorsContentBoundsWithUserResizingDisabled() throws {
+        var app = ResizableApp()
+        app.resize = .disabled
+        let windows = AppWindows(app)
+        defer { windows.finish() }
+        let host = try XCTUnwrap(windows.launchWindows()?.first)
+        let initial = qs_window_frame(host.window)
+        XCTAssertEqual(qs_window_allows_resize(host.window), 0)
+        host.open(width: 235, height: 140)
+        let larger = qs_window_frame(host.window)
+        XCTAssertEqual(larger.width - initial.width, 35)
+        XCTAssertEqual(larger.height - initial.height, 40)
+        host.open(width: 300, height: 210)
+        let bounded = qs_window_frame(host.window)
+        XCTAssertEqual(bounded.width - initial.width, 50)
+        XCTAssertEqual(bounded.height - initial.height, 60)
+        XCTAssertEqual(qs_window_allows_resize(host.window), 0)
     }
 
     @MainActor func testPresentationValueBindingMatchingAndDefaults() async throws {
