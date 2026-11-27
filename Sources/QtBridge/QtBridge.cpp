@@ -1979,6 +1979,7 @@ void qs_selectable(QSWidget w, int enabled) {
     auto *label = static_cast<QLabel *>(w);
     Qt::TextInteractionFlags flags = enabled ? Qt::TextSelectableByMouse | Qt::TextSelectableByKeyboard : Qt::NoTextInteraction;
     if (label->textInteractionFlags() != flags) label->setTextInteractionFlags(flags);
+    label->setFocusPolicy(enabled ? Qt::ClickFocus : Qt::NoFocus);
 }
 int qs_register_font(const char *path) {
     auto &app = application();
