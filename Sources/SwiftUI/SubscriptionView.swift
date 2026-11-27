@@ -1,12 +1,13 @@
 import Combine
 import Foundation
 
-public nonisolated struct SubscriptionView<PublisherType: Publisher, Content: View>: Primitive where PublisherType.Failure == Never {
+@frozen public nonisolated struct SubscriptionView<PublisherType: Publisher, Content: View>: Primitive where PublisherType.Failure == Never {
+    public typealias Body = Never
     public var content: Content
     public var publisher: PublisherType
     public var action: (PublisherType.Output) -> Void
 
-    public init(content: Content, publisher: PublisherType, action: @escaping (PublisherType.Output) -> Void) {
+    nonisolated public init(content: Content, publisher: PublisherType, action: @escaping (PublisherType.Output) -> Void) {
         self.content = content
         self.publisher = publisher
         self.action = action

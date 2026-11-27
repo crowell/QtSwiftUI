@@ -21,7 +21,7 @@ private final class CountingPublisher: Publisher {
     }
 }
 
-private struct Feed: Publisher {
+private struct Feed: Combine.Publisher {
     let source: CountingPublisher
     let key: Int
     func receive<S: Subscriber>(subscriber: S) where S.Input == Int, S.Failure == Never {
@@ -136,6 +136,7 @@ final class SubscriptionTests: XCTestCase {
     }
 
     @MainActor func testImmediatePublisherRunsBeforeAppearance() {
+        let _: Never.Type = SubscriptionView<Just<Int>, Text>.Body.self
         var seen: [String] = []
         let view = Text("Label").onReceive(Just(7)) { seen.append(String($0)) }
             .onAppear { seen.append("appear") }
