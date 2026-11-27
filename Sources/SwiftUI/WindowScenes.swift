@@ -10,6 +10,7 @@ import QtBridge
     var initialValue: (() -> AnyHashable)?
     var size: CGSize?
     var appDefaults: UserDefaults?
+    var level = WindowLevel.automatic
     var resizability = WindowResizability.automatic
     let content: (Context) -> [Element]
     var commands: (Context, MenuEntries) -> Void = { _, _ in }
@@ -266,9 +267,11 @@ extension EnvironmentValues {
             }
             let current = self.scenes(context.environment)
             guard current.indices.contains(index) else { return [] }
+            qs_set_window_level(source.host.window, current[index].level.native)
             source.host.resizability = current[index].resizability
             return current[index].windowContent(in: context)
         }
+        qs_set_window_level(host.window, definition.level.native)
         host.observeClose { [weak self] in self?.instances.removeValue(forKey: key)?.host.close() }
         instances[key] = Instance(sceneIndex: index, host: host, presentation: presentation)
         let size = definition.size ?? CGSize(width: 640, height: 480)

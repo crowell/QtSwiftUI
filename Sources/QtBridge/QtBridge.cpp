@@ -983,6 +983,35 @@ void qs_window_limits(QSWindow *window, double minWidth, double minHeight, doubl
     if (window->minimumSize() != minimum) window->setMinimumSize(minimum);
     if (window->maximumSize() != maximum) window->setMaximumSize(maximum);
 }
+QSWindowLevel qs_window_level(QSWindow *window) {
+    const auto flags = window->windowFlags();
+    if (flags.testFlag(Qt::WindowStaysOnTopHint)) return QSFloatingWindow;
+    if (flags.testFlag(Qt::WindowStaysOnBottomHint)) return QSDesktopWindow;
+    return QSNormalWindow;
+}
+void qs_set_window_level(QSWindow *window, QSWindowLevel level) {
+    if (level == qs_window_level(window)) return;
+    auto flags = window->windowFlags();
+    flags.setFlag(Qt::WindowStaysOnTopHint, level == QSFloatingWindow);
+    flags.setFlag(Qt::WindowStaysOnBottomHint, level == QSDesktopWindow);
+    // Changing a QWidget's window flags hides it. Preserve its presentation
+    // and the focused control when a live scene changes level.
+    const bool visible = window->isVisible();
+    const bool active = window->isActiveWindow();
+    const auto geometry = window->geometry();
+    const auto state = window->windowState();
+    QPointer<QWidget> focus = window->focusWidget();
+    window->setWindowFlags(flags);
+    if (visible) {
+        const bool withoutActivation = window->testAttribute(Qt::WA_ShowWithoutActivating);
+        window->setAttribute(Qt::WA_ShowWithoutActivating, !active || withoutActivation);
+        window->setGeometry(geometry);
+        window->setWindowState(state);
+        window->show();
+        window->setAttribute(Qt::WA_ShowWithoutActivating, withoutActivation);
+        if (active && focus) focus->setFocus(Qt::OtherFocusReason);
+    }
+}
 void qs_window_raise(QSWindow *window) {
     if (window->isMinimized()) window->showNormal(); else window->show();
     window->raise();

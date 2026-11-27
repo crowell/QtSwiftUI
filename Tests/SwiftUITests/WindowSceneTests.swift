@@ -81,7 +81,32 @@ private struct LaunchApp: App {
     }
 }
 
+private struct StackingApp: App {
+    @State var level = WindowLevel.floating
+    var body: some Scene {
+        Window("Inspector", id: "inspector") {
+            Button("Move behind") { level = .desktop }.accessibilityIdentifier("lower")
+        }
+        .windowLevel(level)
+        .defaultLaunchBehavior(.presented)
+        Window("Main", id: "main") { Text("Main") }
+            .windowLevel(.normal)
+            .defaultLaunchBehavior(.presented)
+    }
+}
+
 final class WindowSceneTests: XCTestCase {
+    @MainActor func testWindowLevelsApplyPerSceneAndUpdateLive() async throws {
+        XCTAssertEqual(Set([WindowLevel.automatic, .normal, .desktop, .floating]).count, 4)
+        let windows = AppWindows(StackingApp())
+        defer { windows.finish() }
+        let hosts = try XCTUnwrap(windows.launchWindows())
+        XCTAssertEqual(hosts.map { qs_window_level($0.window) }, [QSFloatingWindow, QSNormalWindow])
+        XCTAssertEqual(qs_click(hosts[0].window, "lower"), 1)
+        qs_flush()
+        XCTAssertEqual(hosts.map { qs_window_level($0.window) }, [QSDesktopWindow, QSNormalWindow])
+    }
+
     @MainActor func testExplicitLaunchAndSuppressedWindows() async {
         var app = LaunchApp()
         app.detail = .presented
