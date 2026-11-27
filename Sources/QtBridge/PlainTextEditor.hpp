@@ -4,10 +4,9 @@
 #include <QScrollBar>
 #include <QSignalBlocker>
 #include <QTextCursor>
-#include <QTextLayout>
+#include <QTextBlock>
 #include <QKeyEvent>
 #include <functional>
-#include <cmath>
 
 class PlainTextEditor : public SubmitKeyEditor<QPlainTextEdit> {
 public:
@@ -24,28 +23,23 @@ public:
         setTabChangesFocus(true);
         setVerticalScrollBarPolicy(Qt::ScrollBarAlwaysOff);
         setHorizontalScrollBarPolicy(Qt::ScrollBarAlwaysOff);
+        connect(verticalScrollBar(), &QScrollBar::valueChanged, this,
+                &PlainTextEditor::revealFittingLines, Qt::QueuedConnection);
     }
-    double fieldHeight(double width, int minimum, int maximum) const {
-        const int margins = frameWidth() * 2;
-        int lines = 0;
-        const QString displayed = document()->isEmpty() ? placeholderText() : value();
-        for (const auto &paragraph : displayed.split(QChar::LineFeed)) {
-            QTextLayout layout(paragraph, font());
-            layout.setTextOption(document()->defaultTextOption());
-            layout.beginLayout();
-            int count = 0;
-            while (true) {
-                auto line = layout.createLine();
-                if (!line.isValid()) break;
-                line.setLineWidth(width < 0 || !std::isfinite(width) ? 1e7 : qMax(1.0, width - margins));
-                ++count;
-                if (maximum > 0 && lines + count >= maximum) break;
-            }
-            layout.endLayout();
-            lines += qMax(1, count);
-            if (maximum > 0 && lines >= maximum) break;
+    void resizeEvent(QResizeEvent *event) override {
+        QPlainTextEdit::resizeEvent(event);
+        revealFittingLines();
+    }
+    void revealFittingLines() {
+        // A fixed-size field grows after its edit notification. Qt can still be
+        // scrolled to a wrapped line from the previous, narrower viewport.
+        if (!submit || !verticalScrollBar()->value()) return;
+        qreal height = 0;
+        for (auto block = document()->begin(); block.isValid(); block = block.next()) {
+            height += blockBoundingRect(block).height();
+            if (height > viewport()->height()) return;
         }
-        return qMax(minimum, lines) * fontMetrics().lineSpacing() + margins;
+        verticalScrollBar()->setValue(0);
     }
     void keyPressEvent(QKeyEvent *event) override {
         if (submit && (event->key() == Qt::Key_Return || event->key() == Qt::Key_Enter)) {

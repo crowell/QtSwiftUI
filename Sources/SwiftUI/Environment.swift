@@ -59,8 +59,8 @@ public struct EnvironmentValues {
     public var multilineTextAlignment: TextAlignment = .leading
     public var truncationMode: Text.TruncationMode = .tail
     public var lineSpacing: CGFloat = 0
-    public var lineLimit: Int? { didSet { minimumLines = 1 } }
-    var minimumLines = 1
+    public var lineLimit: Int? { didSet { minimumLines = 0 } }
+    var minimumLines = 0
     public internal(set) var autocorrectionDisabled = false
     public var verticalScrollBounceBehavior = ScrollBounceBehavior.automatic
     public var horizontalScrollBounceBehavior = ScrollBounceBehavior.automatic

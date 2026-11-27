@@ -15,12 +15,15 @@ extension Context {
             }
         }
     }
-    func control(_ widget: UnsafeMutableRawPointer, expands: Bool = false) -> Element {
+    func styleControl(_ widget: UnsafeMutableRawPointer) {
         let scale = environment.controlSize.qtScale
         if environment.font == nil && scale != 1 {
             with(\.font, .system(size: Font.body.size * scale)).style(widget)
         } else { style(widget) }
         qs_control_scale(widget, scale)
+    }
+    func control(_ widget: UnsafeMutableRawPointer, expands: Bool = false) -> Element {
+        styleControl(widget)
         return Element { p in
             let hint = qs_measure(widget, p.width ?? -1)
             return CGSize(width: expands ? (p.width ?? hint.width) : hint.width, height: hint.height)
@@ -221,21 +224,21 @@ public struct Toggle<Label: View>: Primitive {
         return [stacked([context.control(widget)] + label.resolve(context.descending(.position(0))), axis: .horizontal, alignment: .center, spacing: 4, direction: context.environment.layoutDirection)]
     }
 }
-@MainActor private func field(_ title: String, promptColor: String, text: Binding<String>, secure: Bool, selection: EditorSelection?, in context: Context) -> Element {
-    let widget = context.widget(secure ? QSSecureEdit : QSEdit, cursorChanged: { selection?.changed($0, text: nativeEditorText($0)) },
-                                action: { text.wrappedValue = $0 })
+@MainActor private func singleLineField(_ text: Binding<String>, secure: Bool, selection: EditorSelection?, callbacks: TextFieldCallbacks?, in context: Context) -> UnsafeMutableRawPointer {
+    let editing = callbacks?.session(in: context)
+    let widget = context.widget(secure ? QSSecureEdit : QSEdit, focusChanged: editing?.focus, submitted: editing?.commit,
+                                cursorChanged: { selection?.changed($0, text: nativeEditorText($0)) },
+                                action: { editing?.beginTyping(); text.wrappedValue = $0 })
     qs_text(widget, text.wrappedValue)
     selection?.apply(to: widget)
-    let control = context.control(widget, expands: true)
-    qs_hint(widget, title, promptColor)
-    qs_field_style(widget, context.environment.roundedField ? 2 : context.environment.plainField ? 1 : 0)
-    return control
+    return widget
 }
 public nonisolated struct TextField<Label: View>: Primitive {
     let title: Text, text: Binding<String>
     private var selection: Binding<TextSelection?>?
     var axis: Axis = .horizontal
     var prompt: Text?
+    var callbacks: TextFieldCallbacks?
     var secure = false
     public init(_ titleKey: LocalizedStringKey, text: Binding<String>) where Label == Text {
         self.init(configuration: Text(titleKey), text: text, secure: false, prompt: nil, axis: .horizontal)
@@ -271,7 +274,8 @@ public nonisolated struct TextField<Label: View>: Primitive {
         self.init(title, text: text, prompt: prompt, axis: axis ?? .horizontal)
         self.selection = selection
     }
-    init(configuration title: Text, text: Binding<String>, secure: Bool, selection: Binding<TextSelection?>? = nil, prompt: Text? = nil, axis: Axis = .horizontal) {
+    init(configuration title: Text, text: Binding<String>, secure: Bool, selection: Binding<TextSelection?>? = nil, prompt: Text? = nil, axis: Axis = .horizontal, callbacks: TextFieldCallbacks? = nil) {
+        self.callbacks = callbacks
         self.selection = selection
         self.prompt = prompt
         self.axis = axis
@@ -281,7 +285,7 @@ public nonisolated struct TextField<Label: View>: Primitive {
     }
     @MainActor func elements(in context: Context) -> [Element] {
         if let style = context.environment.fieldStyle {
-            let configuration = TextField<_TextFieldStyleLabel>(configuration: title, text: text, secure: secure, selection: selection, prompt: prompt, axis: axis)
+            let configuration = TextField<_TextFieldStyleLabel>(configuration: title, text: text, secure: secure, selection: selection, prompt: prompt, axis: axis, callbacks: callbacks)
             return style(configuration).resolve(context.with(\.fieldStyle, nil))
         }
         let title = title.resolvedString(context.environment.locale)
@@ -290,21 +294,22 @@ public nonisolated struct TextField<Label: View>: Primitive {
         let placeholder = prompt?.resolvedString(context.environment.locale) ?? title
         let promptColor = prompt?.foregroundOverride?.resolvedPaint(in: context.environment).representativeColor.hex(context.environment.colorScheme) ?? ""
         let cursor = selection.map { EditorSelection(binding: $0, text: text, affinity: context.environment.selectionAffinity) }
-        guard axis == .vertical else { return [field(placeholder, promptColor: promptColor, text: text, secure: secure, selection: cursor, in: context)] }
-        let widget = boundEditor(QSMultilineField, text: text, selection: cursor, in: context)
-        context.style(widget)
+        let widget = axis == .vertical ? boundEditor(QSMultilineField, text: text, selection: cursor, in: context)
+                                       : singleLineField(text, secure: secure, selection: cursor, callbacks: callbacks, in: context)
+        context.styleControl(widget)
         qs_hint(widget, placeholder, promptColor)
         qs_field_style(widget, context.environment.roundedField ? 2 : context.environment.plainField ? 1 : 0)
         let minimum = Int32(clamping: context.environment.minimumLines)
         let maximum = Int32(clamping: context.environment.lineLimit.map { max(1, $0) } ?? 0)
         return [Element { proposal in
-            let width = proposal.width ?? 0
-            return CGSize(width: width, height: qs_field_height(widget, proposal.width ?? -1, minimum, maximum))
+            let size = qs_field_size(widget, proposal.width ?? -1, proposal.height ?? -1, minimum, maximum)
+            return CGSize(width: size.width, height: size.height)
         } place: { rect, _ in qs_place(widget, rect.minX, rect.minY, rect.width, rect.height) }]
     }
 }
 public nonisolated struct SecureField<Label: View>: Primitive {
     let title: Text, text: Binding<String>, prompt: Text?
+    var callbacks: TextFieldCallbacks?
     public init(_ titleKey: LocalizedStringKey, text: Binding<String>) where Label == Text {
         self.init(titleKey, text: text, prompt: nil)
     }
@@ -322,7 +327,7 @@ public nonisolated struct SecureField<Label: View>: Primitive {
         self.prompt = prompt
     }
     @MainActor func elements(in context: Context) -> [Element] {
-        TextField<_TextFieldStyleLabel>(configuration: title, text: text, secure: true, prompt: prompt).elements(in: context)
+        TextField<_TextFieldStyleLabel>(configuration: title, text: text, secure: true, prompt: prompt, callbacks: callbacks).elements(in: context)
     }
 }
 public struct Slider<Label: View, ValueLabel: View>: Primitive {

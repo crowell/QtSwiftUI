@@ -1872,9 +1872,6 @@ void qs_scroll_background(QSWidget w, int visible, int dark) {
 void qs_editor_indicators(QSWidget w, int vertical) {
     static_cast<PlainTextEditor *>(w)->setVerticalScrollBarPolicy(vertical ? Qt::ScrollBarAsNeeded : Qt::ScrollBarAlwaysOff);
 }
-double qs_field_height(QSWidget w, double width, int minimum, int maximum) {
-    return static_cast<PlainTextEditor *>(w)->fieldHeight(width, minimum, maximum);
-}
 QSBaselines qs_text_baselines(QSWidget w, double width, double height) {
     if (auto *rich = dynamic_cast<AttributedLabel *>(widget(w))) return rich->baselines(width, height);
     const auto metrics = widget(w)->fontMetrics();

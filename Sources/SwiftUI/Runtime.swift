@@ -75,7 +75,7 @@ enum Part: Hashable {
         return owner
     }
     func widget(_ kind: QSKind, focusChanged: ((Bool) -> Void)? = nil, moveCommand: ((MoveCommandDirection) -> Void)? = nil, deleteCommand: (() -> Void)? = nil, pressed: ((Bool) -> Void)? = nil, exitCommand: (() -> Void)? = nil,
-                cursorChanged: ((UnsafeMutableRawPointer) -> Void)? = nil,
+                submitted: (() -> Void)? = nil, cursorChanged: ((UnsafeMutableRawPointer) -> Void)? = nil,
                 tap: ((UnsafeMutableRawPointer) -> Void)? = nil, transfer: TransferAction? = nil,
                 adjustment: ((AccessibilityAdjustmentDirection) -> Void)? = nil,
                 drag: ((QSDragSample, UnsafeMutableRawPointer) -> Void)? = nil,
@@ -110,7 +110,9 @@ enum Part: Hashable {
                 if value != "0", let host, host.defaultFocus.entered(id: entry.id, reason: value) { host.update() }
                 focus?.change(value != "0")
                 focusChanged?(value != "0")
-            case QSSubmit: submit?(.text)
+            case QSSubmit:
+                submitted?()
+                submit?(.text)
             case QSMagnified: magnify?(qs_magnify_sample(entry.widget))
             case QSGestureCancelled: cancelGesture?()
             case QSExitCommand: exitCommand?()

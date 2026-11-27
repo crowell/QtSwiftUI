@@ -110,17 +110,17 @@ extension View {
         let apply: @MainActor (Context) -> Context = { $0.with(\.lineSpacing, lineSpacing) }
         return Transform(content: self, readingContext: apply) { $0.resolve(apply($1)) }
     }
-    nonisolated public func lineLimit(_ number: Int?) -> some View { limits(minimum: 1, maximum: number) }
+    nonisolated public func lineLimit(_ number: Int?) -> some View { limits(minimum: 0, maximum: number) }
     nonisolated public func lineLimit(_ limit: ClosedRange<Int>) -> some View { limits(minimum: limit.lowerBound, maximum: limit.upperBound) }
     nonisolated public func lineLimit(_ limit: PartialRangeFrom<Int>) -> some View { limits(minimum: limit.lowerBound, maximum: nil) }
-    nonisolated public func lineLimit(_ limit: PartialRangeThrough<Int>) -> some View { limits(minimum: 1, maximum: limit.upperBound) }
-    nonisolated public func lineLimit(_ limit: Int, reservesSpace: Bool) -> some View { limits(minimum: reservesSpace ? limit : 1, maximum: limit) }
+    nonisolated public func lineLimit(_ limit: PartialRangeThrough<Int>) -> some View { limits(minimum: 0, maximum: limit.upperBound) }
+    nonisolated public func lineLimit(_ limit: Int, reservesSpace: Bool) -> some View { limits(minimum: reservesSpace ? limit : 0, maximum: limit) }
 
     private nonisolated func limits(minimum: Int, maximum: Int?) -> some View {
         let apply: @MainActor (Context) -> Context = { context in
             var copy = context
             copy.environment.lineLimit = maximum
-            copy.environment.minimumLines = max(1, minimum)
+            copy.environment.minimumLines = max(0, minimum)
             return copy
         }
         return Transform(content: self, readingContext: apply) { $0.resolve(apply($1)) }

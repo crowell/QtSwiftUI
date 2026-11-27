@@ -69,6 +69,7 @@ void qs_view_blur(QSWidget, double radius, int opaque);
 void qs_view_shadow(QSWidget, unsigned argb, double radius, double x, double y);
 void qs_alpha_mask(QSWidget, QSWidget stencil);
 void qs_control_scale(QSWidget, double scale);
+QSSize qs_field_size(QSWidget, double width, double height, int minimumLines, int maximumLines);
 double qs_field_height(QSWidget, double width, int minimumLines, int maximumLines);
 typedef struct { double first, last; } QSBaselines;
 QSBaselines qs_text_baselines(QSWidget, double width, double height);
