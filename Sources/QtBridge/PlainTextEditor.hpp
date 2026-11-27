@@ -1,4 +1,5 @@
 #pragma once
+#include "SubmitKeyEditor.hpp"
 #include <QPlainTextEdit>
 #include <QScrollBar>
 #include <QSignalBlocker>
@@ -8,9 +9,9 @@
 #include <functional>
 #include <cmath>
 
-class PlainTextEditor : public QPlainTextEdit {
+class PlainTextEditor : public SubmitKeyEditor<QPlainTextEdit> {
 public:
-    explicit PlainTextEditor(QWidget *parent) : QPlainTextEdit(parent) {
+    explicit PlainTextEditor(QWidget *parent) : SubmitKeyEditor(parent) {
         setFrameShape(QFrame::NoFrame);
         document()->setDocumentMargin(0);
         setViewportMargins(5, 0, 5, 0);

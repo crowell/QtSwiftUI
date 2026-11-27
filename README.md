@@ -26,11 +26,15 @@ Selecting the contact name in the conversation header opens Conversation Details
 
 ![Conversation Details in the Serein Linux release](Screenshots/serein-linux-conversation-details.png)
 
+From Conversation Details, Serein’s Nickname editor accepts a first name, last name, and private note. The Docker check saved all three with Return, reopened the editor, and read each field back from the running application.
+
+![Editing a contact nickname and note in the production Serein Linux executable](Screenshots/serein-linux-edit-nickname.png)
+
 In the chat color picker, choosing crimson updates the sample bubbles. The Docker check opens Custom Color, switches to Gradient, checks that the modal backdrop blocks the Back button, drags the hue slider, and rotates the gradient by dragging its endpoint beyond the handle. Cancel returns to the crimson preset. Back opens the [conversation with crimson outgoing messages](Screenshots/serein-linux-chat-color-conversation.png).
 
 ![Editing a custom gradient in the running Serein Linux release](Screenshots/serein-linux-custom-chat-color.png)
 
-With another X11 app focused, the desktop received “The ferry leaves Harbor Pier at nine.” Returning to Serein sent a read sync for that message to the linked phone. Searching the conversation for “Harbor Pier” found the incoming message.
+With another X11 app focused, the desktop received “The ferry leaves Harbor Pier at nine.” Returning to Serein sent a read sync for that message to the linked phone. Opening conversation search focused the field immediately. Typing “Harbor Pier” found the incoming message.
 
 ![A matching message in the running Serein conversation search](Screenshots/serein-linux-conversation-search.png)
 
@@ -355,12 +359,12 @@ The target is source compatibility with Apple's public SwiftUI APIs. The impleme
 | Scrolling | `ScrollViewReader` scrolls by explicit or `ForEach` ID, with an optional anchor. Shared tests move both axes, target sibling scroll views, jump to distant lazy rows and remove a target. `scrollDisabled` controls Qt wheel, scrollbar and kinetic input while leaving child actions available. Scroll views and text editors apply per-axis bounce policies to the Qt kinetic scroller. Physical trackpad and touch bounce remain unverified. Native Qt scrolling updates scroll geometry observers. Apple and Ubuntu tests scroll 240 points of content through an 80-point viewport and check old and new values as the offset crosses a threshold. |
 | Adaptive layouts | `ViewThatFits` checks candidates in order, measures ideal size on the requested axes and falls back to the last child. Tests resize across breakpoints and check the chosen button, lifecycle callbacks, preference values, size and alignment guides on Ubuntu and macOS. |
 | Scroll positioning | `ScrollPosition` and ID bindings move a native Qt scroll area by edge, coordinate or target. Tests cover per-role default anchors, short content, visibility thresholds, disabled target layouts and appended rows. Animated scrolling and exact visibility timing remain open. |
-| Keyboard input | Programmatic composer focus, native focus changes, sending with Return, Escape commands and selectable monospaced diagnostic text. |
+| Keyboard input | Programmatic composer focus, native focus changes, nested Return handlers, `submitScope`, Escape commands and selectable monospaced diagnostic text. `submitLabel` sets the Qt input method’s Return key hint. Qt uses Go for Join and Route, and Next for Continue. |
 | Lifecycle | `SubscriptionView` and `onReceive` use OpenCombine on Linux. Shared tests cover publisher replacement, action changes, cancellation when a view disappears, and background notifications delivered in order on the main actor. An async view task updates an observable model while the Qt event loop runs. An on-change handler observes the result. A timeline also advances to a scheduled date inside the Qt event loop. |
 
 `./Scripts/check-apple.sh ../serein` type-checks the example source with Apple's SwiftUI module on a Mac with Xcode. `./Scripts/check-api.sh` extracts public symbol graphs from Xcode and the Linux image. Pass `--by-kind` to see coverage for classes, structs, protocols and each member kind, or `--missing` to list individual missing declaration paths. The inventory groups declarations by symbol kind and path, counts overload spellings separately, and excludes underscored and synthesized members. A shared name alone cannot establish matching signatures, constraints, availability or behavior.
 
-The inventory against the macOS 27.2 SDK found 1,739 shared declaration paths out of 7,627 and 1,185 identical declaration spellings out of 8,735. Of the 5,888 absent paths, 725 are nominal type or protocol declarations (6 classes, 591 structs, 50 enums and 78 protocols). The examples exercise a smaller set at runtime. Navigation, window state restoration, broader animation support, text shaping parity, gestures and platform integration remain substantial gaps. Font metrics, control appearance and several layout behaviors differ from Apple's implementation.
+The inventory against the macOS 27.2 SDK found 1,754 shared declaration paths out of 7,627 and 1,203 identical declaration spellings out of 8,735. Of the 5,873 absent paths, 724 are nominal type or protocol declarations (6 classes, 590 structs, 50 enums and 78 protocols). The examples exercise a smaller set at runtime. Navigation, window state restoration, broader animation support, text shaping parity, gestures and platform integration remain substantial gaps. Font metrics, control appearance and several layout behaviors differ from Apple's implementation.
 
 After capturing the Linux examples, run `./Scripts/compare-artwork.sh ../serein` on macOS to render both illustrations with Apple's `ImageRenderer`. At a threshold of 8/255 in any RGB channel, 101 of 119,680 account artwork pixels (0.084%) and 91 of 49,928 key transparency pixels (0.182%) differed. The mean absolute channel differences were 0.104/255 and 0.095/255 respectively. Both reference images are saved in `.build/artwork/`.
 

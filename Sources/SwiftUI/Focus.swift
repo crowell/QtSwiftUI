@@ -33,9 +33,25 @@ struct FocusLink {
     mutating func install(in context: Context) { state.install(in: context) }
 }
 public struct SubmitTriggers: OptionSet, Sendable {
-    public let rawValue: UInt
-    public init(rawValue: UInt) { self.rawValue = rawValue }
-    public static let text = Self(rawValue: 1), search = Self(rawValue: 2)
+    public typealias RawValue = Int
+    public typealias Element = SubmitTriggers
+    public typealias ArrayLiteralElement = SubmitTriggers
+    public let rawValue: RawValue
+    public init(rawValue: RawValue) { self.rawValue = rawValue }
+    public static let text = Self(rawValue: 1), search = Self(rawValue: 4)
+}
+
+public struct SubmitLabel: Sendable {
+    let key: QSEnterKey
+    public static var done: SubmitLabel { Self(key: QSEnterDone) }
+    public static var go: SubmitLabel { Self(key: QSEnterGo) }
+    public static var send: SubmitLabel { Self(key: QSEnterSend) }
+    public static var join: SubmitLabel { Self(key: QSEnterGo) }
+    public static var route: SubmitLabel { Self(key: QSEnterGo) }
+    public static var search: SubmitLabel { Self(key: QSEnterSearch) }
+    public static var `return`: SubmitLabel { Self(key: QSEnterReturn) }
+    public static var next: SubmitLabel { Self(key: QSEnterNext) }
+    public static var `continue`: SubmitLabel { Self(key: QSEnterNext) }
 }
 extension View {
     public func focusable(_ isFocusable: Bool = true) -> some View { focusable(isFocusable, interactions: .automatic) }
@@ -63,11 +79,36 @@ extension View {
             if !active && binding.wrappedValue == value { binding.wrappedValue = nil }
         }))
     }
-    public func onSubmit(of triggers: SubmitTriggers = .text, _ action: @escaping () -> Void) -> some View {
-        Transform(content: self) { view, context in
-            guard triggers.contains(.text) else { return view.resolve(context) }
-            let parent = context.environment.submit
-            return view.resolve(context.with(\.submit, { parent?(); action() }))
+    nonisolated public func submitScope(_ isBlocking: Bool = true) -> some View {
+        let apply: @MainActor (Context) -> Context = { isBlocking ? $0.with(\.submit, nil) : $0 }
+        return Transform(content: self, readingContext: apply) { $0.resolve(apply($1)) }
+    }
+    nonisolated public func submitLabel(_ submitLabel: SubmitLabel) -> some View {
+        environment(\.submitLabel, submitLabel)
+    }
+    nonisolated public func onSubmit(of triggers: SubmitTriggers = .text, _ action: @escaping () -> Void) -> some View {
+        SubmitHandler(content: self, triggers: triggers, action: action)
+    }
+}
+
+private nonisolated struct SubmitHandler<Content: View>: Primitive, SubviewSource {
+    let content: Content
+    let triggers: SubmitTriggers
+    let action: () -> Void
+
+    @MainActor func scoped(_ context: Context) -> Context {
+        let parent = context.environment.submit
+        return context.with(\.submit, { trigger in
+            guard !triggers.intersection(trigger).isEmpty else { return }
+            parent?(trigger)
+            action()
+        })
+    }
+
+    @MainActor func elements(in context: Context) -> [Element] { content.resolve(scoped(context)) }
+    @MainActor func subviews(in context: Context) -> [Subview] {
+        content.collectSubviews(in: scoped(context)).map { child in
+            child.applying { view, destination in view.resolve(scoped(destination)) }
         }
     }
 }

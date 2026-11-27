@@ -83,6 +83,12 @@ enum Part: Hashable {
                 accessibilityAction: ((String) -> Void)? = nil, cancelGesture: (() -> Void)? = nil, hover: ((Bool) -> Void)? = nil,
                 continuousHover: ((UnsafeMutableRawPointer, Bool) -> Void)? = nil, action: ((String) -> Void)? = nil) -> UnsafeMutableRawPointer {
         let entry = host.mount(path: path + [.widget(kind.rawValue)], kind: kind, parent: parent)
+        switch kind {
+        case QSEdit, QSSecureEdit, QSMultilineField, QSTextEditor, QSRichEditor:
+            qs_submit_label(entry.widget, environment.submitLabel?.key ?? QSEnterDefault)
+            qs_autocorrection(entry.widget, environment.autocorrectionDisabled ? 1 : 0)
+        default: break
+        }
         host.keys.install(environment.keyPressHandlers, for: entry.id)
         host.transfers[entry.id] = transfer
         if let drag { host.drags[entry.id] = { drag($0, entry.widget) } }
@@ -103,7 +109,7 @@ enum Part: Hashable {
             case QSFocusChanged:
                 if value != "0", let host, host.defaultFocus.entered(id: entry.id, reason: value) { host.update() }
                 focus?.change(value != "0")
-            case QSSubmit: submit?()
+            case QSSubmit: submit?(.text)
             case QSMagnified: magnify?(qs_magnify_sample(entry.widget))
             case QSGestureCancelled: cancelGesture?()
             case QSExitCommand: exitCommand?()

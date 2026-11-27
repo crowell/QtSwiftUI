@@ -90,7 +90,8 @@ public struct EnvironmentValues {
     var focusReset = ResetFocusAction { _ in }
     var focus: FocusLink?
     public var isFocusEffectEnabled = true
-    var submit: (() -> Void)?
+    var submit: ((SubmitTriggers) -> Void)?
+    var submitLabel: SubmitLabel?
     public internal(set) var isPresented = false
     var appDefaults = UserDefaults.standard
     var canPresentWindow = false

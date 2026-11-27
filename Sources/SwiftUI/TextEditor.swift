@@ -31,7 +31,6 @@ extension View {
     }, tap: updateText)
     synchronize(widget)
     selection?.apply(to: widget)
-    qs_autocorrection(widget, context.environment.autocorrectionDisabled ? 1 : 0)
     return widget
 }
 

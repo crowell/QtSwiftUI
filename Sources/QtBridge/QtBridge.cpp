@@ -49,6 +49,7 @@
 #include <QHoverEvent>
 #include <QElapsedTimer>
 #include <QLineEdit>
+#include <QInputMethod>
 #include <QInputMethodEvent>
 #include <QKeyEvent>
 #include <QMouseEvent>
@@ -1488,7 +1489,7 @@ QSWidget qs_create(QSWindow *window, QSWidget parent, QSKind kind, int id) {
         return edit;
     }
     case QSEdit: case QSSecureEdit: {
-        auto *edit = new QLineEdit(container);
+        auto *edit = new SubmitKeyEditor<QLineEdit>(container);
         if (kind == QSSecureEdit) edit->setEchoMode(QLineEdit::Password);
         window->observeFocus(edit, id);
         auto cursorChanged = [=] { window->event(window->context, id, QSCursorChanged, ""); };
@@ -1805,6 +1806,29 @@ QSBaselines qs_text_baselines(QSWidget w, double width, double height) {
     return {first, first + qMax(0.0, drawn - metrics.height())};
 }
 double qs_line_height(QSWidget w) { return widget(w)->fontMetrics().lineSpacing(); }
+void qs_submit_label(QSWidget w, enum QSEnterKey label) {
+    auto *editor = widget(w);
+    QVariant value;
+    switch (label) {
+    case QSEnterDefault: break;
+    case QSEnterReturn: value = Qt::EnterKeyReturn; break;
+    case QSEnterDone: value = Qt::EnterKeyDone; break;
+    case QSEnterGo: value = Qt::EnterKeyGo; break;
+    case QSEnterSend: value = Qt::EnterKeySend; break;
+    case QSEnterSearch: value = Qt::EnterKeySearch; break;
+    case QSEnterNext: value = Qt::EnterKeyNext; break;
+    }
+    if (editor->property("qsEnterKey") == value) return;
+    editor->setProperty("qsEnterKey", value);
+    if (editor->hasFocus()) QGuiApplication::inputMethod()->update(Qt::ImEnterKeyType);
+}
+int qs_focused_enter_key(QSWindow *window) {
+    auto *focus = window->focusWidget();
+    if (!focus) return -1;
+    QInputMethodQueryEvent query(Qt::ImEnterKeyType);
+    QCoreApplication::sendEvent(focus, &query);
+    return query.value(Qt::ImEnterKeyType).toInt();
+}
 void qs_autocorrection(QSWidget w, int disabled) {
     auto *item = widget(w);
     const auto *edit = qobject_cast<QLineEdit *>(item);

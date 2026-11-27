@@ -225,7 +225,6 @@ public struct Toggle<Label: View>: Primitive {
                                 action: { text.wrappedValue = $0 })
     qs_text(widget, text.wrappedValue)
     selection?.apply(to: widget)
-    qs_autocorrection(widget, context.environment.autocorrectionDisabled ? 1 : 0)
     let control = context.control(widget, expands: true)
     qs_hint(widget, title, promptColor)
     qs_field_style(widget, context.environment.roundedField ? 2 : context.environment.plainField ? 1 : 0)

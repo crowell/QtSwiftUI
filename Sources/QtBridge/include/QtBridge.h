@@ -73,6 +73,9 @@ double qs_field_height(QSWidget, double width, int minimumLines, int maximumLine
 typedef struct { double first, last; } QSBaselines;
 QSBaselines qs_text_baselines(QSWidget, double width, double height);
 double qs_line_height(QSWidget);
+enum QSEnterKey { QSEnterDefault, QSEnterReturn, QSEnterDone, QSEnterGo, QSEnterSend, QSEnterSearch, QSEnterNext };
+void qs_submit_label(QSWidget, enum QSEnterKey);
+int qs_focused_enter_key(QSWindow *);
 void qs_autocorrection(QSWidget, int disabled);
 void qs_clipboard_text(const char *text);
 QSSize qs_primary_screen_size(void);
