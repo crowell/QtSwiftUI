@@ -412,10 +412,10 @@ public struct ScrollView<Content: View>: Primitive {
         var visibility: ScrollVisibilitySnapshot?
         inner.publish(FirstScrollVisibility.self) { visibility }
         if axes.contains(.vertical) { inner.verticalViewport = widget }
-        let origin = NamedOrigin()
-        inner.spaces[ScrollSpace.nearest] = origin
+        let space = PlacedCoordinateSpace()
+        inner.spaces[ScrollSpace.nearest] = space
         for axis in Axis.allCases where axes.contains(axis == .vertical ? .vertical : .horizontal) {
-            inner.spaces[ScrollSpace.axis(axis)] = origin
+            inner.spaces[ScrollSpace.axis(axis)] = space
         }
         var geometry: ScrollGeometry?
         inner.publish(FirstScrollGeometry.self) { geometry }
@@ -434,13 +434,13 @@ public struct ScrollView<Content: View>: Primitive {
                           height: vertical ? (p.height ?? ideal.height) : ideal.height)
         } place: { bounds, _ in
             qs_place(widget, bounds.minX, bounds.minY, bounds.width, bounds.height)
-            let position = qs_origin(widget)
-            origin.point = CGPoint(x: position.width, y: position.height)
             let proposal = offer(ProposedViewSize(bounds.size))
             let size = view.measure(proposal)
             let contentSize = CGSize(width: max(bounds.width, size.width), height: max(bounds.height, size.height))
             let prior = qs_scroll_viewport(widget)
             qs_scroll_size(widget, Int32(contentSize.width.rounded(.up)), Int32(contentSize.height.rounded(.up)))
+            let visible = qs_scroll_viewport(widget)
+            space.geometry = context.spaceGeometry(in: CGRect(origin: bounds.origin, size: CGSize(width: visible.width, height: visible.height)))
             var rect = Alignment.top.rect(size, in: CGRect(origin: .zero, size: contentSize))
             var shift = CGPoint.zero
             if let mount {

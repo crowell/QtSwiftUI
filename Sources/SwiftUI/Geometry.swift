@@ -8,41 +8,60 @@ public struct SafeAreaRegions: OptionSet, Sendable {
     public static let all = Self(rawValue: .max)
 }
 
+struct CoordinateSpaceGeometry {
+    var size: CGSize
+    var toWindow: CGAffineTransform
+    var rotationDepth: Int
+
+    var bounds: CGRect { CGRect(origin: .zero, size: size) }
+}
+
 public struct GeometryProxy {
-    public let size: CGSize
-    let globalOrigin: CGPoint
-    let fromWindow: CGAffineTransform
-    let origins: [AnyHashable: CGPoint]
+    let local: CoordinateSpaceGeometry
+    let spaces: [AnyHashable: CoordinateSpaceGeometry]
+    var fromWindow: CGAffineTransform { local.toWindow.inverted() }
+
+    public var size: CGSize { local.size }
     public var safeAreaInsets: EdgeInsets { EdgeInsets() }
     public func frame(in coordinateSpace: some CoordinateSpaceProtocol) -> CGRect { frame(in: coordinateSpace.coordinateSpace) }
     @_disfavoredOverload public func frame(in coordinateSpace: CoordinateSpace) -> CGRect {
         switch coordinateSpace {
-        case .local: return CGRect(origin: .zero, size: size)
-        case .global: return CGRect(origin: globalOrigin, size: size)
+        case .local: return local.bounds
+        case .global: return local.bounds.applying(local.toWindow)
         case .named(let name):
-            let origin = origins[name] ?? .zero
-            return CGRect(x: globalOrigin.x - origin.x, y: globalOrigin.y - origin.y, width: size.width, height: size.height)
+            let fromWindow = spaces[name]?.toWindow.inverted() ?? .identity
+            return local.bounds.applying(local.toWindow.concatenating(fromWindow))
         }
     }
+
+    public func bounds(of coordinateSpace: NamedCoordinateSpace) -> CGRect? {
+        // SwiftUI provides named bounds across translations and scales. Crossing
+        // a rotation loses those bounds even if a later rotation cancels it.
+        guard let other = spaces[coordinateSpace.name], other.rotationDepth == local.rotationDepth else { return nil }
+        return other.bounds.applying(other.toWindow.concatenating(fromWindow))
+    }
 }
+
 extension Context {
     func transformToWindow(from origin: CGPoint) -> CGAffineTransform {
         let translation = CGAffineTransform(translationX: origin.x, y: origin.y)
         guard let parent else { return translation }
-        let t = qs_transform_to_window(parent)
-        return translation.concatenating(CGAffineTransform(a: t.a, b: t.b, c: t.c, d: t.d, tx: t.tx, ty: t.ty))
+        return translation.concatenating(widgetToWindow(parent))
+    }
+
+    func spaceGeometry(in bounds: CGRect) -> CoordinateSpaceGeometry {
+        CoordinateSpaceGeometry(size: bounds.size, toWindow: transformToWindow(from: bounds.origin), rotationDepth: rotationDepth)
     }
 
     func geometry(in bounds: CGRect) -> GeometryProxy {
-        let offset = windowOffset
-        return GeometryProxy(size: bounds.size, globalOrigin: CGPoint(x: bounds.minX + offset.x, y: bounds.minY + offset.y),
-                             fromWindow: transformToWindow(from: bounds.origin).inverted(), origins: spaces.mapValues(\.point))
+        GeometryProxy(local: spaceGeometry(in: bounds), spaces: spaces.compactMapValues(\.geometry))
     }
 }
-public struct GeometryReader<Content: View>: Primitive {
-    let content: (GeometryProxy) -> Content
-    public init(@ViewBuilder content: @escaping (GeometryProxy) -> Content) { self.content = content }
-    func elements(in context: Context) -> [Element] {
+
+@frozen nonisolated public struct GeometryReader<Content: View>: Primitive {
+    public var content: (GeometryProxy) -> Content
+    public init(@ContentBuilder content: @escaping (GeometryProxy) -> Content) { self.content = content }
+    @MainActor func elements(in context: Context) -> [Element] {
         [Element { $0.replacingUnspecifiedDimensions() } place: { bounds, _ in
             let proxy = context.geometry(in: bounds)
             let proposal = ProposedViewSize(bounds.size)
@@ -52,15 +71,44 @@ public struct GeometryReader<Content: View>: Primitive {
         }]
     }
 }
-@MainActor final class NamedOrigin { var point: CGPoint = .zero }
+
+@MainActor final class PlacedCoordinateSpace {
+    var geometry: CoordinateSpaceGeometry?
+}
+
+private nonisolated struct NamedSpaceView<Content: View, Name: Hashable>: Primitive, SubviewSource {
+    let content: Content
+    let name: Name
+
+    @MainActor func elements(in context: Context) -> [Element] {
+        subviews(in: context).flatMap { $0.resolve(context.preferenceBranch()) }
+    }
+
+    @MainActor func subviews(in context: Context) -> [Subview] {
+        content.collectSubviews(in: context).map { child in
+            child.applying { view, destination in
+                let space = PlacedCoordinateSpace()
+                var inner = destination
+                inner.spaces[AnyHashable(name)] = space
+                return view.resolve(inner).map { element in
+                    element.wrapping(size: element.measure) { bounds, proposal in
+                        space.geometry = destination.spaceGeometry(in: bounds)
+                        element.place(bounds, proposal)
+                    }
+                }
+            }
+        }
+    }
+}
+
 @MainActor private final class GeometrySample<Value> { var value: Value? }
 
-private struct GeometryObserver<Content: View, Value: Equatable & Sendable>: Primitive {
+private nonisolated struct GeometryObserver<Content: View, Value: Equatable & Sendable>: Primitive {
     let content: Content
     let project: @Sendable (GeometryProxy) -> Value
     let change: (Value, Value) -> Void
 
-    func elements(in context: Context) -> [Element] {
+    @MainActor func elements(in context: Context) -> [Element] {
         content.resolve(context).enumerated().map { index, child in
             let path = context.path + [.property("geometry change"), .position(index)]
             let sample = context.host.storage[path] as? GeometrySample<Value> ?? GeometrySample<Value>()
@@ -83,28 +131,17 @@ private struct GeometryObserver<Content: View, Value: Equatable & Sendable>: Pri
     }
 }
 extension View {
-    public func onGeometryChange<T: Equatable & Sendable>(for type: T.Type, of transform: @escaping @Sendable (GeometryProxy) -> T,
+    @preconcurrency nonisolated public func onGeometryChange<T: Equatable & Sendable>(for type: T.Type, of transform: @escaping @Sendable (GeometryProxy) -> T,
                                                          action: @escaping (_ newValue: T) -> Void) -> some View {
         GeometryObserver(content: self, project: transform) { _, next in action(next) }
     }
-    public func onGeometryChange<T: Equatable & Sendable>(for type: T.Type, of transform: @escaping @Sendable (GeometryProxy) -> T,
+    @preconcurrency nonisolated public func onGeometryChange<T: Equatable & Sendable>(for type: T.Type, of transform: @escaping @Sendable (GeometryProxy) -> T,
                                                          action: @escaping (_ oldValue: T, _ newValue: T) -> Void) -> some View {
         GeometryObserver(content: self, project: transform, change: action)
     }
-    public func coordinateSpace(_ name: NamedCoordinateSpace) -> some View { coordinateSpace(name: name.name) }
-    public func coordinateSpace<T: Hashable>(name: T) -> some View {
-        Transform(content: self) { view, context in
-            let origin = NamedOrigin()
-            var inner = context
-            inner.spaces[AnyHashable(name)] = origin
-            return view.resolve(inner).map { child in
-                child.wrapping(size: child.measure) { bounds, proposal in
-                    let offset = context.windowOffset
-                    origin.point = CGPoint(x: bounds.minX + offset.x, y: bounds.minY + offset.y)
-                    child.place(bounds, proposal)
-                }
-            }
-        }
+    nonisolated public func coordinateSpace(_ name: NamedCoordinateSpace) -> some View { coordinateSpace(name: name.name) }
+    nonisolated public func coordinateSpace<T: Hashable>(name: T) -> some View {
+        NamedSpaceView(content: self, name: name)
     }
     // The desktop host lays out its content entirely inside the window decorations.
     // Its container and keyboard safe-area insets are both zero.
@@ -152,26 +189,34 @@ extension View {
         Transform(content: self) { view, ctx in
             let group = ctx.widget(QSGroup)
             let anchorX = ctx.environment.layoutDirection == .rightToLeft ? 1 - anchor.x : anchor.x
-            qs_group_scale(group, ctx.interpolated(x, key: "scale x"), ctx.interpolated(y, key: "scale y"), anchorX, anchor.y)
+            // Keep a collapsed axis invertible when geometry is read from inside it.
+            func invertible(_ value: CGFloat) -> CGFloat {
+                let minimum = (2 * CGFloat.leastNormalMagnitude).squareRoot()
+                return abs(value) < minimum ? (value < 0 ? -minimum : minimum) : value
+            }
+            qs_group_scale(group, invertible(ctx.interpolated(x, key: "scale x")),
+                           invertible(ctx.interpolated(y, key: "scale y")), anchorX, anchor.y)
             return ctx.children(of: view, inside: group)
         }
     }
-    public func rotationEffect(_ angle: Angle, anchor: UnitPoint = .center) -> some View {
+    nonisolated public func rotationEffect(_ angle: Angle, anchor: UnitPoint = .center) -> some View {
         Transform(content: self) { view, ctx in
             let group = ctx.widget(QSGroup)
             let direction = ctx.environment.layoutDirection
             let degrees = ctx.interpolated(angle.degrees, key: "rotation")
             let anchorX = direction == .rightToLeft ? 1 - anchor.x : anchor.x
             qs_group_rotation(group, direction == .rightToLeft ? -degrees : degrees, anchorX, anchor.y)
-            return ctx.children(of: view, inside: group)
+            var inner = ctx
+            if degrees != 0 { inner.rotationDepth += 1 }
+            return inner.children(of: view, inside: group)
         }
     }
-    public func offset(x: CGFloat = 0, y: CGFloat = 0) -> some View {
+    nonisolated public func offset(x: CGFloat = 0, y: CGFloat = 0) -> some View {
         Transform(content: self) { view, ctx in
             let dx = ctx.environment.layoutDirection.horizontalOffset(ctx.interpolated(x, key: "offset x"))
             let dy = ctx.interpolated(y, key: "offset y")
             return view.resolve(ctx).map { child in child.wrapping(size: child.measure) { child.place($0.offsetBy(dx: dx, dy: dy), $1) } }
         }
     }
-    public func offset(_ offset: CGSize) -> some View { self.offset(x: offset.width, y: offset.height) }
+    nonisolated public func offset(_ offset: CGSize) -> some View { self.offset(x: offset.width, y: offset.height) }
 }

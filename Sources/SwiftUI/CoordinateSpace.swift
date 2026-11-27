@@ -34,14 +34,17 @@ extension CoordinateSpaceProtocol where Self == NamedCoordinateSpace {
     public static func scrollView(axis: Axis) -> Self { .named(ScrollSpace.axis(axis)) }
 }
 
+@MainActor func widgetToWindow(_ widget: UnsafeMutableRawPointer) -> CGAffineTransform {
+    let t = qs_transform_to_window(widget)
+    return CGAffineTransform(a: t.a, b: t.b, c: t.c, d: t.d, tx: t.tx, ty: t.ty)
+}
+
 extension Context {
-    func origin(of space: CoordinateSpace, widget: UnsafeMutableRawPointer) -> CGPoint {
+    func windowToSpace(_ space: CoordinateSpace, widget: UnsafeMutableRawPointer) -> CGAffineTransform {
         switch space {
-        case .global: return .zero
-        case .local:
-            let position = qs_origin(widget)
-            return CGPoint(x: position.width, y: position.height)
-        case .named(let name): return spaces[name]?.point ?? .zero
+        case .global: return .identity
+        case .local: return widgetToWindow(widget).inverted()
+        case .named(let name): return spaces[name]?.geometry?.toWindow.inverted() ?? .identity
         }
     }
 }

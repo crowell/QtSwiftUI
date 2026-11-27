@@ -7,11 +7,11 @@ public struct DragGesture: Gesture, NativeGesture {
         public var location: CGPoint
         public var startLocation: CGPoint
         private let speed: CGSize
-        fileprivate init(sample: QSDragSample, origin: CGPoint) {
+        fileprivate init(sample: QSDragSample, transform: CGAffineTransform) {
             time = Date(timeIntervalSince1970: sample.time)
-            location = CGPoint(x: sample.x - origin.x, y: sample.y - origin.y)
-            startLocation = CGPoint(x: sample.startX - origin.x, y: sample.startY - origin.y)
-            speed = CGSize(width: sample.velocityX, height: sample.velocityY)
+            location = CGPoint(x: sample.x, y: sample.y).applying(transform)
+            startLocation = CGPoint(x: sample.startX, y: sample.startY).applying(transform)
+            speed = CGSize(width: sample.velocityX, height: sample.velocityY).applying(transform)
         }
         public var translation: CGSize { CGSize(width: location.x - startLocation.x, height: location.y - startLocation.y) }
         public var velocity: CGSize { speed }
@@ -36,8 +36,7 @@ public struct DragGesture: Gesture, NativeGesture {
     }
     func recognizer(changed: @escaping (Any) -> Void, ended: @escaping (Any) -> Void) -> Recognizer {
         Recognizer(inputs: inputs, dragDistance: max(0, minimumDistance), drag: { sample, context, widget in
-            let origin = context.origin(of: coordinateSpace, widget: widget)
-            let value = Value(sample: sample, origin: origin)
+            let value = Value(sample: sample, transform: context.windowToSpace(coordinateSpace, widget: widget))
             if sample.ended != 0 { ended(value) } else { changed(value) }
         }, ended: {})
     }

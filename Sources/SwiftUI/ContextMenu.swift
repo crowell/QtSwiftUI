@@ -23,9 +23,9 @@ extension View {
     @_spi(Qt) nonisolated public func qtOnContextRequest(isEnabled: Bool = true, perform: @escaping @MainActor (CGPoint) -> Void) -> some View {
         Transform(content: self) { content, context in
             let group = context.widget(QSGroup, tap: { widget in
-                let origin = context.origin(of: .local, widget: widget)
+                let transform = context.windowToSpace(.local, widget: widget)
                 let point = qs_tap_location(widget)
-                perform(CGPoint(x: point.width - origin.x, y: point.height - origin.y))
+                perform(CGPoint(x: point.width, y: point.height).applying(transform))
             })
             qs_context_request_scope(group, isEnabled && context.environment.isEnabled ? 1 : 0)
             return context.children(of: content, inside: group)

@@ -28,7 +28,8 @@ enum Part: Hashable {
         get { transaction.animation }
         set { transaction.animation = newValue }
     }
-    var spaces: [AnyHashable: NamedOrigin] = [:]
+    var spaces: [AnyHashable: PlacedCoordinateSpace] = [:]
+    var rotationDepth = 0
     var windowOffset: CGPoint {
         guard let parent else { return .zero }
         let position = qs_origin(parent)

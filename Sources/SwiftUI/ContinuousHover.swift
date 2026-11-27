@@ -15,8 +15,8 @@ private nonisolated struct ContinuousHoverView<Content: View>: View {
             let group = context.widget(QSGroup, continuousHover: { widget, inside in
                 guard inside else { action(.ended); return }
                 let point = qs_hover_location(widget)
-                let origin = context.origin(of: coordinateSpace, widget: widget)
-                action(.active(CGPoint(x: point.width - origin.x, y: point.height - origin.y)))
+                let transform = context.windowToSpace(coordinateSpace, widget: widget)
+                action(.active(CGPoint(x: point.width, y: point.height).applying(transform)))
             })
             qs_continuous_hover(group)
             return context.children(of: view, inside: group)

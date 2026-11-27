@@ -78,6 +78,10 @@ In the chat color picker, choosing crimson updates the sample bubbles. The Docke
 
 ![Editing a custom gradient in the running Serein Linux release](Screenshots/serein-linux-custom-chat-color.png)
 
+A separate Docker run saved a green-to-blue gradient, closed and reopened the picker, and checked the selected swatch and both ends of the preview. The test phone received the next message typed into the [running conversation](Screenshots/serein-linux-saved-gradient.png).
+
+The same geometry tests on macOS and Ubuntu check named and global frames through nested rotation and scaling in both layout directions, independent bounds for each child of a named group, and a scroll viewport before and after scrolling. They also tap and drag in a scaled named space. `GeometryProxy.bounds(of:)` returns the named ancestor’s bounds in the reader’s coordinates. Crossing a rotation returns `nil`, including when a later rotation restores the original orientation.
+
 The desktop `ViewBuilder` and `ContentBuilder` accept mixed Swift values, optional content and conditional branches. On the macOS 27.2 SDK and Qt, a two-view block infers `TupleContent`. An explicit `TupleView` result remains supported. Conditional siblings in a lazy stack keep their own state when rows appear and disappear.
 
 Desktop `Text` accepts Foundation format styles that produce strings or attributed strings, and reference or object values with a `Formatter`. Numbers and dates resolve in the view’s environment. Attributed values and substrings preserve their runs inside localized text, and `Canvas` uses its graphics environment to draw formatted labels.
@@ -420,7 +424,7 @@ The target is source compatibility with Apple's public SwiftUI APIs. The impleme
 
 `./Scripts/check-apple.sh ../serein` type-checks the example source with Apple's SwiftUI module on a Mac with Xcode. `./Scripts/check-api.sh` extracts public symbol graphs from Xcode and the Linux image. Pass `--by-kind` to see coverage for classes, structs, protocols and each member kind, or `--missing` to list individual missing declaration paths. The inventory groups declarations by symbol kind and path, counts overload spellings separately, and excludes underscored and synthesized members. A shared name alone cannot establish matching signatures, constraints, availability or behavior.
 
-The inventory against the macOS 27.2 SDK found 1,851 shared declaration paths out of 7,627 and 1,313 identical declaration spellings out of 8,735. Of the 5,776 absent paths, 715 are nominal type or protocol declarations (6 classes, 584 structs, 48 enums and 77 protocols). The examples exercise a smaller set at runtime. Navigation, window state restoration, broader animation support, text shaping parity, gestures and platform integration remain substantial gaps. Font metrics, control appearance and several layout behaviors differ from Apple's implementation.
+The inventory against the macOS 27.2 SDK found 1,853 shared declaration paths out of 7,627 and 1,322 identical declaration spellings out of 8,735. Of the 5,774 absent paths, 715 are nominal type or protocol declarations (6 classes, 584 structs, 48 enums and 77 protocols). The examples exercise a smaller set at runtime. Navigation, window state restoration, broader animation support, text shaping parity, gestures and platform integration remain substantial gaps. Font metrics, control appearance and several layout behaviors differ from Apple's implementation.
 
 After capturing the Linux examples, run `./Scripts/compare-artwork.sh ../serein` on macOS to render both illustrations with Apple's `ImageRenderer`. At a threshold of 8/255 in any RGB channel, 101 of 119,680 account artwork pixels (0.084%) and 91 of 49,928 key transparency pixels (0.182%) differed. The mean absolute channel differences were 0.104/255 and 0.095/255 respectively. Both reference images are saved in `.build/artwork/`.
 
