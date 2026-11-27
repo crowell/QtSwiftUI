@@ -15,7 +15,7 @@ link_package() {
 }
 mkdir -p "$target/Sources/CallDiagnostics" "$target/Tests/ScreenTests"
 cp "$root"/Tests/SereinDiagnostics/*.swift "$root/Tests/SwiftUITests/LocalizedStringTests.swift" \
-    "$root/Tests/SwiftUITests/ShapeHitTests.swift" "$target/Tests/ScreenTests/"
+    "$root/Tests/SwiftUITests/ShapeHitTests.swift" "$root/Tests/SwiftUITests/SubscriptionTests.swift" "$target/Tests/ScreenTests/"
 link_package "$checkout/Packages/SignalI18n" "$target/SignalI18n"
 link_package "$checkout/Packages/SignalText" "$target/SignalText"
 codecs="$checkout/Packages/SignalCodecs"
@@ -245,16 +245,18 @@ awk '
     !video && !time {print}
     END {if (branches!=1 || timers!=1) exit 1}
 ' "$source_dir/Components/Lightbox.swift" > "$target_dir/Lightbox.swift"
-# Serein observes AppKit's app-deactivation notification to save the recording draft.
-# The Linux scene supplies the same transition from Qt window and application events.
-if grep -q '\.onChange(of: scenePhase)' "$source_dir/Components/CompositionRecording.swift"; then
-    cp "$source_dir/Components/CompositionRecording.swift" "$target_dir/"
+# Serein's upstream recorder uses AppKit's application notification name.
+recording="$source_dir/Components/CompositionRecording.swift"
+if grep -Eq 'QtDesktop.didResignActiveNotification|\.onChange\(of: scenePhase\)' "$recording"; then
+    cp "$recording" "$target_dir/"
 else
-    awk '/^public struct CompositionRecording: View/ { print; print "#if os(Linux)\n    @Environment(\\.scenePhase) var phase\n#endif"; next }
-     /NSApplication.didResignActiveNotification/ {
-         print "#if os(Linux)\n        .onChange(of: phase) { old, new in if old == .active && new != .active { saveDraftRecordingIfNeeded() } }\n#else"
-         print; print "#endif"; found=1; next }
-     { print } END { if (!found) exit 1 }' "$source_dir/Components/CompositionRecording.swift" > "$target_dir/CompositionRecording.swift"
+    {
+        echo '#if os(Linux)'
+        echo '@_spi(Qt) import SwiftUI'
+        echo 'private typealias NSApplication = QtDesktop'
+        echo '#endif'
+        cat "$recording"
+    } > "$target_dir/CompositionRecording.swift"
 fi
 awk 'BEGIN { print "import Foundation" } /^func durationToPlaybackText\(/ { inside=1 }
      inside { print } inside && /^}$/ { done=1; exit } END { if (!done) exit 1 }' \
@@ -503,7 +505,7 @@ var dependencies: [Target.Dependency] = [.product(name: "SignalI18n", package: "
     .product(name: "ImageBMP", package: "SignalCodecs"), .product(name: "ImageJPEG", package: "SignalCodecs"), .product(name: "EncodePNG", package: "SignalCodecs")]
 #if os(Linux)
 packages.append(.package(name: "QtSwiftUI", path: "/src"))
-dependencies.append(.product(name: "SwiftUI", package: "QtSwiftUI"))
+dependencies += [.product(name: "SwiftUI", package: "QtSwiftUI"), .product(name: "Combine", package: "QtSwiftUI")]
 #endif
 let package = Package(name: "CallDiagnostics", platforms: [.macOS("27.0")], dependencies: packages,
                       targets: [.executableTarget(name: "CallDiagnostics", dependencies: dependencies, resources: [.copy("Fonts"), .copy("Media"), .copy("emoji-data.json")]),

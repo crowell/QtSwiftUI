@@ -6,10 +6,12 @@ let package = Package(
     name: "QtSwiftUI",
     products: [
         .library(name: "SwiftUI", targets: ["SwiftUI"]),
+        .library(name: "Combine", targets: ["Combine"]),
         .executable(name: "Conversation", targets: ["Conversation"]),
         .executable(name: "Controls", targets: ["Controls"])
     ],
     dependencies: [
+        .package(url: "https://github.com/OpenCombine/OpenCombine.git", from: "0.14.0"),
         .package(url: "https://github.com/swiftlang/swift-syntax.git", from: "602.0.0")
     ],
     targets: [
@@ -22,10 +24,15 @@ let package = Package(
         .target(name: "CoreGraphics", dependencies: ["QtBridge"]),
         .target(name: "UniformTypeIdentifiers"),
         .target(name: "CoreTransferable", dependencies: ["UniformTypeIdentifiers"]),
-        .target(name: "SwiftUI", dependencies: ["QtBridge", "CoreGraphics", "UniformTypeIdentifiers", "CoreTransferable", "QtSwiftUIMacros"]),
+        .target(name: "Combine", dependencies: [
+            .product(name: "OpenCombine", package: "OpenCombine"),
+            .product(name: "OpenCombineFoundation", package: "OpenCombine"),
+            .product(name: "OpenCombineDispatch", package: "OpenCombine")
+        ]),
+        .target(name: "SwiftUI", dependencies: ["Combine", "QtBridge", "CoreGraphics", "UniformTypeIdentifiers", "CoreTransferable", "QtSwiftUIMacros"]),
         .executableTarget(name: "Conversation", dependencies: ["SwiftUI"], path: "Examples/Conversation"),
         .executableTarget(name: "Controls", dependencies: ["SwiftUI"], path: "Examples/Controls"),
-        .testTarget(name: "SwiftUITests", dependencies: ["SwiftUI", "QtBridge", "Controls", "Conversation"])
+        .testTarget(name: "SwiftUITests", dependencies: ["SwiftUI", "Combine", "QtBridge", "Controls", "Conversation"])
     ],
     cxxLanguageStandard: .cxx17
 )

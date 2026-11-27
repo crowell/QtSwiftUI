@@ -30,6 +30,10 @@ In the chat color picker, choosing crimson updates the sample bubbles. The Docke
 
 ![Editing a custom gradient in the running Serein Linux release](Screenshots/serein-linux-custom-chat-color.png)
 
+With another X11 app focused, the desktop received “The ferry leaves Harbor Pier at nine.” Returning to Serein sent a read sync for that message to the linked phone. Searching the conversation for “Harbor Pier” found the incoming message.
+
+![A matching message in the running Serein conversation search](Screenshots/serein-linux-conversation-search.png)
+
 In the linked release executable, File → Create/upload sticker pack opens the sticker creator. The Docker check selected Serein’s bundled PNG in the file picker, waited for the confined media decoder’s preview, assigned an emoji and entered the title and author. Canceling the upload confirmation returned to the same details window.
 
 ![Sticker pack details in the running Serein Linux release](Screenshots/serein-linux-sticker-creator.png)
@@ -254,7 +258,7 @@ The custom chat-color example runs Serein’s production editor dialog, gradient
 
 Set `QTSWIFTUI_EDITOR_REFERENCE` to an absolute PNG path when running `Scripts/check-apple.sh ../serein` to capture the static SDK reference. At 520 × 620, 8,685 pixels (2.69%) differ from the Ubuntu capture by more than 8/255 in any RGB channel.
 
-Serein’s voice-note recorder runs with sample peaks and a fixed 1:23 timer. The production code supplies its waveform, buttons, one-hour timeout and discard dialog. Ubuntu substitutes a SwiftUI scene-phase change for the single AppKit deactivation notification that saves the draft. The tests exercise draft saving, cancellation of the timeout when a recording is replaced, and the timeout callback on Apple and Ubuntu. Qt also receives native clicks, focused Escape, and the two discard-dialog actions. The fixture supplies the recording data and captures the Send callback.
+Serein’s voice-note recorder runs with sample peaks and a fixed 1:23 timer. The production code supplies its waveform, buttons, one-hour timeout and discard dialog. The recorder subscribes to the desktop deactivation notification to save the draft. Ubuntu publishes this notification when Qt reports that the application loses focus. The tests exercise draft saving, cancellation of the timeout when a recording is replaced, and the timeout callback on Apple and Ubuntu. Qt also receives native clicks, focused Escape, and the two discard-dialog actions. The fixture supplies the recording data and captures the Send callback.
 
 ![Serein voice-note recorder on Ubuntu](Screenshots/voice-recording.png)
 
@@ -352,11 +356,11 @@ The target is source compatibility with Apple's public SwiftUI APIs. The impleme
 | Adaptive layouts | `ViewThatFits` checks candidates in order, measures ideal size on the requested axes and falls back to the last child. Tests resize across breakpoints and check the chosen button, lifecycle callbacks, preference values, size and alignment guides on Ubuntu and macOS. |
 | Scroll positioning | `ScrollPosition` and ID bindings move a native Qt scroll area by edge, coordinate or target. Tests cover per-role default anchors, short content, visibility thresholds, disabled target layouts and appended rows. Animated scrolling and exact visibility timing remain open. |
 | Keyboard input | Programmatic composer focus, native focus changes, sending with Return, Escape commands and selectable monospaced diagnostic text. |
-| Lifecycle | An async view task updates an observable model while the Qt event loop runs. An on-change handler observes the result. A timeline also advances to a scheduled date inside the Qt event loop. |
+| Lifecycle | `SubscriptionView` and `onReceive` use OpenCombine on Linux. Shared tests cover publisher replacement, action changes, cancellation when a view disappears, and background notifications delivered in order on the main actor. An async view task updates an observable model while the Qt event loop runs. An on-change handler observes the result. A timeline also advances to a scheduled date inside the Qt event loop. |
 
 `./Scripts/check-apple.sh ../serein` type-checks the example source with Apple's SwiftUI module on a Mac with Xcode. `./Scripts/check-api.sh` extracts public symbol graphs from Xcode and the Linux image. Pass `--by-kind` to see coverage for classes, structs, protocols and each member kind, or `--missing` to list individual missing declaration paths. The inventory groups declarations by symbol kind and path, counts overload spellings separately, and excludes underscored and synthesized members. A shared name alone cannot establish matching signatures, constraints, availability or behavior.
 
-The inventory against the macOS 27.2 SDK found 1,732 shared declaration paths out of 7,627 and 1,178 identical declaration spellings out of 8,735. Of the 5,895 absent paths, 726 are nominal type or protocol declarations (6 classes, 592 structs, 50 enums and 78 protocols). The examples exercise a smaller set at runtime. Navigation, window state restoration, broader animation support, text shaping parity, gestures and platform integration remain substantial gaps. Font metrics, control appearance and several layout behaviors differ from Apple's implementation.
+The inventory against the macOS 27.2 SDK found 1,738 shared declaration paths out of 7,627 and 1,182 identical declaration spellings out of 8,735. Of the 5,889 absent paths, 725 are nominal type or protocol declarations (6 classes, 591 structs, 50 enums and 78 protocols). The examples exercise a smaller set at runtime. Navigation, window state restoration, broader animation support, text shaping parity, gestures and platform integration remain substantial gaps. Font metrics, control appearance and several layout behaviors differ from Apple's implementation.
 
 After capturing the Linux examples, run `./Scripts/compare-artwork.sh ../serein` on macOS to render both illustrations with Apple's `ImageRenderer`. At a threshold of 8/255 in any RGB channel, 101 of 119,680 account artwork pixels (0.084%) and 91 of 49,928 key transparency pixels (0.182%) differed. The mean absolute channel differences were 0.104/255 and 0.095/255 respectively. Both reference images are saved in `.build/artwork/`.
 

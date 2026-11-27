@@ -40,6 +40,7 @@ double qs_window_scale(QSWindow *);
 int qs_reduce_motion(QSWindow *);
 int qs_scene_phase(QSWindow *);
 int qs_application_active(void);
+void qs_observe_application_activity(void (*changed)(int active));
 int qs_dark_appearance(void);
 void qs_application_appearance(int mode);
 void qs_request_attention(void);

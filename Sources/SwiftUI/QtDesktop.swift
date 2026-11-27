@@ -42,6 +42,25 @@ import Glibc
     public static func minimizeWindow() { qs_active_window_state(0) }
     public static func toggleFullScreen() { qs_active_window_state(1) }
 
+    private static let activation = Notification.Name("QtSwiftUI.applicationDidBecomeActive")
+    private static let resignation = Notification.Name("QtSwiftUI.applicationDidResignActive")
+    private static func observeActivity() {
+        qs_observe_application_activity { active in
+            MainActor.assumeIsolated {
+                NotificationCenter.default.post(name: active != 0 ? QtDesktop.activation : QtDesktop.resignation, object: nil)
+            }
+        }
+    }
+
+    public static var didBecomeActiveNotification: Notification.Name {
+        observeActivity()
+        return activation
+    }
+    public static var didResignActiveNotification: Notification.Name {
+        observeActivity()
+        return resignation
+    }
+
     public static var isActive: Bool { qs_application_active() != 0 }
     public static func requestAttention() { qs_request_attention() }
     public static func setAppearance(_ scheme: ColorScheme?) {

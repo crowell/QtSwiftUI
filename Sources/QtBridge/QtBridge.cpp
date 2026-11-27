@@ -1264,6 +1264,17 @@ int qs_run(QSWindow *window, const char *screenshot, QSPump pump) {
 int qs_application_active(void) {
     return QGuiApplication::applicationState() == Qt::ApplicationActive;
 }
+void qs_observe_application_activity(void (*changed)(int)) {
+    auto &app = application();
+    if (app.property("qsObservesApplicationActivity").toBool()) return;
+    app.setProperty("qsObservesApplicationActivity", true);
+    QObject::connect(&app, &QGuiApplication::applicationStateChanged, &app,
+                     [changed, active = app.applicationState() == Qt::ApplicationActive](Qt::ApplicationState state) mutable {
+        const bool wasActive = active;
+        active = state == Qt::ApplicationActive;
+        if (wasActive != active) changed(active ? 1 : 0);
+    });
+}
 int qs_dark_appearance(void) {
     const auto palette = application().palette();
     return palette.color(QPalette::Window).lightness() < palette.color(QPalette::WindowText).lightness();

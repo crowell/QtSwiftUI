@@ -171,6 +171,7 @@ enum Part: Hashable {
         if disappear[path] == nil && nextDisappear[path] == nil { afterRender.append(appear) }
         nextDisappear[path] = action
     }
+    let subscriptions = ViewSubscriptions()
     let focusScopes = WindowFocusScopes()
     let defaultFocus = WindowDefaultFocus()
     let keys = WindowKeyPresses()
@@ -235,6 +236,7 @@ enum Part: Hashable {
         didClose = nil
         focusScopes.begin()
         if let window { qs_close(window); self.window = nil }
+        subscriptions.close()
         for stop in disappear.values { stop() }
         disappear.removeAll()
         observationPass.revision += 1
@@ -286,6 +288,7 @@ enum Part: Hashable {
                 self.update(transaction: transaction)
             }
         }
+        subscriptions.commit()
         let ended = disappear.filter { nextDisappear[$0.key] == nil }
         disappear = nextDisappear
         for action in ended.values { action() }

@@ -4,7 +4,7 @@ import SignalI18n
 @testable import CallDiagnostics
 #if os(Linux)
 import QtBridge
-@testable import SwiftUI
+@_spi(Qt) @testable import SwiftUI
 #else
 import AppKit
 #endif
@@ -90,6 +90,10 @@ final class RecordingTests: XCTestCase {
         qs_minimize(host.window, 1)
         qs_flush()
         XCTAssertEqual(qs_scene_phase(host.window), 0)
+        // Under the offscreen plugin a minimized window can still belong to the active app.
+        if QtDesktop.isActive {
+            NotificationCenter.default.post(name: QtDesktop.didResignActiveNotification, object: nil)
+        }
         qs_minimize(host.window, 0)
         qs_flush()
         #else
