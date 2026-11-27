@@ -22,6 +22,10 @@ The composer also accepts file URLs for documents granted through the Linux desk
 
 ![File and caption sent from the production Serein composer](Screenshots/serein-linux-file-transfer.png)
 
+In the linked release executable, File → Create/upload sticker pack opens the sticker creator. The Docker check selected Serein’s bundled PNG in the file picker, waited for the confined media decoder’s preview, assigned an emoji and entered the title and author. Canceling the upload confirmation returned to the same details window.
+
+![Sticker pack details in the running Serein Linux release](Screenshots/serein-linux-sticker-creator.png)
+
 The entry point and all eight worker executables in this Docker package were built in release configuration. Choosing Help → About in the desktop app opens Serein’s own About view in a second Qt window. Escape closes About and leaves the installer running. `WindowGroup` also accepts typed presentation values. Opening an existing value activates its window, and changing the binding updates which value will find that window. `Settings`, `SettingsLink`, and the application menu’s Ctrl+, shortcut share a single settings window. Scenes can request or suppress presentation at launch. `@AppStorage` keeps controls in sync across windows and saves changes between launches. A view or scene can select its preferences suite with `defaultAppStorage(_:)`.
 
 ![Serein’s About window opened from the Linux desktop menu](Screenshots/serein-linux-about.png)
