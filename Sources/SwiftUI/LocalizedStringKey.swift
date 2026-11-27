@@ -1,17 +1,25 @@
 import Foundation
 
 public struct LocalizedStringKey: Equatable, ExpressibleByStringInterpolation {
+    public typealias StringLiteralType = String
+    public typealias ExtendedGraphemeClusterLiteralType = String
+    public typealias UnicodeScalarLiteralType = String
+
     fileprivate final class Argument: Equatable {
         let value: Any
-        let matches: (Any) -> Bool
+        let matches: ((Any) -> Bool)?
         let render: (String, Locale) -> String
 
         init<T: Equatable>(_ value: T, comparesValue: Bool = false, render: @escaping (String, Locale) -> String) {
             self.value = value
-            matches = { comparesValue && ($0 as? T) == value }
+            matches = comparesValue ? { ($0 as? T) == value } : nil
             self.render = render
         }
-        static func == (lhs: Argument, rhs: Argument) -> Bool { lhs === rhs || lhs.matches(rhs.value) }
+        static func == (lhs: Argument, rhs: Argument) -> Bool {
+            if lhs === rhs { return true }
+            guard let matches = lhs.matches, rhs.matches != nil else { return false }
+            return matches(rhs.value)
+        }
     }
 
     private let key: String
@@ -23,12 +31,17 @@ public struct LocalizedStringKey: Equatable, ExpressibleByStringInterpolation {
         arguments = stringInterpolation.arguments
     }
 
+    public static func == (a: LocalizedStringKey, b: LocalizedStringKey) -> Bool {
+        a.key == b.key && a.arguments == b.arguments
+    }
+
     private struct Formatted<Input: Equatable, Style: Equatable>: Equatable {
         let value: Input
         let style: Style
     }
 
     public struct StringInterpolation: StringInterpolationProtocol {
+        public typealias StringLiteralType = String
         fileprivate var key = ""
         fileprivate var arguments: [Argument] = []
         public init(literalCapacity: Int, interpolationCount: Int) {
@@ -40,7 +53,7 @@ public struct LocalizedStringKey: Equatable, ExpressibleByStringInterpolation {
         }
         public mutating func appendInterpolation(_ string: String) {
             key += "%@"
-            arguments.append(Argument(string) { _, _ in string })
+            arguments.append(Argument(string, comparesValue: true) { _, _ in string })
         }
         public mutating func appendInterpolation(_ substring: Substring) { appendInterpolation(String(substring)) }
         public mutating func appendInterpolation<T: _FormatSpecifiable>(_ value: T) {
@@ -48,7 +61,7 @@ public struct LocalizedStringKey: Equatable, ExpressibleByStringInterpolation {
         }
         public mutating func appendInterpolation<T: _FormatSpecifiable>(_ value: T, specifier: String) {
             key += specifier
-            arguments.append(Argument(value) { format, locale in
+            arguments.append(Argument(value, comparesValue: true) { format, locale in
                 // Pass only a single, type-compatible conversion to Foundation. Translated
                 // positional markers are resolved before this point.
                 let floats = "fFeEgGaA"

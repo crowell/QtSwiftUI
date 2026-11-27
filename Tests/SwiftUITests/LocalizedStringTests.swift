@@ -41,7 +41,20 @@ import XCTest
         XCTAssertEqual(try pixels(Text("Total \(count, format: .number)"), french),
                        try pixels(Text(verbatim: "Total 7"), french))
         XCTAssertEqual(key, key)
-        XCTAssertNotEqual(key, "\(name) has \(count)")
+        // The Apple runtime can return false on its first comparisons of newly
+        // interpolated values. Wait for equal inputs to settle before testing
+        // independent keys. Qt compares string and numeric arguments immediately.
+        #if os(macOS)
+        let deadline = ContinuousClock.now + .seconds(2)
+        while key != "\(name) has \(count)" && ContinuousClock.now < deadline {
+            try await Task.sleep(for: .milliseconds(10))
+        }
+        #endif
+        XCTAssertEqual(key, "\(String(name)) has \(count)")
+        let changedName = name + "!"
+        XCTAssertNotEqual(key, "\(changedName) has \(count)")
+        let oneDecimal: LocalizedStringKey = "Progress \(progress, specifier: "%.1f")%"
+        XCTAssertNotEqual(oneDecimal, "Progress \(progress, specifier: "%.2f")%")
         let formatted: LocalizedStringKey = "Total \(count, format: .number)"
         XCTAssertEqual(formatted, "Total \(count, format: .number)")
         XCTAssertNotEqual(key, "\(name) has \(count + 1)")
