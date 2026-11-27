@@ -36,6 +36,10 @@ Reopening the picker and pressing Space sends a heart. The test phone verified t
 
 ![Serein’s reaction viewer after the test phone received the heart](Screenshots/serein-linux-reaction-viewer.png)
 
+In the Ubuntu release, hovering over a quick reaction enlarges its emoji along Serein’s custom timing curve. More opens the full emoji picker. The test searches for a rocket and sends it, then clicks the selected rocket in the quick picker to remove it. The phone decrypts both updates and verifies their target author and timestamp. The check then replaces the first preferred emoji, saves it, and confirms that the phone’s account record contains the new rocket followed by the original teapot. Clicking the saved first slot sends the rocket. [Search result](Screenshots/serein-linux-reaction-emoji-search.png) · [Customize reactions](Screenshots/serein-linux-preferred-reaction-draft.png)
+
+![Serein’s full emoji picker open above a sent message on Ubuntu](Screenshots/serein-linux-reaction-emoji-picker.png)
+
 The composer also accepts file URLs for documents granted through the Linux desktop portal. In the Docker check, the X11 clipboard offered a file URL for a disposable document at the document portal mount point. Serein sent the file and its caption. The test phone downloaded the attachment, decrypted it and compared its bytes with the original.
 
 ![File and caption sent from the production Serein composer](Screenshots/serein-linux-file-transfer.png)
@@ -448,7 +452,7 @@ The target is source compatibility with Apple's public SwiftUI APIs. The impleme
 
 `./Scripts/check-apple.sh ../serein` type-checks the example source with Apple's SwiftUI module on a Mac with Xcode. `./Scripts/check-api.sh` extracts public symbol graphs from Xcode and the Linux image. Pass `--by-kind` to see coverage for classes, structs, protocols and each member kind, or `--missing` to list individual missing declaration paths. The inventory groups declarations by symbol kind and path, counts overload spellings separately, and excludes underscored and synthesized members. A shared name alone cannot establish matching signatures, constraints, availability or behavior.
 
-The inventory against the macOS 27.2 SDK found 1,935 shared declaration paths out of 7,627 and 1,405 identical declaration spellings out of 8,735. Of the 5,692 absent paths, 712 are nominal type or protocol declarations (6 classes, 581 structs, 48 enums and 77 protocols). The examples exercise a smaller set at runtime. Navigation, window state restoration, broader animation support, text shaping parity, gestures and platform integration remain substantial gaps. Font metrics, control appearance and several layout behaviors differ from Apple's implementation.
+The inventory against the macOS 27.2 SDK found 1,949 shared declaration paths out of 7,627 and 1,419 identical declaration spellings out of 8,735. Of the 5,678 absent paths, 711 are nominal type or protocol declarations (6 classes, 580 structs, 48 enums and 77 protocols). The examples exercise a smaller set at runtime. Navigation, window state restoration, broader animation support, text shaping parity, gestures and platform integration remain substantial gaps. Font metrics, control appearance and several layout behaviors differ from Apple's implementation.
 
 After capturing the Linux examples, run `./Scripts/compare-artwork.sh ../serein` on macOS to render both illustrations with Apple's `ImageRenderer`. At a threshold of 8/255 in any RGB channel, 101 of 119,680 account artwork pixels (0.084%) and 91 of 49,928 key transparency pixels (0.182%) differed. The mean absolute channel differences were 0.104/255 and 0.095/255 respectively. Both reference images are saved in `.build/artwork/`.
 
@@ -461,6 +465,8 @@ The same package runs Serein’s `AxoChatDateSection` inside a native scroll vie
 The raster tests compile Serein’s `MediaEditorImageState` and `MediaEditorRenderer.drawBackground` and supply a decoded test image. Apple and Qt agree on the sampled crop bounds, horizontal flip, quarter turn, and colors inside each swatch. High-quality interpolation differs at sharp color boundaries.
 
 Serein’s production HSL color slider uses explicit device-RGB interpolation for its track. Apple and Ubuntu tests sample the hue stops in both layout directions. The Qt test drags the thumb and invokes accessible increment and decrement. Shared rendering tests also check SwiftUI’s default perceptual gradient, type-erased shape styles, linear-light Canvas shading, and repeated and mirrored gradients.
+
+The public `UnitCurve` type evaluates linear, cubic Bézier and circular curves, their velocities and their inverses. `Animation.timingCurve(_:duration:)` uses these curves for presentation updates. The same evaluator drives Serein’s custom Bézier curves in the reaction picker, switches and progress indicators.
 
 The public `Spring` type provides the physical, response, duration and settling-duration initializers, the three presets, vector and animatable sampling, velocity, force and updates. Both spring animation factories accept a `Spring`. Shared tests cover underdamped, critically damped and overdamped motion, settling estimates and the metadata preserved in an animated value.
 

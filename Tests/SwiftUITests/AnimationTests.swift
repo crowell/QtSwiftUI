@@ -17,6 +17,16 @@ final class AnimationTests: XCTestCase {
         XCTAssertFalse(value.isAnimating)
     }
 
+    func testUnitCurveDrivesThePresentationValue() {
+        let opacity = AnimatedValue(0.0)
+        opacity.update(to: 1, at: 10, animation: .timingCurve(.circularEaseInOut, duration: 2))
+        XCTAssertEqual(opacity.sample(at: 10.5), 0.0669872981077807, accuracy: 1e-12)
+        XCTAssertEqual(opacity.sample(at: 11), 0.5, accuracy: 1e-12)
+        XCTAssertEqual(opacity.sample(at: 11.5), 0.9330127018922193, accuracy: 1e-12)
+        XCTAssertEqual(opacity.sample(at: 12), 1)
+        XCTAssertFalse(opacity.isAnimating)
+    }
+
     func testPersistentSpringRetargetCarriesVelocityAndBlendsResponse() {
         let initial = Animation.spring(response: 0.75, dampingFraction: 0.55)
         let switching = 0.12, step = 0.000001

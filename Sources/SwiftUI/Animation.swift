@@ -1,7 +1,7 @@
 import QtBridge
 
 public struct Animation: Equatable, Sendable {
-    private let x1, y1, x2, y2: Double
+    private let curve: UnitCurve
     let duration: TimeInterval
     private var delays: [TimeInterval] = []
     fileprivate var totalDuration: TimeInterval {
@@ -20,7 +20,7 @@ public struct Animation: Equatable, Sendable {
     public static func spring(response: Double = 0.5, dampingFraction: Double = 0.825,
                               blendDuration: TimeInterval = 0) -> Self {
         let spring = PersistentSpring(response: max(0, response), damping: max(0, dampingFraction), blend: max(0, blendDuration))
-        return Self(x1: 0, y1: 0, x2: 1, y2: 1, duration: spring.duration, persistent: spring)
+        return Self(curve: .linear, duration: spring.duration, persistent: spring)
     }
     public static func spring(duration: TimeInterval = 0.5, bounce: Double = 0, blendDuration: Double = 0) -> Self {
         .spring(response: duration, dampingFraction: dampingRatio(bounce), blendDuration: blendDuration)
@@ -50,7 +50,7 @@ public struct Animation: Equatable, Sendable {
 
     public static func interpolatingSpring(mass: Double = 1, stiffness: Double, damping: Double, initialVelocity: Double = 0) -> Self {
         let spring = DampedSpring(mass: mass, stiffness: stiffness, damping: damping, initialVelocity: initialVelocity)
-        return Self(x1: 0, y1: 0, x2: 1, y2: 1, duration: spring.duration, oscillator: spring)
+        return Self(curve: .linear, duration: spring.duration, oscillator: spring)
     }
     public static func interpolatingSpring(duration: TimeInterval = 0.5, bounce: Double = 0, initialVelocity: Double = 0) -> Self {
         let frequency = 2 * Double.pi / max(0.001, duration)
@@ -74,7 +74,12 @@ public struct Animation: Equatable, Sendable {
 
     public static func timingCurve(_ p1x: Double, _ p1y: Double, _ p2x: Double, _ p2y: Double,
                                    duration: TimeInterval = 0.35) -> Self {
-        Self(x1: p1x, y1: p1y, x2: p2x, y2: p2y, duration: duration)
+        .timingCurve(.bezier(startControlPoint: .init(x: p1x, y: p1y),
+                             endControlPoint: .init(x: p2x, y: p2y)), duration: duration)
+    }
+    public static func timingCurve(_ curve: UnitCurve, duration: TimeInterval) -> Animation {
+        let diagonal = UnitCurve.bezier(startControlPoint: .zero, endControlPoint: .bottomTrailing)
+        return Self(curve: curve == diagonal ? .linear : curve, duration: duration)
     }
     public static var linear: Self { .linear(duration: 0.35) }
     public static var easeIn: Self { .easeIn(duration: 0.35) }
@@ -99,18 +104,7 @@ public struct Animation: Equatable, Sendable {
         guard duration > 0 && elapsed < duration else { return 1 }
         if let persistent { return 1 - persistent.motion(offset: 1.0, velocity: 0, from: nil, at: elapsed).offset }
         if let oscillator { return oscillator.fraction(at: max(0, elapsed)) }
-        let x = max(0, elapsed / duration)
-        if x1 == y1 && x2 == y2 { return x }
-        func cubic(_ t: Double, _ a: Double, _ b: Double) -> Double {
-            let u = 1 - t
-            return 3 * u * u * t * a + 3 * u * t * t * b + t * t * t
-        }
-        var lo = 0.0, hi = 1.0
-        for _ in 0..<24 {
-            let t = (lo + hi) / 2
-            if cubic(t, x1, x2) < x { lo = t } else { hi = t }
-        }
-        return cubic((lo + hi) / 2, y1, y2)
+        return curve.value(at: max(0, elapsed / duration))
     }
 }
 
